@@ -71,6 +71,49 @@ class Api {
     await dio.post('/api/v1/driver/documents',data:form);
   }
 
+  Future<void> saveCompany({
+    String? siren,String? siret,required String legalName
+  }) async {
+    await dio.put('/api/v1/driver/onboarding/company',data:{
+      'siren':siren,'siret':siret,'legalName':legalName
+    });
+  }
+
+  Future<void> saveVtc({
+    required String registrationNumber,
+    required String cardNumber,
+    String? issuedAt,
+    String? expiresAt,
+  }) async {
+    await dio.put('/api/v1/driver/onboarding/vtc',data:{
+      'registrationNumber':registrationNumber,
+      'cardNumber':cardNumber,
+      'issuedAt':issuedAt,
+      'expiresAt':expiresAt,
+    });
+  }
+
+  Future<List<dynamic>> vehicleCategories() async =>
+      List<dynamic>.from((await dio.get('/api/v1/reference/vehicle-categories')).data);
+
+  Future<void> addVehicle({
+    required String categoryId,
+    required String brand,
+    required String model,
+    required int year,
+    required String plateNumber,
+    String? color,
+  }) async {
+    await dio.post('/api/v1/driver/onboarding/vehicles',data:{
+      'categoryId':categoryId,
+      'brand':brand,
+      'model':model,
+      'year':year,
+      'plateNumber':plateNumber,
+      'color':color,
+    });
+  }
+
   Future<Map<String,dynamic>> onboardingStatus() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/onboarding/status')).data);
 
