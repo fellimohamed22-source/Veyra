@@ -35,8 +35,12 @@ export class Api {
 
   adminDashboard(){return this.request('/admin/dashboard');}
   adminBookings(){return this.request('/admin/bookings');}
+  adminDrivers(){return this.request('/admin/drivers');}
+  adminPartners(){return this.request('/admin/partners');}
   approveDriver(id:string){return this.request('/admin/drivers/'+id+'/approve',{method:'POST'});}
+  rejectDriver(id:string,reasonCode:string){return this.request('/admin/drivers/'+id+'/reject',{method:'POST',body:JSON.stringify({reasonCode})});}
   approvePartner(id:string){return this.request('/admin/partners/'+id+'/approve',{method:'POST'});}
+  suspendPartner(id:string){return this.request('/admin/partners/'+id+'/suspend',{method:'POST'});}
   cashDebts(){return this.request('/finance/cash-debts');}
   payables(){return this.request('/finance/payables');}
   settleDebt(id:string,amountMinor:number){return this.request('/finance/cash-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
