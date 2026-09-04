@@ -1,0 +1,1 @@
+package com.veyra.auth;import org.junit.jupiter.api.Test;import java.util.*;import static org.junit.jupiter.api.Assertions.*;class JwtServiceTest{@Test void roundtrip(){var s=new JwtService("0123456789012345678901234567890123456789","test",15);UUID id=UUID.randomUUID();assertEquals(id,s.userId(s.issue(id,"a@b.com",List.of("CLIENT"))));}}

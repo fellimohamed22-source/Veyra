@@ -1,0 +1,1 @@
+package com.veyra.security;import java.util.UUID;import org.springframework.security.core.context.SecurityContextHolder;public final class CurrentUser{private CurrentUser(){}public static UUID id(){return (UUID)SecurityContextHolder.getContext().getAuthentication().getPrincipal();}}

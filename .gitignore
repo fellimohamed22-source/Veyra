@@ -1,0 +1,9 @@
+.idea/
+.vscode/
+.DS_Store
+.env
+**/target/
+**/build/
+**/.dart_tool/
+**/node_modules/
+runtime/

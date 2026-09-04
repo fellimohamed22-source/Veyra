@@ -1,0 +1,1 @@
+package com.veyra.storage;import java.io.*;public interface FileStorageProvider{StoredFile store(InputStream c,String n,String t,long s)throws IOException;InputStream load(String k)throws IOException;void delete(String k)throws IOException;boolean exists(String k);}
