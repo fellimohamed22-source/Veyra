@@ -23,6 +23,7 @@ class DriverApp extends StatelessWidget{
 
 final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
+  GoRoute(path:'/register',builder:(c,s)=>const RegisterDriverScreen()),
   GoRoute(path:'/kyc',builder:(c,s)=>const KycScreen()),
   GoRoute(path:'/home',builder:(c,s)=>const OpportunitiesScreen()),
   GoRoute(path:'/request/:id',builder:(c,s)=>RequestScreen(bookingId:s.pathParameters['id']!)),
@@ -72,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen>{
       if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:20),
       FilledButton(onPressed:loading?null:submit,child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2)):const Text('Se connecter')),
+      TextButton(onPressed:()=>context.go('/register'),child:const Text('Créer un compte Chauffeur')),
     ])),
   );
 }
@@ -475,5 +477,61 @@ class _WalletScreenState extends State<WalletScreen>{
         ]);
       },
     ),
+  );
+}
+
+
+class RegisterDriverScreen extends StatefulWidget{
+  const RegisterDriverScreen({super.key});
+  @override State<RegisterDriverScreen> createState()=>_RegisterDriverScreenState();
+}
+class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
+  final firstName=TextEditingController();
+  final lastName=TextEditingController();
+  final phone=TextEditingController();
+  final email=TextEditingController();
+  final password=TextEditingController();
+  bool loading=false;
+  String? error;
+
+  Future<void> submit()async{
+    if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
+      setState(()=>error='Prénom, e-mail et mot de passe de 10 caractères minimum requis.');
+      return;
+    }
+    setState((){loading=true;error=null;});
+    try{
+      await api.register(
+        email:email.text,
+        password:password.text,
+        firstName:firstName.text,
+        lastName:lastName.text,
+        phone:phone.text,
+      );
+      await api.createProfile();
+      if(mounted)context.go('/kyc');
+    }catch(_){
+      if(mounted)setState(()=>error='Création du compte impossible.');
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('Créer un compte Chauffeur')),
+    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
+      TextField(controller:firstName,decoration:const InputDecoration(labelText:'Prénom')),
+      const SizedBox(height:12),
+      TextField(controller:lastName,decoration:const InputDecoration(labelText:'Nom')),
+      const SizedBox(height:12),
+      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:const InputDecoration(labelText:'Téléphone')),
+      const SizedBox(height:12),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:const InputDecoration(labelText:'Email')),
+      const SizedBox(height:12),
+      TextField(controller:password,obscureText:true,decoration:const InputDecoration(labelText:'Mot de passe',helperText:'10 caractères minimum')),
+      if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+      const SizedBox(height:16),
+      FilledButton(onPressed:loading?null:submit,child:loading?const Text('Création…'):const Text('Continuer vers mon dossier VTC')),
+    ])),
   );
 }
