@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'api.dart';
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
 
-void main()=>runApp(const App());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  const publishableKey=String.fromEnvironment('STRIPE_PUBLISHABLE_KEY',defaultValue:'');
+  if(publishableKey.isNotEmpty){
+    Stripe.publishableKey=publishableKey;
+    await Stripe.instance.applySettings();
+  }
+  runApp(const App());
+}
 
 class App extends StatelessWidget{
   const App({super.key});
@@ -20,6 +29,7 @@ final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/home',builder:(c,s)=>const HomeScreen()),
   GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
+  GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
 ]);
 
 class LoginScreen extends StatefulWidget{
@@ -357,7 +367,13 @@ class _OffersScreenState extends State<OffersScreen>{
               trailing:FilledButton(
                 onPressed:()async{
                   await api.accept(widget.bookingId,x['offerId'].toString());
-                  if(context.mounted)context.go('/home');
+                  final booking=await api.bookingDetail(widget.bookingId);
+                  if(!context.mounted)return;
+                  if(booking['payment_method']=='ONLINE'){
+                    context.go('/payment/'+widget.bookingId);
+                  }else{
+                    context.go('/home');
+                  }
                 },
                 child:const Text('Choisir'),
               ),
@@ -367,4 +383,67 @@ class _OffersScreenState extends State<OffersScreen>{
       },
     ),
   );
+}
+
+
+class PaymentScreen extends StatefulWidget{
+  final String bookingId;
+  const PaymentScreen({required this.bookingId,super.key});
+  @override State<PaymentScreen> createState()=>_PaymentScreenState();
+}
+class _PaymentScreenState extends State<PaymentScreen>{
+  bool loading=false;
+  String? error;
+  Map<String,dynamic>? booking;
+
+  @override void initState(){
+    super.initState();
+    api.bookingDetail(widget.bookingId).then((v){if(mounted)setState(()=>booking=v);}).catchError((_){if(mounted)setState(()=>error='Impossible de charger le paiement.');});
+  }
+
+  Future<void> pay()async{
+    const publishableKey=String.fromEnvironment('STRIPE_PUBLISHABLE_KEY',defaultValue:'');
+    if(publishableKey.isEmpty){
+      setState(()=>error='Paiement en ligne non configuré sur cette version.');
+      return;
+    }
+    setState((){loading=true;error=null;});
+    try{
+      final idem='mobile-'+widget.bookingId+'-'+DateTime.now().microsecondsSinceEpoch.toString();
+      final intent=await api.createPaymentIntent(widget.bookingId,idem);
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters:SetupPaymentSheetParameters(
+          paymentIntentClientSecret:intent['clientSecret'] as String,
+          merchantDisplayName:'Veyra',
+        ),
+      );
+      await Stripe.instance.presentPaymentSheet();
+      if(mounted)context.go('/home');
+    }catch(_){
+      if(mounted)setState(()=>error='Le paiement n’a pas été finalisé.');
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  @override Widget build(BuildContext context){
+    final total=((booking?['customer_total_amount_minor']??0) as num).toDouble()/100;
+    return Scaffold(
+      appBar:AppBar(title:const Text('Paiement sécurisé')),
+      body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
+        const Icon(Icons.lock_outline,size:56),
+        const SizedBox(height:16),
+        Text('Total à payer : '+total.toStringAsFixed(2)+' €',style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold),textAlign:TextAlign.center),
+        const SizedBox(height:12),
+        const Text('Ce total inclut le prix proposé par le chauffeur et la commission Veyra.',textAlign:TextAlign.center),
+        if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error),textAlign:TextAlign.center)),
+        const SizedBox(height:20),
+        FilledButton.icon(
+          onPressed:loading?null:pay,
+          icon:const Icon(Icons.credit_card),
+          label:loading?const Text('Paiement…'):const Text('Payer maintenant'),
+        ),
+      ])),
+    );
+  }
 }
