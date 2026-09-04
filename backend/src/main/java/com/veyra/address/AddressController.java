@@ -1,5 +1,26 @@
 package com.veyra.address;
-import org.springframework.http.MediaType;import org.springframework.web.bind.annotation.*;import org.springframework.web.client.RestClient;import java.util.*;
-@RestController @RequestMapping("/api/v1/addresses")public class AddressController{private final RestClient http=RestClient.builder().baseUrl("https://nominatim.openstreetmap.org").defaultHeader("User-Agent","Veyra-MVP/1.0").build();
- @GetMapping("/autocomplete")List<Map<String,Object>>search(@RequestParam String q){if(q==null||q.trim().length()<3)return List.of();Object[]r=http.get().uri(u->u.path("/search").queryParam("q",q).queryParam("format","jsonv2").queryParam("limit",5).queryParam("countrycodes","fr").build()).accept(MediaType.APPLICATION_JSON).retrieve().body(Object[].class);if(r==null)return List.of();List<Map<String,Object>>out=new ArrayList<>();for(Object o:r){Map<?,?>m=(Map<?,?>)o;out.add(Map.of("label",String.valueOf(m.get("display_name")),"lat",Double.parseDouble(String.valueOf(m.get("lat"))),"lng",Double.parseDouble(String.valueOf(m.get("lon")))));}return out;}
+
+import com.veyra.provider.GeocodingProvider;
+import org.springframework.web.bind.annotation.*;
+import java.util.*;
+
+@RestController
+@RequestMapping("/api/v1/addresses")
+public class AddressController {
+  private final GeocodingProvider geocoding;
+  public AddressController(GeocodingProvider geocoding){ this.geocoding=geocoding; }
+
+  @GetMapping("/autocomplete")
+  public List<Map<String,Object>> search(
+      @RequestParam String q,
+      @RequestParam(defaultValue="43.2965") double biasLat,
+      @RequestParam(defaultValue="5.3698") double biasLng){
+    return geocoding.search(q,biasLat,biasLng).stream()
+      .map(p->Map.<String,Object>of(
+        "providerId",p.providerId(),
+        "label",p.label(),
+        "lat",p.lat(),
+        "lng",p.lng()))
+      .toList();
+  }
 }
