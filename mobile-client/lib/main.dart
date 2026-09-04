@@ -459,3 +459,210 @@ class _PaymentScreenState extends State<PaymentScreen>{
     );
   }
 }
+
+
+class BookingDetailScreen extends StatefulWidget{
+  final String bookingId;
+  const BookingDetailScreen({required this.bookingId,super.key});
+  @override State<BookingDetailScreen> createState()=>_BookingDetailScreenState();
+}
+class _BookingDetailScreenState extends State<BookingDetailScreen>{
+  late Future<Map<String,dynamic>> future;
+  String? pin;
+  String? message;
+
+  @override void initState(){
+    super.initState();
+    future=api.bookingDetail(widget.bookingId);
+  }
+
+  void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
+
+  Future<void> loadPin()async{
+    try{
+      final value=await api.pin(widget.bookingId);
+      if(mounted)setState(()=>pin=value);
+    }catch(_){
+      if(mounted)setState(()=>message='Le PIN sera disponible à H-1.');
+    }
+  }
+
+  Future<void> cancel()async{
+    try{
+      final result=await api.cancel(widget.bookingId);
+      if(mounted)setState(()=>message='Réservation annulée. Frais éventuels : '+(((result['cancellationFeeMinor']??0) as num).toDouble()/100).toStringAsFixed(2)+' €');
+      reload();
+    }catch(_){
+      if(mounted)setState(()=>message='Annulation impossible dans l’état actuel.');
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('Détail réservation')),
+    body:FutureBuilder<Map<String,dynamic>>(
+      future:future,
+      builder:(context,s){
+        if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+        if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:const Text('Réessayer')));
+        final x=s.data??{};
+        final status=(x['status']??'').toString();
+        final driverName=((x['driver_first_name']??'') as Object).toString()+' '+((x['driver_last_name']??'') as Object).toString();
+        final driverPhone=x['driver_phone']?.toString();
+        final total=((x['customer_total_amount_minor']??0) as num).toDouble()/100;
+        return ListView(padding:const EdgeInsets.all(20),children:[
+          Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
+          const SizedBox(height:8),
+          Text((x['scheduled_at']??'').toString()),
+          const SizedBox(height:12),
+          Card(child:ListTile(title:const Text('Statut'),trailing:Text(status))),
+          if(x['selected_driver_id']!=null)Card(child:ListTile(
+            leading:const CircleAvatar(child:Icon(Icons.person)),
+            title:Text(driverName.trim().isEmpty?'Chauffeur confirmé':driverName.trim()),
+            subtitle:Text('Note : '+(x['driver_rating']??'-').toString()),
+          )),
+          if(x['customer_total_amount_minor']!=null)Card(child:ListTile(
+            title:const Text('Total client'),
+            subtitle:Text((x['payment_method']??'').toString()),
+            trailing:Text(total.toStringAsFixed(2)+' €'),
+          )),
+          if(x['payment_method']=='ONLINE'&&Set.of('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED').contains(status))
+            FilledButton.icon(onPressed:()=>context.go('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:const Text('Payer en ligne')),
+          if(Set.of('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS').contains(status))...[
+            OutlinedButton.icon(onPressed:()=>context.go('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:const Text('Chat Veyra')),
+            OutlinedButton.icon(
+              onPressed:driverPhone==null||driverPhone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:driverPhone)),
+              icon:const Icon(Icons.phone_outlined),label:const Text('Appeler le chauffeur')),
+          ],
+          if(Set.of('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS').contains(status))
+            FilledButton.icon(onPressed:()=>context.go('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:const Text('Suivre la course')),
+          if(status=='CONFIRMED'||status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED')...[
+            OutlinedButton(onPressed:loadPin,child:Text(pin==null?'Afficher le PIN':'PIN : '+pin!)),
+            TextButton(onPressed:cancel,child:const Text('Annuler la réservation')),
+          ],
+          if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(message!)),
+        ]);
+      },
+    ),
+  );
+}
+
+class ChatScreen extends StatefulWidget{
+  final String bookingId;
+  const ChatScreen({required this.bookingId,super.key});
+  @override State<ChatScreen> createState()=>_ChatScreenState();
+}
+class _ChatScreenState extends State<ChatScreen>{
+  final input=TextEditingController();
+  late Future<List<dynamic>> future;
+  bool sending=false;
+
+  @override void initState(){super.initState();future=api.chatMessages(widget.bookingId);}
+  void reload()=>setState(()=>future=api.chatMessages(widget.bookingId));
+
+  Future<void> send()async{
+    final body=input.text.trim();
+    if(body.isEmpty)return;
+    setState(()=>sending=true);
+    try{
+      await api.sendMessage(widget.bookingId,body);
+      input.clear();reload();
+    }finally{
+      if(mounted)setState(()=>sending=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('Chat Veyra')),
+    body:Column(children:[
+      Expanded(child:FutureBuilder<List<dynamic>>(
+        future:future,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+          if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:const Text('Réessayer')));
+          final items=s.data??[];
+          if(items.isEmpty)return const Center(child:Text('Aucun message pour le moment.'));
+          return ListView(padding:const EdgeInsets.all(12),children:items.map((raw){
+            final x=Map<String,dynamic>.from(raw as Map);
+            return Card(child:ListTile(title:Text((x['body']??'').toString()),subtitle:Text((x['sent_at']??'').toString())));
+          }).toList());
+        },
+      )),
+      SafeArea(child:Padding(
+        padding:const EdgeInsets.all(12),
+        child:Row(children:[
+          Expanded(child:TextField(controller:input,maxLength:2000,decoration:const InputDecoration(hintText:'Votre message',counterText:''))),
+          IconButton(onPressed:sending?null:send,icon:const Icon(Icons.send)),
+        ]),
+      )),
+    ]),
+  );
+}
+
+class LiveLocationScreen extends StatefulWidget{
+  final String bookingId;
+  const LiveLocationScreen({required this.bookingId,super.key});
+  @override State<LiveLocationScreen> createState()=>_LiveLocationScreenState();
+}
+class _LiveLocationScreenState extends State<LiveLocationScreen>{
+  Timer? timer;
+  Map<String,dynamic>? location;
+  String? error;
+
+  @override void initState(){
+    super.initState();
+    refresh();
+    timer=Timer.periodic(const Duration(seconds:10),(_)=>refresh());
+  }
+
+  @override void dispose(){
+    timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> refresh()async{
+    try{
+      final value=await api.currentLocation(widget.bookingId);
+      if(mounted)setState((){location=value;error=null;});
+    }catch(_){
+      if(mounted)setState(()=>error='Position en cours de mise à jour.');
+    }
+  }
+
+  @override Widget build(BuildContext context){
+    final available=location?['available']==true;
+    final lat=available?((location!['lat'] as num).toDouble()):43.2965;
+    final lng=available?((location!['lng'] as num).toDouble()):5.3698;
+    return Scaffold(
+      appBar:AppBar(title:const Text('Suivi en direct')),
+      body:Stack(children:[
+        FlutterMap(
+          options:MapOptions(initialCenter:LatLng(lat,lng),initialZoom:available?14:9),
+          children:[
+            TileLayer(
+              urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName:'com.veyra.client',
+            ),
+            if(available)MarkerLayer(markers:[
+              Marker(
+                point:LatLng(lat,lng),
+                width:56,height:56,
+                child:const Icon(Icons.local_taxi,size:44),
+              )
+            ]),
+          ],
+        ),
+        Positioned(
+          left:16,right:16,bottom:20,
+          child:Card(child:Padding(
+            padding:const EdgeInsets.all(16),
+            child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(available?'Position actuelle du chauffeur':'Position indisponible',style:const TextStyle(fontWeight:FontWeight.bold)),
+              Text(error??(available?'Mise à jour automatique toutes les 10 secondes.':'En attente de la première position GPS.')),
+              if(available&&location!['recorded_at']!=null)Text('Dernière position : '+location!['recorded_at'].toString()),
+            ]),
+          )),
+        ),
+      ]),
+    );
+  }
+}
