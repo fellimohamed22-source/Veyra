@@ -1,0 +1,1 @@
+import 'package:flutter_test/flutter_test.dart';import 'package:veyra_client/main.dart';void main(){testWidgets('login',(t)async{await t.pumpWidget(const App());expect(find.text('Connexion'),findOneWidget);});}
