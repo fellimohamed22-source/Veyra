@@ -1,0 +1,8 @@
+package com.veyra.admin;
+import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.security.access.prepost.PreAuthorize;import org.springframework.web.bind.annotation.*;import java.util.*;
+@RestController @RequestMapping("/api/v1/admin")@PreAuthorize("hasRole('ADMIN')")public class AdminController{private final JdbcTemplate db;public AdminController(JdbcTemplate d){db=d;}
+ @GetMapping("/dashboard")Map<String,Object>dash(){return Map.of("bookings",db.queryForObject("select count(*) from scheduled_bookings",Long.class),"pendingDrivers",db.queryForObject("select count(*) from drivers where kyc_status='SUBMITTED'",Long.class),"pendingPartners",db.queryForObject("select count(*) from partner_organizations where status='SUBMITTED'",Long.class));}
+ @PostMapping("/drivers/{id}/approve")void driver(@PathVariable UUID id){db.update("update drivers set kyc_status='APPROVED',status='ACTIVE',marketplace_enabled=true where id=?",id);}
+ @PostMapping("/partners/{id}/approve")void partner(@PathVariable UUID id){db.update("update partner_organizations set status='APPROVED',credit_status='APPROVED' where id=?",id);db.update("insert into partner_invoice_accounts(partner_id) values (?) on conflict do nothing",id);}
+ @GetMapping("/bookings")List<Map<String,Object>>bookings(){return db.queryForList("select id,creator_type,scheduled_at,status,payment_method,selected_driver_id from scheduled_bookings order by created_at desc limit 200");}
+}
