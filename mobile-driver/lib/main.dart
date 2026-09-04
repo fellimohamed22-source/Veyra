@@ -85,16 +85,74 @@ class KycScreen extends StatefulWidget{
 }
 class _KycScreenState extends State<KycScreen>{
   late Future<Map<String,dynamic>> future;
+  late Future<List<dynamic>> categories;
+
+  final legalName=TextEditingController();
+  final siren=TextEditingController();
+  final siret=TextEditingController();
+  final registrationNumber=TextEditingController();
+  final cardNumber=TextEditingController();
+  final brand=TextEditingController();
+  final model=TextEditingController();
+  final year=TextEditingController(text:DateTime.now().year.toString());
+  final plate=TextEditingController();
+  final color=TextEditingController();
+
+  String? categoryId;
   String? uploadingType;
   String? message;
+  bool saving=false;
 
   @override void initState(){
     super.initState();
     future=api.onboardingStatus();
+    categories=api.vehicleCategories();
+  }
+
+  Future<void> saveProfessionalData()async{
+    if(legalName.text.trim().isEmpty||registrationNumber.text.trim().isEmpty||
+       cardNumber.text.trim().isEmpty||brand.text.trim().isEmpty||
+       model.text.trim().isEmpty||plate.text.trim().isEmpty||categoryId==null){
+      setState(()=>message='Complétez les informations professionnelles et le véhicule.');
+      return;
+    }
+    final parsedYear=int.tryParse(year.text);
+    if(parsedYear==null){
+      setState(()=>message='Année du véhicule invalide.');
+      return;
+    }
+    setState((){saving=true;message=null;});
+    try{
+      await api.saveCompany(
+        legalName:legalName.text.trim(),
+        siren:siren.text.trim().isEmpty?null:siren.text.trim(),
+        siret:siret.text.trim().isEmpty?null:siret.text.trim(),
+      );
+      await api.saveVtc(
+        registrationNumber:registrationNumber.text.trim(),
+        cardNumber:cardNumber.text.trim(),
+      );
+      await api.addVehicle(
+        categoryId:categoryId!,
+        brand:brand.text.trim(),
+        model:model.text.trim(),
+        year:parsedYear,
+        plateNumber:plate.text.trim(),
+        color:color.text.trim(),
+      );
+      if(mounted)setState(()=>message='Informations professionnelles enregistrées.');
+    }catch(_){
+      if(mounted)setState(()=>message='Impossible d’enregistrer les informations professionnelles.');
+    }finally{
+      if(mounted)setState(()=>saving=false);
+    }
   }
 
   Future<void> upload(String type)async{
-    final result=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf','jpg','jpeg','png']);
+    final result=await FilePicker.platform.pickFiles(
+      type:FileType.custom,
+      allowedExtensions:['pdf','jpg','jpeg','png'],
+    );
     if(result==null||result.files.single.path==null)return;
     setState((){uploadingType=type;message=null;});
     try{
@@ -118,13 +176,50 @@ class _KycScreenState extends State<KycScreen>{
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
         final status=s.data??{};
         final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+
         return ListView(padding:const EdgeInsets.all(20),children:[
           Card(child:ListTile(
             leading:Icon(approved?Icons.verified:Icons.pending_actions),
             title:Text(approved?'Dossier approuvé':'Vérification en cours'),
             subtitle:Text('Statut KYC : '+(status['kyc_status']??'DRAFT').toString()),
           )),
+          const SizedBox(height:16),
+          const Text('Informations professionnelles',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+          TextField(controller:legalName,decoration:const InputDecoration(labelText:'Raison sociale')),
+          TextField(controller:siren,decoration:const InputDecoration(labelText:'SIREN')),
+          TextField(controller:siret,decoration:const InputDecoration(labelText:'SIRET')),
+          TextField(controller:registrationNumber,decoration:const InputDecoration(labelText:'N° inscription registre VTC')),
+          TextField(controller:cardNumber,decoration:const InputDecoration(labelText:'N° carte professionnelle VTC')),
           const SizedBox(height:12),
+          const Text('Véhicule',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+          FutureBuilder<List<dynamic>>(
+            future:categories,
+            builder:(context,cs){
+              if(cs.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
+              final items=cs.data??[];
+              return DropdownButtonFormField<String>(
+                initialValue:categoryId,
+                decoration:const InputDecoration(labelText:'Catégorie'),
+                items:items.map((raw){
+                  final x=Map<String,dynamic>.from(raw as Map);
+                  return DropdownMenuItem<String>(
+                    value:x['id'].toString(),
+                    child:Text((x['display_name']??x['code']).toString()),
+                  );
+                }).toList(),
+                onChanged:(v)=>setState(()=>categoryId=v),
+              );
+            },
+          ),
+          TextField(controller:brand,decoration:const InputDecoration(labelText:'Marque')),
+          TextField(controller:model,decoration:const InputDecoration(labelText:'Modèle')),
+          TextField(controller:year,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'Année')),
+          TextField(controller:plate,decoration:const InputDecoration(labelText:'Immatriculation')),
+          TextField(controller:color,decoration:const InputDecoration(labelText:'Couleur')),
+          const SizedBox(height:12),
+          FilledButton(onPressed:saving?null:saveProfessionalData,child:Text(saving?'Enregistrement…':'Enregistrer les informations')),
+          const SizedBox(height:24),
+          const Text('Documents obligatoires',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           for(final item in const [
             ('IDENTITY','Pièce d’identité'),
             ('VTC_CARD','Carte professionnelle VTC'),
@@ -142,7 +237,7 @@ class _KycScreenState extends State<KycScreen>{
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
           if(approved)FilledButton(onPressed:()=>context.go('/home'),child:const Text('Accéder aux demandes')),
           if(!approved)const Text(
-            'Les demandes de réservation seront accessibles après validation manuelle du dossier par Veyra.',
+            'Après envoi, l’équipe Veyra vérifie le dossier avant d’activer l’accès aux demandes.',
             textAlign:TextAlign.center,
           ),
         ]);
