@@ -37,3 +37,7 @@ veyra:
   firebase:
     enabled: ${FIREBASE_ENABLED:false}
     credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+
+  bootstrap-admin:
+    email: ${VEYRA_BOOTSTRAP_ADMIN_EMAIL:}
+    password: ${VEYRA_BOOTSTRAP_ADMIN_PASSWORD:}
