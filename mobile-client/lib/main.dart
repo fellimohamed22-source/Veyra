@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen>{
   bool loading=false; String? error;
 
   Future<void> submit()async{
-    setState(()=>{loading=true,error=null});
+    setState((){loading=true;error=null;});
     try{
       await api.login(email.text,password.text);
       if(mounted)context.go('/home');
