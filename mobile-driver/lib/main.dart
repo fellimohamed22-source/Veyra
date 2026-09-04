@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen>{
   bool loading=false;String? error;
 
   Future<void> submit()async{
-    setState(()=>{loading=true,error=null});
+    setState((){loading=true;error=null;});
     try{
       await api.login(email.text,password.text);
       if(mounted)context.go('/home');
@@ -76,7 +76,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
       onRefresh:()async{reload();await future;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         DropdownButtonFormField<String>(
-          value:sort,
+          initialValue:sort,
           decoration:const InputDecoration(labelText:'Trier les demandes'),
           items:const [
             DropdownMenuItem(value:'date',child:Text('Date de départ')),
@@ -130,7 +130,7 @@ class _RequestScreenState extends State<RequestScreen>{
   Future<void> submit()async{
     final euros=double.tryParse(amount.text.replaceAll(',','.'));
     if(euros==null||euros<=0){setState(()=>error='Saisissez un prix valide.');return;}
-    setState(()=>{sending=true,error=null});
+    setState((){sending=true;error=null;});
     try{
       await api.offer(widget.bookingId,(euros*100).round());
       if(mounted)context.go('/home');
