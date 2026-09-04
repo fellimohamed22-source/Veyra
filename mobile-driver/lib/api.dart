@@ -1,0 +1,7 @@
+import 'package:dio/dio.dart';import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+class Api{final Dio dio;final FlutterSecureStorage s=const FlutterSecureStorage();Api(String base):dio=Dio(BaseOptions(baseUrl:base)){dio.interceptors.add(InterceptorsWrapper(onRequest:(o,h)async{final t=await s.read(key:'accessToken');if(t!=null)o.headers['Authorization']='Bearer $t';h.next(o);}));}
+ Future<void>login(String e,String p)async{final r=await dio.post('/api/v1/auth/login',data:{'email':e,'password':p,'deviceName':'driver-mobile'});await s.write(key:'accessToken',value:r.data['accessToken']);}
+ Future<List<dynamic>>opportunities({String sort='date'})async=>(await dio.get('/api/v1/driver/opportunities',queryParameters:{'sort':sort})).data;
+ Future<void>offer(String id,int cents)async{await dio.post('/api/v1/driver/opportunities/$id/offers',data:{'amountMinor':cents,'currency':'EUR'});}
+ Future<void>enRoute(String id)=>dio.post('/api/v1/bookings/$id/en-route');Future<void>arrived(String id)=>dio.post('/api/v1/bookings/$id/arrived');Future<void>start(String id,String pin)=>dio.post('/api/v1/bookings/$id/start',data:{'pin':pin});Future<void>complete(String id)=>dio.post('/api/v1/bookings/$id/complete');
+}
