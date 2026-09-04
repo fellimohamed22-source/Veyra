@@ -1,0 +1,1 @@
+package com.veyra.security;import org.junit.jupiter.api.Test;import static org.junit.jupiter.api.Assertions.*;class PinCryptoTest{@Test void roundtrip(){var p=new PinCrypto("01234567890123456789012345678901");String e=p.encrypt("0427");assertNotEquals("0427",e);assertEquals("0427",p.decrypt(e));}}
