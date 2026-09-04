@@ -30,6 +30,8 @@ class App extends StatelessWidget{
 
 final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
+  GoRoute(path:'/register',builder:(c,s)=>const RegisterScreen()),
+  GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
   GoRoute(path:'/home',builder:(c,s)=>const HomeScreen()),
   GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
@@ -71,8 +73,8 @@ class _LoginScreenState extends State<LoginScreen>{
       if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:20),
       FilledButton(onPressed:loading?null:submit,child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2)):const Text('Se connecter')),
-      TextButton(onPressed:(){},child:const Text('Mot de passe oublié ?')),
-      TextButton(onPressed:(){},child:const Text('Créer un compte')),
+      TextButton(onPressed:()=>context.go('/forgot'),child:const Text('Mot de passe oublié ?')),
+      TextButton(onPressed:()=>context.go('/register'),child:const Text('Créer un compte')),
     ])),
   );
 }
