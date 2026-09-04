@@ -61,6 +61,9 @@ class Api {
   Future<List<dynamic>> vehicleCategories() async =>
       List<dynamic>.from((await dio.get('/api/v1/reference/vehicle-categories')).data);
 
+  Future<Map<String,dynamic>> createPaymentIntent(String bookingId,String idempotencyKey) async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/payments/bookings/$bookingId/intent',options:Options(headers:{'Idempotency-Key':idempotencyKey}))).data);
+
   Future<List<dynamic>> notifications() async =>
       List<dynamic>.from((await dio.get('/api/v1/notifications')).data);
 
