@@ -41,6 +41,9 @@ class Api {
   Future<List<dynamic>> bookings() async =>
       List<dynamic>.from((await dio.get('/api/v1/scheduled-bookings')).data);
 
+  Future<Map<String,dynamic>> bookingDetail(String id) async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/scheduled-bookings/$id')).data);
+
   Future<Map<String,dynamic>> createBooking(Map<String,dynamic> body) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings',data:body)).data);
 
@@ -49,6 +52,9 @@ class Api {
 
   Future<Map<String,dynamic>> accept(String bookingId,String offerId) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings/$bookingId/offers/$offerId/accept')).data);
+
+  Future<Map<String,dynamic>> cancel(String bookingId) async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/bookings/$bookingId/cancel')).data);
 
   Future<String> pin(String bookingId) async =>
       (await dio.get('/api/v1/bookings/$bookingId/pin')).data['pin'] as String;
