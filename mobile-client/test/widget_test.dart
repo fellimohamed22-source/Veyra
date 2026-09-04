@@ -1,1 +1,10 @@
-import 'package:flutter_test/flutter_test.dart';import 'package:veyra_client/main.dart';void main(){testWidgets('login',(t)async{await t.pumpWidget(const App());expect(find.text('Connexion'),findsOneWidget);});}
+import 'package:flutter_test/flutter_test.dart';
+import 'package:veyra_client/main.dart';
+
+void main(){
+  testWidgets('login screen is visible',(tester)async{
+    await tester.pumpWidget(const App());
+    expect(find.text('Connexion Veyra'),findsOneWidget);
+    expect(find.text('Se connecter'),findsOneWidget);
+  });
+}
