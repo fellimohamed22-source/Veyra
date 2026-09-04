@@ -1,0 +1,3 @@
+import {bootstrapApplication} from '@angular/platform-browser';import {provideRouter,RouterOutlet,RouterLink} from '@angular/router';import {Component} from '@angular/core';import {routes} from './routes';
+@Component({selector:'app-root',standalone:true,imports:[RouterOutlet,RouterLink],template:`<div class="shell"><nav class="nav"><h2>Veyra</h2><a routerLink="/partner">Partenaire</a><a routerLink="/admin">Admin</a><a routerLink="/finance">Finance</a><a routerLink="/support">Support</a></nav><main class="content"><router-outlet/></main></div>`})class App{}
+bootstrapApplication(App,{providers:[provideRouter(routes)]});
