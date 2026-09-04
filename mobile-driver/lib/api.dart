@@ -64,6 +64,27 @@ class Api {
 
   Future<void> noShow(String id) async => dio.post('/api/v1/bookings/$id/no-show');
 
+  Future<void> updateLocation({
+    required String bookingId,
+    required double lat,
+    required double lng,
+    required int sequenceNo,
+    double? accuracyM,
+    double? heading,
+    double? speedMps,
+  }) async {
+    await dio.post('/api/v1/driver/location',data:{
+      'bookingId':bookingId,
+      'lat':lat,
+      'lng':lng,
+      'accuracyM':accuracyM,
+      'heading':heading,
+      'speedMps':speedMps,
+      'sequenceNo':sequenceNo,
+      'recordedAt':DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);
 
