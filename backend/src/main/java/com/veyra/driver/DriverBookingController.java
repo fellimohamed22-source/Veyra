@@ -18,8 +18,7 @@ public class DriverBookingController {
   }
 
   @GetMapping
-  public List<Map<String, Object>> mine(
-      @RequestParam(defaultValue = "upcoming") String scope) {
+  public List<Map<String, Object>> mine(@RequestParam(defaultValue="upcoming") String scope) {
     UUID driverId = driverId();
     String states = "('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')";
     if ("history".equals(scope)) {
@@ -38,8 +37,12 @@ public class DriverBookingController {
     UUID driverId = driverId();
     List<Map<String, Object>> rows = db.queryForList(
         "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.payment_method," +
-        "sb.beneficiary_name_snapshot,sb.beneficiary_phone_snapshot,bfs.driver_net_amount_minor,bfs.currency " +
-        "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
+        "coalesce(sb.beneficiary_name_snapshot,concat(cu.first_name,' ',coalesce(cu.last_name,''))) as customer_name," +
+        "coalesce(sb.beneficiary_phone_snapshot,cu.phone) as customer_phone," +
+        "bfs.driver_net_amount_minor,bfs.currency " +
+        "from scheduled_bookings sb " +
+        "join users cu on cu.id=sb.creator_user_id " +
+        "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "where sb.id=? and sb.selected_driver_id=?",
         bookingId,
         driverId);
