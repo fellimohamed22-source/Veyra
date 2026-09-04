@@ -1,4 +1,9 @@
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
@@ -290,14 +295,83 @@ class _RideScreenState extends State<RideScreen>{
   final pin=TextEditingController();
   bool busy=false;
   String? error;
+  Timer? gpsTimer;
+  Position? position;
+  int sequence=0;
 
-  @override void initState(){super.initState();future=api.bookingDetail(widget.bookingId);}
+  @override void initState(){
+    super.initState();
+    future=api.bookingDetail(widget.bookingId);
+  }
+
+  @override void dispose(){
+    gpsTimer?.cancel();
+    super.dispose();
+  }
+
   void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
 
-  Future<void> action(Future<void> Function() fn)async{
+  Future<bool> ensureLocationPermission()async{
+    if(!await Geolocator.isLocationServiceEnabled()){
+      if(mounted)setState(()=>error='Activez la localisation du téléphone.');
+      return false;
+    }
+    var permission=await Geolocator.checkPermission();
+    if(permission==LocationPermission.denied){
+      permission=await Geolocator.requestPermission();
+    }
+    if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
+      if(mounted)setState(()=>error='La localisation est obligatoire pendant la prise en charge et la course.');
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> sendLocation()async{
+    if(!await ensureLocationPermission())return;
+    try{
+      final p=await Geolocator.getCurrentPosition(
+        locationSettings:const LocationSettings(accuracy:LocationAccuracy.high),
+      );
+      sequence++;
+      await api.updateLocation(
+        bookingId:widget.bookingId,
+        lat:p.latitude,
+        lng:p.longitude,
+        sequenceNo:sequence,
+        accuracyM:p.accuracy,
+        heading:p.heading,
+        speedMps:p.speed,
+      );
+      if(mounted)setState(()=>position=p);
+    }catch(_){
+      if(mounted)setState(()=>error='Position GPS momentanément indisponible.');
+    }
+  }
+
+  void startTracking(){
+    gpsTimer?.cancel();
+    sendLocation();
+    gpsTimer=Timer.periodic(const Duration(seconds:10),(_)=>sendLocation());
+  }
+
+  void stopTracking(){
+    gpsTimer?.cancel();
+    gpsTimer=null;
+  }
+
+  Future<void> action(Future<void> Function() fn,{bool startGps=false,bool stopGps=false})async{
     setState((){busy=true;error=null;});
-    try{await fn();reload();}catch(_){if(mounted)setState(()=>error='Action impossible dans l’état actuel.');}
-    finally{if(mounted)setState(()=>busy=false);}
+    try{
+      await fn();
+      if(startGps)startTracking();
+      if(stopGps)stopTracking();
+      reload();
+    }catch(_){
+      if(mounted)setState(()=>error='Action impossible dans l’état actuel.');
+    }finally{
+      if(mounted)setState(()=>busy=false);
+    }
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
@@ -309,26 +383,65 @@ class _RideScreenState extends State<RideScreen>{
         if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:const Text('Réessayer')));
         final x=s.data??{};
         final status=(x['status']??'').toString();
+        final phone=x['customer_phone']?.toString();
+        final lat=position?.latitude??43.2965;
+        final lng=position?.longitude??5.3698;
+
+        if(Set.of('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS').contains(status)&&gpsTimer==null){
+          WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)startTracking();});
+        }
+
         return ListView(padding:const EdgeInsets.all(20),children:[
-          Container(height:220,decoration:BoxDecoration(color:Theme.of(context).colorScheme.surfaceContainerHighest,borderRadius:BorderRadius.circular(20)),
-            alignment:Alignment.center,child:const Column(mainAxisSize:MainAxisSize.min,children:[
-              Icon(Icons.map_outlined,size:70),Text('Carte / position temps réel'),
-            ])),
+          SizedBox(
+            height:240,
+            child:ClipRRect(
+              borderRadius:BorderRadius.circular(20),
+              child:FlutterMap(
+                options:MapOptions(initialCenter:LatLng(lat,lng),initialZoom:position==null?9:14),
+                children:[
+                  TileLayer(
+                    urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName:'com.veyra.driver',
+                  ),
+                  if(position!=null)MarkerLayer(markers:[
+                    Marker(
+                      point:LatLng(lat,lng),width:56,height:56,
+                      child:const Icon(Icons.local_taxi,size:44),
+                    )
+                  ]),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height:16),
-          Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+          Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
+            style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           Text('Statut : '+status),
-          if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-          if(status=='CONFIRMED')FilledButton(onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId)),child:const Text('Je suis en route')),
-          if(status=='DRIVER_EN_ROUTE')FilledButton(onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),child:const Text('Je suis arrivé')),
+          if(x['customer_name']!=null)Text('Client : '+x['customer_name'].toString()),
+          if(error!=null)Padding(
+            padding:const EdgeInsets.symmetric(vertical:10),
+            child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
+          ),
+          if(status=='CONFIRMED')
+            FilledButton(onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),child:const Text('Je suis en route')),
+          if(status=='DRIVER_EN_ROUTE')
+            FilledButton(onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),child:const Text('Je suis arrivé')),
           if(status=='DRIVER_ARRIVED')...[
-            TextField(controller:pin,maxLength:4,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'PIN client (4 chiffres)')),
-            FilledButton(onPressed:busy?null:()=>action(()=>api.start(widget.bookingId,pin.text)),child:const Text('Démarrer la course')),
-            TextButton(onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId)),child:const Text('Signaler un no-show')),
+            TextField(
+              controller:pin,maxLength:4,keyboardType:TextInputType.number,
+              decoration:const InputDecoration(labelText:'PIN client (4 chiffres)'),
+            ),
+            FilledButton(onPressed:busy?null:()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),child:const Text('Démarrer la course')),
+            TextButton(onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),child:const Text('Signaler un no-show')),
           ],
-          if(status=='IN_PROGRESS')FilledButton(onPressed:busy?null:()=>action(()=>api.complete(widget.bookingId)),child:const Text('Terminer la course')),
+          if(status=='IN_PROGRESS')
+            FilledButton(onPressed:busy?null:()=>action(()=>api.complete(widget.bookingId),stopGps:true),child:const Text('Terminer la course')),
           const SizedBox(height:10),
-          const ListTile(leading:Icon(Icons.chat_bubble_outline),title:Text('Chat Veyra'),subtitle:Text('Disponible après confirmation')),
-          const ListTile(leading:Icon(Icons.phone_outlined),title:Text('Appeler le client')),
+          OutlinedButton.icon(
+            onPressed:phone==null||phone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:phone)),
+            icon:const Icon(Icons.phone_outlined),label:const Text('Appeler le client'),
+          ),
+          const Text('Le chat Veyra est disponible après confirmation depuis la réservation.'),
         ]);
       },
     ),
