@@ -24,7 +24,7 @@ public class DocumentController {
     byte[] bytes=storage.load((String)x.get("storage_key")).readAllBytes();
     return ResponseEntity.ok()
       .contentType(MediaType.parseMediaType((String)x.get("content_type")))
-      .header(HttpHeaders.CONTENT_DISPOSITION,"inline; filename="document"")
+      .header(HttpHeaders.CONTENT_DISPOSITION,"inline; filename=\"document\"")
       .body(bytes);
   }
 }
