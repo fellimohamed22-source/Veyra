@@ -1,11 +1,22 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
+
+Future<void> configurePush() async {
+  try{
+    if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+    await FirebaseMessaging.instance.requestPermission();
+    final token=await FirebaseMessaging.instance.getToken();
+    if(token!=null)await api.registerDevice(token);
+  }catch(_){}
+}
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
 
@@ -54,6 +65,7 @@ class _LoginScreenState extends State<LoginScreen>{
     setState((){loading=true;error=null;});
     try{
       await api.login(email.text,password.text);
+      await configurePush();
       if(mounted)context.go('/home');
     }catch(_){
       if(mounted)setState(()=>error='Identifiants invalides ou service indisponible.');
@@ -697,6 +709,7 @@ class _RegisterScreenState extends State<RegisterScreen>{
         lastName:lastName.text,
         phone:phone.text,
       );
+      await configurePush();
       if(mounted)context.go('/home');
     }catch(_){
       if(mounted)setState(()=>error='Création du compte impossible. Vérifiez les informations ou utilisez un autre e-mail.');
