@@ -7,5 +7,6 @@ dependencies:
   dio: ^5.7.0
   flutter_secure_storage: ^9.2.2
   web_socket_channel: ^3.0.1
+  flutter_stripe: ^11.5.0
 dev_dependencies:
   flutter_test: {sdk: flutter}
