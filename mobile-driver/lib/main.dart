@@ -30,6 +30,7 @@ final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/agenda',builder:(c,s)=>const AgendaScreen()),
   GoRoute(path:'/ride/:id',builder:(c,s)=>RideScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/wallet',builder:(c,s)=>const WalletScreen()),
+  GoRoute(path:'/chat/:id',builder:(c,s)=>DriverChatScreen(bookingId:s.pathParameters['id']!)),
 ]);
 
 class LoginScreen extends StatefulWidget{
@@ -443,7 +444,7 @@ class _RideScreenState extends State<RideScreen>{
             onPressed:phone==null||phone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:phone)),
             icon:const Icon(Icons.phone_outlined),label:const Text('Appeler le client'),
           ),
-          const Text('Le chat Veyra est disponible après confirmation depuis la réservation.'),
+          OutlinedButton.icon(onPressed:()=>context.go('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:const Text('Chat Veyra')),
         ]);
       },
     ),
@@ -533,5 +534,59 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
       const SizedBox(height:16),
       FilledButton(onPressed:loading?null:submit,child:loading?const Text('Création…'):const Text('Continuer vers mon dossier VTC')),
     ])),
+  );
+}
+
+
+class DriverChatScreen extends StatefulWidget{
+  final String bookingId;
+  const DriverChatScreen({required this.bookingId,super.key});
+  @override State<DriverChatScreen> createState()=>_DriverChatScreenState();
+}
+class _DriverChatScreenState extends State<DriverChatScreen>{
+  final input=TextEditingController();
+  late Future<List<dynamic>> future;
+  bool sending=false;
+
+  @override void initState(){super.initState();future=api.chatMessages(widget.bookingId);}
+  void reload()=>setState(()=>future=api.chatMessages(widget.bookingId));
+
+  Future<void> send()async{
+    final body=input.text.trim();
+    if(body.isEmpty)return;
+    setState(()=>sending=true);
+    try{
+      await api.sendMessage(widget.bookingId,body);
+      input.clear();
+      reload();
+    }finally{
+      if(mounted)setState(()=>sending=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('Chat Veyra')),
+    body:Column(children:[
+      Expanded(child:FutureBuilder<List<dynamic>>(
+        future:future,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+          if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:const Text('Réessayer')));
+          final items=s.data??[];
+          if(items.isEmpty)return const Center(child:Text('Aucun message pour le moment.'));
+          return ListView(padding:const EdgeInsets.all(12),children:items.map((raw){
+            final x=Map<String,dynamic>.from(raw as Map);
+            return Card(child:ListTile(title:Text((x['body']??'').toString()),subtitle:Text((x['sent_at']??'').toString())));
+          }).toList());
+        },
+      )),
+      SafeArea(child:Padding(
+        padding:const EdgeInsets.all(12),
+        child:Row(children:[
+          Expanded(child:TextField(controller:input,maxLength:2000,decoration:const InputDecoration(hintText:'Votre message',counterText:''))),
+          IconButton(onPressed:sending?null:send,icon:const Icon(Icons.send)),
+        ]),
+      )),
+    ]),
   );
 }
