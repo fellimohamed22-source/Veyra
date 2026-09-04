@@ -33,6 +33,12 @@ class Api {
       data:{'amountMinor':amountMinor,'currency':'EUR'});
   }
 
+  Future<List<dynamic>> bookings({String scope='upcoming'}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/driver/bookings',queryParameters:{'scope':scope})).data);
+
+  Future<Map<String,dynamic>> bookingDetail(String id) async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/driver/bookings/$id')).data);
+
   Future<Map<String,dynamic>> wallet() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/wallet')).data);
 
@@ -44,6 +50,8 @@ class Api {
   Future<void> start(String id,String pin) async =>
       dio.post('/api/v1/bookings/$id/start',data:{'pin':pin});
   Future<void> complete(String id) async => dio.post('/api/v1/bookings/$id/complete');
+
+  Future<void> noShow(String id) async => dio.post('/api/v1/bookings/$id/no-show');
 
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);
