@@ -1,0 +1,1 @@
+import {Component} from '@angular/core';@Component({standalone:true,template:`<h1>Support</h1><div class="card"><h3>Recherche réservation</h3><input placeholder="ID, client, chauffeur"><p>Timeline, chat, paiement, annulation, incident et audit.</p></div>`})export class Support{}
