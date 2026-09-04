@@ -41,3 +41,6 @@ veyra:
   bootstrap-admin:
     email: ${VEYRA_BOOTSTRAP_ADMIN_EMAIL:}
     password: ${VEYRA_BOOTSTRAP_ADMIN_PASSWORD:}
+
+  websocket:
+    allowed-origins: ${VEYRA_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:8080}
