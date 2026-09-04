@@ -1,7 +1,79 @@
 package com.veyra.security;
-import com.veyra.auth.JwtService;import jakarta.servlet.*;import jakarta.servlet.http.*;import org.springframework.context.annotation.*;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;import org.springframework.security.config.annotation.web.builders.HttpSecurity;import org.springframework.security.config.http.SessionCreationPolicy;import org.springframework.security.core.authority.SimpleGrantedAuthority;import org.springframework.security.core.context.SecurityContextHolder;import org.springframework.security.crypto.bcrypt.*;import org.springframework.security.crypto.password.PasswordEncoder;import org.springframework.security.web.*;import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;import org.springframework.web.filter.OncePerRequestFilter;import java.io.*;import java.util.*;
-@Configuration @EnableMethodSecurity public class SecurityConfig{
- @Bean PasswordEncoder encoder(){return new BCryptPasswordEncoder(12);}
- @Bean OncePerRequestFilter jwtFilter(JwtService jwt,JdbcTemplate jdbc){return new OncePerRequestFilter(){protected void doFilterInternal(HttpServletRequest q,HttpServletResponse r,FilterChain c)throws ServletException,IOException{String h=q.getHeader("Authorization");if(h!=null&&h.startsWith("Bearer ")){try{UUID id=jwt.userId(h.substring(7));var a=jdbc.queryForList("select r.code from roles r join user_roles ur on ur.role_id=r.id where ur.user_id=?",String.class,id).stream().map(x->new SimpleGrantedAuthority("ROLE_"+x)).toList();SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(id,null,a));}catch(Exception ignored){SecurityContextHolder.clearContext();}}c.doFilter(q,r);}};}
- @Bean SecurityFilterChain chain(HttpSecurity h,OncePerRequestFilter f)throws Exception{return h.csrf(c->c.disable()).sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS)).authorizeHttpRequests(a->a.requestMatchers("/api/v1/auth/**","/actuator/health").permitAll().anyRequest().authenticated()).addFilterBefore(f,UsernamePasswordAuthenticationFilter.class).build();}
+
+import com.veyra.auth.JwtService;
+import jakarta.servlet.*;
+import jakarta.servlet.http.*;
+import org.springframework.context.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.UUID;
+
+@Configuration
+@EnableMethodSecurity
+public class SecurityConfig {
+
+  @Bean
+  PasswordEncoder encoder() {
+    return new BCryptPasswordEncoder(12);
+  }
+
+  @Bean
+  OncePerRequestFilter jwtFilter(JwtService jwt, JdbcTemplate jdbc) {
+    return new OncePerRequestFilter() {
+      @Override
+      protected void doFilterInternal(
+          HttpServletRequest request,
+          HttpServletResponse response,
+          FilterChain chain) throws ServletException, IOException {
+
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+          try {
+            UUID userId = jwt.userId(header.substring(7));
+            var authorities = jdbc.queryForList(
+                    "select r.code from roles r join user_roles ur on ur.role_id=r.id where ur.user_id=?",
+                    String.class,
+                    userId)
+                .stream()
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                .toList();
+            SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(userId, null, authorities));
+          } catch (Exception ignored) {
+            SecurityContextHolder.clearContext();
+          }
+        }
+        chain.doFilter(request, response);
+      }
+    };
+  }
+
+  @Bean
+  SecurityFilterChain chain(HttpSecurity http, OncePerRequestFilter jwtFilter) throws Exception {
+    return http
+        .csrf(csrf -> csrf.disable())
+        .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers(
+                "/api/v1/auth/**",
+                "/api/v1/payments/stripe/webhook",
+                "/actuator/health")
+            .permitAll()
+            .anyRequest()
+            .authenticated())
+        .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+        .build();
+  }
 }
