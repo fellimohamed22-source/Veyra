@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32);
+CREATE INDEX IF NOT EXISTS ix_users_phone ON users(phone) WHERE phone IS NOT NULL;
