@@ -42,6 +42,17 @@ class Api {
   Future<Map<String,dynamic>> wallet() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/wallet')).data);
 
+  Future<Map<String,dynamic>> createProfile() async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/driver/profile')).data);
+
+  Future<void> uploadDocument(String type,String filePath) async {
+    final form=FormData.fromMap({
+      'type':type,
+      'file':await MultipartFile.fromFile(filePath),
+    });
+    await dio.post('/api/v1/driver/documents',data:form);
+  }
+
   Future<Map<String,dynamic>> onboardingStatus() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/onboarding/status')).data);
 
