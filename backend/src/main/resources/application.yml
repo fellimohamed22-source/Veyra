@@ -29,3 +29,7 @@ veyra:
     max-offer-window-hours: 24
     normal-close-before-minutes: 120
     short-close-before-minutes: 30
+
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
