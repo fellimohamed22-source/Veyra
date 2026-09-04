@@ -22,8 +22,15 @@ public class BookingOwnerController {
     List<Map<String, Object>> rows = db.queryForList(
         "select sb.id,sb.creator_user_id,sb.partner_id,sb.pickup_address,sb.dropoff_address," +
         "sb.scheduled_at,sb.status,sb.payment_method,sb.selected_driver_id," +
+        "du.id as selected_driver_user_id,du.first_name as driver_first_name,du.last_name as driver_last_name," +
+        "du.phone as driver_phone,d.rating as driver_rating,v.brand as vehicle_brand,v.model as vehicle_model," +
+        "v.plate_number as vehicle_plate,v.color as vehicle_color," +
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency " +
-        "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=?",
+        "from scheduled_bookings sb " +
+        "left join drivers d on d.id=sb.selected_driver_id " +
+        "left join users du on du.id=d.user_id " +
+        "left join vehicles v on v.driver_id=d.id and v.status in ('ACTIVE','APPROVED') " +
+        "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=? limit 1",
         bookingId);
     if (rows.isEmpty()) {
       throw new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND");
