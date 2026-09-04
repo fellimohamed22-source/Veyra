@@ -19,6 +19,8 @@ veyra:
     access-ttl-minutes: 15
     refresh-ttl-days: 30
     secret: ${JWT_SECRET:dev-only-change-this-secret-at-least-32-bytes}
+  crypto:
+    pin-key: ${PIN_ENCRYPTION_KEY:dev-pin-key-must-be-32-bytes-long}
   storage:
     root: ${VEYRA_DOCUMENT_ROOT:./runtime/documents}
     max-file-size-mb: 10
