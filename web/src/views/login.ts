@@ -1,11 +1,12 @@
 import {Component} from '@angular/core';
 import {FormsModule} from '@angular/forms';
+import {CommonModule} from '@angular/common';
 import {Router} from '@angular/router';
 import {Api} from '../api';
 
 @Component({
   standalone:true,
-  imports:[FormsModule],
+  imports:[FormsModule,CommonModule],
   template:`
     <div class="card" style="max-width:460px;margin:40px auto">
       <h1>Connexion Veyra</h1>
