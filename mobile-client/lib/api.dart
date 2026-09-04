@@ -73,6 +73,15 @@ class Api {
   Future<List<dynamic>> notifications() async =>
       List<dynamic>.from((await dio.get('/api/v1/notifications')).data);
 
+  Future<Map<String,dynamic>> currentLocation(String bookingId) async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/location')).data);
+
+  Future<void> rate(String bookingId,String ratedUserId,int score,{String? comment}) async {
+    await dio.post('/api/v1/bookings/$bookingId/rating',data:{
+      'score':score,'comment':comment,'ratedUserId':ratedUserId
+    });
+  }
+
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);
 
