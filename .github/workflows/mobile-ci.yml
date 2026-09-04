@@ -1,0 +1,17 @@
+name: mobile-ci
+on: [push, pull_request]
+jobs:
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: {channel: stable}
+      - run: cd mobile-client && flutter pub get && flutter analyze && flutter test
+  driver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: {channel: stable}
+      - run: cd mobile-driver && flutter pub get && flutter analyze && flutter test
