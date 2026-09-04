@@ -1,7 +1,49 @@
 package com.veyra.finance;
-import com.veyra.security.CurrentUser;import com.veyra.shared.ApiException;import org.springframework.http.*;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.web.bind.annotation.*;import java.util.*;
-@RestController @RequestMapping("/api/v1")public class FinanceController{private final JdbcTemplate db;public FinanceController(JdbcTemplate d){db=d;}
- @PostMapping("/bookings/{id}/pay-online")Map<String,Object>pay(@PathVariable UUID id,@RequestHeader(value="Idempotency-Key")String key){Map<String,Object>b=one("select sb.creator_user_id,sb.payment_method,bfs.customer_total_amount_minor,bfs.currency from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=?",id);if(!CurrentUser.id().equals(b.get("creator_user_id")))throw new ApiException(HttpStatus.FORBIDDEN,"FORBIDDEN");if(!"ONLINE".equals(b.get("payment_method")))throw new ApiException(HttpStatus.CONFLICT,"NOT_ONLINE_PAYMENT");List<Map<String,Object>>old=db.queryForList("select id,status,provider_payment_id from payments where idempotency_key=?",key);if(!old.isEmpty())return old.getFirst();UUID p=UUID.randomUUID();db.update("insert into payments(id,booking_id,payer_user_id,amount_minor,currency,method,status,provider,provider_payment_id,idempotency_key) values (?,?,?,?,?,'ONLINE','CAPTURED','MOCK',?,?)",p,id,CurrentUser.id(),b.get("customer_total_amount_minor"),b.get("currency"),"mock_"+p,key);return Map.of("paymentId",p,"status","CAPTURED","provider","MOCK");}
- @GetMapping("/driver/wallet")Map<String,Object>wallet(){UUID d=db.queryForObject("select id from drivers where user_id=?",UUID.class,CurrentUser.id());Long debt=db.queryForObject("select coalesce(sum(amount_minor-paid_amount_minor),0) from driver_platform_debts where driver_id=? and status in ('DUE','PARTIALLY_PAID','OVERDUE')",Long.class,d);Long payable=db.queryForObject("select coalesce(sum(amount_minor),0) from driver_payables where driver_id=? and status='PAYABLE'",Long.class,d);return Map.of("cashDebtMinor",debt,"onlinePayableMinor",payable,"currency","EUR","cashWarning",debt>=5000,"cashRestricted",debt>=10000,"cashBookingsBlocked",debt>=15000);}
- private Map<String,Object>one(String q,Object...a){List<Map<String,Object>>x=db.queryForList(q,a);if(x.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"NOT_FOUND");return x.getFirst();}
+
+import com.veyra.security.CurrentUser;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.*;
+
+@RestController
+@RequestMapping("/api/v1")
+public class FinanceController {
+  private final JdbcTemplate db;
+
+  public FinanceController(JdbcTemplate db) {
+    this.db = db;
+  }
+
+  @GetMapping("/driver/wallet")
+  public Map<String, Object> wallet() {
+    UUID driverId = db.queryForObject(
+        "select id from drivers where user_id=?",
+        UUID.class,
+        CurrentUser.id());
+
+    Long debt = db.queryForObject(
+        "select coalesce(sum(amount_minor-paid_amount_minor),0) " +
+        "from driver_platform_debts where driver_id=? " +
+        "and status in ('DUE','PARTIALLY_PAID','OVERDUE')",
+        Long.class,
+        driverId);
+
+    Long payable = db.queryForObject(
+        "select coalesce(sum(amount_minor),0) " +
+        "from driver_payables where driver_id=? and status='PAYABLE'",
+        Long.class,
+        driverId);
+
+    long cashDebt = debt == null ? 0 : debt;
+    long onlinePayable = payable == null ? 0 : payable;
+
+    return Map.of(
+        "cashDebtMinor", cashDebt,
+        "onlinePayableMinor", onlinePayable,
+        "currency", "EUR",
+        "cashWarning", cashDebt >= 5000,
+        "cashRestricted", cashDebt >= 10000,
+        "cashBookingsBlocked", cashDebt >= 15000);
+  }
 }
