@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
@@ -30,6 +34,9 @@ final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
+  GoRoute(path:'/booking/:id',builder:(c,s)=>BookingDetailScreen(bookingId:s.pathParameters['id']!)),
+  GoRoute(path:'/chat/:id',builder:(c,s)=>ChatScreen(bookingId:s.pathParameters['id']!)),
+  GoRoute(path:'/live/:id',builder:(c,s)=>LiveLocationScreen(bookingId:s.pathParameters['id']!)),
 ]);
 
 class LoginScreen extends StatefulWidget{
@@ -122,7 +129,12 @@ class _HomeScreenState extends State<HomeScreen>{
                 trailing:const Icon(Icons.chevron_right),
                 onTap:(){
                   final id=x['id']?.toString();
-                  if(id!=null&&(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'))context.go('/offers/'+id);
+                  if(id==null)return;
+                  if(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'){
+                    context.go('/offers/'+id);
+                  }else{
+                    context.go('/booking/'+id);
+                  }
                 },
               ));
             }).toList());
