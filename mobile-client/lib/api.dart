@@ -42,6 +42,14 @@ class Api {
     await dio.post('/api/v1/auth/forgot-password',data:{'email':email.trim()});
   }
 
+  Future<void> registerDevice(String token,{String platform='mobile'}) async {
+    await dio.post('/api/v1/devices',data:{
+      'platform':platform,
+      'pushToken':token,
+      'deviceName':'Veyra mobile',
+    });
+  }
+
   Future<void> login(String email,String password) async {
     final r=await dio.post('/api/v1/auth/login',data:{
       'email':email.trim(),
