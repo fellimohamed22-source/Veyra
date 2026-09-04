@@ -5,8 +5,19 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
+
+Future<void> configureDriverPush() async {
+  try{
+    if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+    await FirebaseMessaging.instance.requestPermission();
+    final token=await FirebaseMessaging.instance.getToken();
+    if(token!=null)await api.registerDevice(token);
+  }catch(_){}
+}
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
 
@@ -47,6 +58,7 @@ class _LoginScreenState extends State<LoginScreen>{
     setState((){loading=true;error=null;});
     try{
       await api.login(email.text,password.text);
+      await configureDriverPush();
       await api.createProfile();
       if(!mounted)return;
       try{
@@ -605,6 +617,7 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
         phone:phone.text,
       );
       await api.createProfile();
+      await configureDriverPush();
       if(mounted)context.go('/kyc');
     }catch(_){
       if(mounted)setState(()=>error='Création du compte impossible.');
