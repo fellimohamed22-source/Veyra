@@ -668,3 +668,92 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     );
   }
 }
+
+
+class RegisterScreen extends StatefulWidget{
+  const RegisterScreen({super.key});
+  @override State<RegisterScreen> createState()=>_RegisterScreenState();
+}
+class _RegisterScreenState extends State<RegisterScreen>{
+  final firstName=TextEditingController();
+  final lastName=TextEditingController();
+  final phone=TextEditingController();
+  final email=TextEditingController();
+  final password=TextEditingController();
+  bool loading=false;
+  String? error;
+
+  Future<void> submit()async{
+    if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
+      setState(()=>error='Prénom, e-mail et mot de passe de 10 caractères minimum requis.');
+      return;
+    }
+    setState((){loading=true;error=null;});
+    try{
+      await api.register(
+        email:email.text,
+        password:password.text,
+        firstName:firstName.text,
+        lastName:lastName.text,
+        phone:phone.text,
+      );
+      if(mounted)context.go('/home');
+    }catch(_){
+      if(mounted)setState(()=>error='Création du compte impossible. Vérifiez les informations ou utilisez un autre e-mail.');
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('Créer un compte')),
+    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
+      TextField(controller:firstName,decoration:const InputDecoration(labelText:'Prénom')),
+      const SizedBox(height:12),
+      TextField(controller:lastName,decoration:const InputDecoration(labelText:'Nom')),
+      const SizedBox(height:12),
+      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:const InputDecoration(labelText:'Téléphone')),
+      const SizedBox(height:12),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:const InputDecoration(labelText:'Email')),
+      const SizedBox(height:12),
+      TextField(controller:password,obscureText:true,decoration:const InputDecoration(labelText:'Mot de passe',helperText:'10 caractères minimum')),
+      if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+      const SizedBox(height:16),
+      FilledButton(onPressed:loading?null:submit,child:loading?const Text('Création…'):const Text('Créer mon compte')),
+    ])),
+  );
+}
+
+class ForgotPasswordScreen extends StatefulWidget{
+  const ForgotPasswordScreen({super.key});
+  @override State<ForgotPasswordScreen> createState()=>_ForgotPasswordScreenState();
+}
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
+  final email=TextEditingController();
+  bool loading=false;
+  String? message;
+
+  Future<void> submit()async{
+    setState((){loading=true;message=null;});
+    try{
+      await api.forgotPassword(email.text);
+      if(mounted)setState(()=>message='Si cet e-mail existe, les instructions de réinitialisation ont été envoyées.');
+    }catch(_){
+      if(mounted)setState(()=>message='Impossible d’envoyer la demande pour le moment.');
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('Mot de passe oublié')),
+    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
+      const Text('Saisissez votre e-mail. Le message ne révèle pas si un compte existe.'),
+      const SizedBox(height:16),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:const InputDecoration(labelText:'Email')),
+      const SizedBox(height:16),
+      FilledButton(onPressed:loading?null:submit,child:const Text('Envoyer les instructions')),
+      if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(message!)),
+    ])),
+  );
+}
