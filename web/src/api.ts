@@ -41,6 +41,9 @@ export class Api {
   rejectDriver(id:string,reasonCode:string){return this.request('/admin/drivers/'+id+'/reject',{method:'POST',body:JSON.stringify({reasonCode})});}
   approvePartner(id:string){return this.request('/admin/partners/'+id+'/approve',{method:'POST'});}
   suspendPartner(id:string){return this.request('/admin/partners/'+id+'/suspend',{method:'POST'});}
+  setStandardCommission(bps:number){return this.request('/admin/config/commission/standard',{method:'POST',body:JSON.stringify({bps})});}
+  setPartnerCommission(id:string,bps:number){return this.request('/admin/config/commission/partner/'+id,{method:'POST',body:JSON.stringify({bps})});}
+  setPartnerCredit(id:string,creditLimitMinor:number,paymentTermsDays:number,billingCycle:string){return this.request('/admin/partners/'+id+'/credit',{method:'PUT',body:JSON.stringify({creditLimitMinor,paymentTermsDays,billingCycle})});}
   cashDebts(){return this.request('/finance/cash-debts');}
   payables(){return this.request('/finance/payables');}
   settleDebt(id:string,amountMinor:number){return this.request('/finance/cash-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
