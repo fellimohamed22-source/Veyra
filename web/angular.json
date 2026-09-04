@@ -1,0 +1,1 @@
+{"version":1,"projects":{"veyra-web":{"projectType":"application","root":"","sourceRoot":"src","architect":{"build":{"builder":"@angular-devkit/build-angular:application","options":{"outputPath":"dist/veyra-web","index":"src/index.html","browser":"src/main.ts","tsConfig":"tsconfig.app.json","styles":["src/styles.css"]}}}}}}
