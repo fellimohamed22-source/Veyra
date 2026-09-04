@@ -43,4 +43,10 @@ export class Api {
   supportTimeline(id:string){return this.request('/support/bookings/'+id+'/timeline');}
   createPartner(body:any){return this.request('/partner/organizations',{method:'POST',body:JSON.stringify(body)});}
   partnerFinance(id:string){return this.request('/partner/'+id+'/finance');}
+  autocomplete(q:string){return this.request('/addresses/autocomplete?q='+encodeURIComponent(q));}
+  vehicleCategories(){return this.request('/reference/vehicle-categories');}
+  createScheduledBooking(body:any){return this.request('/scheduled-bookings',{method:'POST',body:JSON.stringify(body)});}
+  myBookings(){return this.request('/scheduled-bookings');}
+  bookingOffers(id:string){return this.request('/scheduled-bookings/'+id+'/offers');}
+  acceptOffer(bookingId:string,offerId:string){return this.request('/scheduled-bookings/'+bookingId+'/offers/'+offerId+'/accept',{method:'POST'});}
 }
