@@ -58,6 +58,9 @@ class Api {
     return List<dynamic>.from((await dio.get('/api/v1/addresses/autocomplete',queryParameters:{'q':query.trim()})).data);
   }
 
+  Future<List<dynamic>> vehicleCategories() async =>
+      List<dynamic>.from((await dio.get('/api/v1/reference/vehicle-categories')).data);
+
   Future<List<dynamic>> notifications() async =>
       List<dynamic>.from((await dio.get('/api/v1/notifications')).data);
 
