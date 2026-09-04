@@ -17,6 +17,24 @@ class Api {
     }));
   }
 
+  Future<void> register({
+    required String email,
+    required String password,
+    required String firstName,
+    String? lastName,
+    String? phone,
+  }) async {
+    final r=await dio.post('/api/v1/auth/register',data:{
+      'email':email.trim(),
+      'password':password,
+      'firstName':firstName.trim(),
+      'lastName':lastName?.trim(),
+      'phone':phone?.trim(),
+    });
+    await storage.write(key:'accessToken',value:r.data['accessToken']);
+    await storage.write(key:'refreshToken',value:r.data['refreshToken']);
+  }
+
   Future<void> login(String email,String password) async {
     final r=await dio.post('/api/v1/auth/login',data:{
       'email':email.trim(),'password':password,'deviceName':'driver-mobile'
