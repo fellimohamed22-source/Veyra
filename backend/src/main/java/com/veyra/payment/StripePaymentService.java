@@ -17,6 +17,8 @@ public class StripePaymentService {
     this.secretKey = secretKey == null ? "" : secretKey.trim();
   }
 
+  public boolean isConfigured(){ return !secretKey.isBlank(); }
+
   private void configure() {
     if (secretKey.isBlank()) {
       throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "STRIPE_NOT_CONFIGURED");
