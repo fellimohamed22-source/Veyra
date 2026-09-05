@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -539,15 +539,15 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             subtitle:Text((x['payment_method']??'').toString()),
             trailing:Text(total.toStringAsFixed(2)+' €'),
           )),
-          if(x['payment_method']=='ONLINE'&&Set.of('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED').contains(status))
+          if(x['payment_method']=='ONLINE'&&{'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status))
             FilledButton.icon(onPressed:()=>context.go('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:const Text('Payer en ligne')),
-          if(Set.of('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS').contains(status))...[
+          if({'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))...[
             OutlinedButton.icon(onPressed:()=>context.go('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:const Text('Chat Veyra')),
             OutlinedButton.icon(
               onPressed:driverPhone==null||driverPhone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:driverPhone)),
               icon:const Icon(Icons.phone_outlined),label:const Text('Appeler le chauffeur')),
           ],
-          if(Set.of('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS').contains(status))
+          if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))
             FilledButton.icon(onPressed:()=>context.go('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:const Text('Suivre la course')),
           if(status=='CONFIRMED'||status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED')...[
             OutlinedButton(onPressed:loadPin,child:Text(pin==null?'Afficher le PIN':'PIN : '+pin!)),
