@@ -616,8 +616,43 @@ class _RideScreenState extends State<RideScreen>{
             padding:const EdgeInsets.symmetric(vertical:10),
             child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
           ),
-          if(status=='CONFIRMED')
+          if(status=='CONFIRMED')...[
             FilledButton(onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),child:const Text('Je suis en route')),
+            TextButton(
+              onPressed:busy?null:()async{
+                final confirm=await showDialog<bool>(
+                  context:context,
+                  builder:(dialogContext)=>AlertDialog(
+                    title:const Text('Annuler cette course ?'),
+                    content:const Text('La réservation sera republiée en priorité si le délai le permet. Cette annulation impactera votre qualité chauffeur.'),
+                    actions:[
+                      TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:const Text('Garder la course')),
+                      FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:const Text('Confirmer l’annulation')),
+                    ],
+                  ),
+                );
+                if(confirm!=true)return;
+                setState(()=>busy=true);
+                try{
+                  final result=await api.cancelAssignedBooking(widget.bookingId);
+                  stopTracking();
+                  if(mounted){
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content:Text(result['republished']==true
+                        ?'Course annulée et demande republiée.'
+                        :'Course annulée. Le support Veyra a été alerté.')),
+                    );
+                    context.go('/agenda');
+                  }
+                }catch(_){
+                  if(mounted)setState(()=>error='Annulation impossible dans l’état actuel.');
+                }finally{
+                  if(mounted)setState(()=>busy=false);
+                }
+              },
+              child:const Text('Annuler ma prise en charge'),
+            ),
+          ],
           if(status=='DRIVER_EN_ROUTE')
             FilledButton(onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),child:const Text('Je suis arrivé')),
           if(status=='DRIVER_ARRIVED')...[
