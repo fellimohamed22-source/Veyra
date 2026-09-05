@@ -89,11 +89,9 @@ class PinLockoutTest {
 
     assertEquals("INVALID_PIN", ex.code());
 
-    ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
-    verify(db).update(contains("pin_failed_attempts=?,pin_locked_until=?"), args.capture());
-    // 3rd wrong attempt (was 2, now 3) -- still below the 5-attempt lock threshold.
-    assertEquals(3, args.getValue()[0]);
-    assertNull(args.getValue()[1]);
+    // 3rd wrong attempt (was 2, now 3) -- still below the 5-attempt lock
+    // threshold, so no lock timestamp (null) should be written.
+    verify(db).update(contains("pin_failed_attempts=?,pin_locked_until=?"), eq(3), isNull(), eq(bookingId));
   }
 
   @Test
@@ -110,11 +108,10 @@ class PinLockoutTest {
     // try again", since trying again immediately would be pointless.
     assertEquals("PIN_TEMPORARILY_LOCKED", ex.code());
 
-    ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
-    verify(db).update(contains("pin_failed_attempts=?,pin_locked_until=?"), args.capture());
-    assertEquals(5, args.getValue()[0]);
-    assertNotNull(args.getValue()[1]);
-    OffsetDateTime lockUntil = (OffsetDateTime) args.getValue()[1];
+    ArgumentCaptor<OffsetDateTime> lockCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
+    verify(db).update(contains("pin_failed_attempts=?,pin_locked_until=?"), eq(5), lockCaptor.capture(), eq(bookingId));
+    OffsetDateTime lockUntil = lockCaptor.getValue();
+    assertNotNull(lockUntil);
     assertTrue(lockUntil.isAfter(OffsetDateTime.now().plusMinutes(14)));
     assertTrue(lockUntil.isBefore(OffsetDateTime.now().plusMinutes(16)));
   }
