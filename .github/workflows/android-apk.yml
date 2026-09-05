@@ -55,6 +55,21 @@ jobs:
           sed -i 's/applicationId = "com.example.veyra_client"/applicationId = "com.veyra.client"/' android/app/build.gradle.kts
           grep -q 'namespace = "com.veyra.client"' android/app/build.gradle.kts
           grep -q 'applicationId = "com.veyra.client"' android/app/build.gradle.kts
+          # REAL BUG FOUND AND FIXED: renaming namespace/applicationId above
+          # only edits build.gradle.kts. It does NOT move the actual
+          # MainActivity.kt source file (still at
+          # kotlin/com/example/veyra_client/MainActivity.kt with
+          # `package com.example.veyra_client`) or update its package
+          # declaration. AndroidManifest.xml ends up pointing at
+          # com.veyra.client.MainActivity while the compiled class is still
+          # under com.example.veyra_client -- confirmed via a real device's
+          # logcat: "ClassNotFoundException: Didn't find class
+          # com.veyra.client.MainActivity", crashing on every launch.
+          mkdir -p android/app/src/main/kotlin/com/veyra/client
+          mv android/app/src/main/kotlin/com/example/veyra_client/MainActivity.kt android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          sed -i 's/package com.example.veyra_client/package com.veyra.client/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          rm -rf android/app/src/main/kotlin/com/example
+          grep -q 'package com.veyra.client' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           # Google Services Gradle plugin -- required to actually process
           # google-services.json into usable Android resources; having
           # firebase_core/firebase_messaging as Dart dependencies alone
@@ -98,6 +113,14 @@ jobs:
           sed -i 's/applicationId = "com.example.veyra_driver"/applicationId = "com.veyra.driver"/' android/app/build.gradle.kts
           grep -q 'namespace = "com.veyra.driver"' android/app/build.gradle.kts
           grep -q 'applicationId = "com.veyra.driver"' android/app/build.gradle.kts
+          # Same real MainActivity package/location bug as the client build
+          # -- see the client build step's comment for the confirmed logcat
+          # evidence (ClassNotFoundException on both apps).
+          mkdir -p android/app/src/main/kotlin/com/veyra/driver
+          mv android/app/src/main/kotlin/com/example/veyra_driver/MainActivity.kt android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
+          sed -i 's/package com.example.veyra_driver/package com.veyra.driver/' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
+          rm -rf android/app/src/main/kotlin/com/example
+          grep -q 'package com.veyra.driver' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
           grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
