@@ -190,6 +190,9 @@ class Api {
 
   Future<void> noShow(String id) async => dio.post('/api/v1/bookings/$id/no-show');
 
+  Future<Map<String,dynamic>> cancelAssignedBooking(String id,{String reasonCode='DRIVER_CANCELLED'}) async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/driver/bookings/$id/cancel',data:{'reasonCode':reasonCode})).data);
+
   Future<void> updateLocation({
     required String bookingId,
     required double lat,
