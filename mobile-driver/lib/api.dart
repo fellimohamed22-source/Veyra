@@ -193,6 +193,15 @@ class Api {
   Future<Map<String,dynamic>> cancelAssignedBooking(String id,{String reasonCode='DRIVER_CANCELLED'}) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/driver/bookings/$id/cancel',data:{'reasonCode':reasonCode})).data);
 
+  Future<Map<String,dynamic>> routeEstimate({
+    required double fromLat,
+    required double fromLng,
+    required double toLat,
+    required double toLng,
+  }) async => Map<String,dynamic>.from((await dio.get('/api/v1/routes/estimate',queryParameters:{
+    'fromLat':fromLat,'fromLng':fromLng,'toLat':toLat,'toLng':toLng
+  })).data);
+
   Future<void> updateLocation({
     required String bookingId,
     required double lat,
