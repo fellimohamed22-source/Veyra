@@ -493,7 +493,9 @@ class _RideScreenState extends State<RideScreen>{
   String? error;
   Timer? gpsTimer;
   Position? position;
+  Map<String,dynamic>? etaInfo;
   int sequence=0;
+  DateTime? lastEtaRefresh;
 
   @override void initState(){
     super.initState();
@@ -540,9 +542,34 @@ class _RideScreenState extends State<RideScreen>{
         speedMps:p.speed,
       );
       if(mounted)setState(()=>position=p);
+      final now=DateTime.now();
+      if(lastEtaRefresh==null||now.difference(lastEtaRefresh!)>=const Duration(seconds:30)){
+        lastEtaRefresh=now;
+        await refreshEta(p);
+      }
     }catch(_){
       if(mounted)setState(()=>error='Position GPS momentanément indisponible.');
     }
+  }
+
+  Future<void> refreshEta(Position p)async{
+    try{
+      final x=await api.bookingDetail(widget.bookingId);
+      final status=(x['status']??'').toString();
+      double? toLat;
+      double? toLng;
+      if(status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED'){
+        toLat=(x['pickup_lat'] as num?)?.toDouble();
+        toLng=(x['pickup_lng'] as num?)?.toDouble();
+      }else if(status=='IN_PROGRESS'){
+        toLat=(x['dropoff_lat'] as num?)?.toDouble();
+        toLng=(x['dropoff_lng'] as num?)?.toDouble();
+      }
+      if(toLat==null||toLng==null)return;
+      final eta=await api.routeEstimate(
+        fromLat:p.latitude,fromLng:p.longitude,toLat:toLat,toLng:toLng);
+      if(mounted)setState(()=>etaInfo=eta);
+    }catch(_){}
   }
 
   void startTracking(){
@@ -630,6 +657,11 @@ class _RideScreenState extends State<RideScreen>{
           Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
             style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           Text('Statut : '+status),
+          if(etaInfo!=null)Card(child:ListTile(
+            leading:const Icon(Icons.schedule),
+            title:Text('ETA : '+(((etaInfo!['durationSeconds']??0) as num).toDouble()/60).ceil().toString()+' min'),
+            subtitle:Text((((etaInfo!['distanceMeters']??0) as num).toDouble()/1000).toStringAsFixed(1)+' km restant(s)'),
+          )),
           if(x['customer_name']!=null)Text('Client : '+x['customer_name'].toString()),
           if(paymentMethod=='CASH')Card(child:ListTile(
             leading:const Icon(Icons.payments_outlined),
