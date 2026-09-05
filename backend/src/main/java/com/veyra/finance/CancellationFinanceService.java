@@ -83,7 +83,7 @@ public class CancellationFinanceService {
       Long maximumFeeMinor){
 
     List<Map<String,Object>> financialRows=db.queryForList(
-        "select sb.payment_method,sb.selected_driver_id,bfs.driver_proposed_amount_minor," +
+        "select sb.payment_method,sb.creator_user_id,sb.selected_driver_id,bfs.driver_proposed_amount_minor," +
         "bfs.customer_total_amount_minor,bfs.currency " +
         "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "where sb.id=?",
@@ -143,6 +143,11 @@ public class CancellationFinanceService {
       if(driverComp>0){
         upsertDriverPayable(driverId,bookingId,driverComp,currency);
       }
+    }else if("CASH".equals(method) && fee>0){
+      db.update(
+          "insert into customer_platform_debts(user_id,driver_id,booking_id,amount_minor,driver_compensation_minor,platform_amount_minor,currency,status) " +
+          "values (?,?,?,?,?,?,?,'DUE') on conflict(booking_id) do nothing",
+          financial.get("creator_user_id"),driverId,bookingId,fee,driverComp,platform,currency);
     }
 
     return new ChargeResult(fee,driverComp,platform,currency,refundQueued);
