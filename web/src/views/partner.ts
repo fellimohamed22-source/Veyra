@@ -93,6 +93,7 @@ import {Api} from '../api';
         <p *ngIf="offers.length===0">Aucune offre active.</p>
         <div *ngFor="let o of offers" style="border-top:1px solid #e5e7eb;padding:12px 0">
           <strong>{{o.totalMinor/100}} € total</strong>
+          <div>{{o.driverFirstName||'Chauffeur'}} • {{o.vehicleCategory||'VTC'}} • {{o.vehicleBrand||''}} {{o.vehicleModel||''}}</div>
           <div>Prix chauffeur {{o.driverPriceMinor/100}} € • note {{o.rating}}</div>
           <button (click)="accept(o.offerId)">Choisir ce chauffeur</button>
         </div>
