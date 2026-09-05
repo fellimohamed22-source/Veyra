@@ -19,12 +19,14 @@ import java.util.*;
     private final JdbcTemplate db;
     private final PasswordEncoder enc;
     private final com.veyra.security.PinCrypto pinCrypto;
+    private final com.veyra.finance.LedgerService ledger;
     private final SecureRandom rnd=new SecureRandom();
     private final long minLead,maxWindow,normalClose,shortClose;
-    public BookingController(JdbcTemplate d,PasswordEncoder e,com.veyra.security.PinCrypto pc,@Value("${veyra.marketplace.min-lead-minutes}")long a,@Value("${veyra.marketplace.max-offer-window-hours}")long b,@Value("${veyra.marketplace.normal-close-before-minutes}")long c,@Value("${veyra.marketplace.short-close-before-minutes}")long f){
+    public BookingController(JdbcTemplate d,PasswordEncoder e,com.veyra.security.PinCrypto pc,com.veyra.finance.LedgerService l,@Value("${veyra.marketplace.min-lead-minutes}")long a,@Value("${veyra.marketplace.max-offer-window-hours}")long b,@Value("${veyra.marketplace.normal-close-before-minutes}")long c,@Value("${veyra.marketplace.short-close-before-minutes}")long f){
         db=d;
         enc=e;
         pinCrypto=pc;
+        ledger=l;
         minLead=a;
         maxWindow=b;
         normalClose=c;
@@ -208,9 +210,32 @@ import java.util.*;
     }
     @PostMapping("/bookings/{id}/complete") @Transactional void complete(@PathVariable UUID id){
         driverTransition(id,"IN_PROGRESS","COMPLETED",null);
-        Map<String,Object>x=one("select sb.payment_method,sb.selected_driver_id,bfs.platform_commission_amount_minor,bfs.driver_net_amount_minor,bfs.currency from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=?",id);
-        if("CASH".equals(x.get("payment_method")))db.update("insert into driver_platform_debts(driver_id,booking_id,amount_minor,currency) values (?,?,?,?) on conflict(booking_id) do nothing",x.get("selected_driver_id"),id,x.get("platform_commission_amount_minor"),x.get("currency"));
-        else db.update("insert into driver_payables(driver_id,booking_id,amount_minor,currency) values (?,?,?,?) on conflict(booking_id) do nothing",x.get("selected_driver_id"),id,x.get("driver_net_amount_minor"),x.get("currency"));
+        Map<String,Object>x=one("select sb.payment_method,sb.selected_driver_id,bfs.platform_commission_amount_minor,bfs.driver_net_amount_minor,bfs.customer_total_amount_minor,bfs.currency from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=?",id);
+        String method=(String)x.get("payment_method");
+        long commission=((Number)x.get("platform_commission_amount_minor")).longValue();
+        long driverNet=((Number)x.get("driver_net_amount_minor")).longValue();
+        long total=((Number)x.get("customer_total_amount_minor")).longValue();
+        String currency=(String)x.get("currency");
+        if("CASH".equals(method)){
+            db.update("insert into driver_platform_debts(driver_id,booking_id,amount_minor,currency) values (?,?,?,?) on conflict(booking_id) do nothing",x.get("selected_driver_id"),id,commission,currency);
+            // Driver already holds the customer's cash directly -- only the
+            // platform's commission is a receivable here, no DRIVER_PAYABLE
+            // entry (there's nothing further platform owes the driver).
+            ledger.post("BOOKING_COMPLETED_CASH",id,"Commission due from driver (cash booking)",currency,List.of(
+                com.veyra.finance.LedgerService.Entry.debit("DRIVER_PLATFORM_DEBT",commission),
+                com.veyra.finance.LedgerService.Entry.credit("PLATFORM_REVENUE",commission)));
+        }else{
+            db.update("insert into driver_payables(driver_id,booking_id,amount_minor,currency) values (?,?,?,?) on conflict(booking_id) do nothing",x.get("selected_driver_id"),id,driverNet,currency);
+            // ONLINE: funds already captured via the PSP (payments table),
+            // recognized here as cleared. PARTNER_INVOICE: no payment was
+            // ever captured -- the partner owes the total instead, a real
+            // receivable rather than PSP-held cash.
+            String debitAccount="PARTNER_INVOICE".equals(method)?"PARTNER_RECEIVABLE":"PAYMENT_PROCESSOR_CLEARING";
+            ledger.post("BOOKING_COMPLETED_"+method,id,"Commission and driver payable recognized",currency,List.of(
+                com.veyra.finance.LedgerService.Entry.debit(debitAccount,total),
+                com.veyra.finance.LedgerService.Entry.credit("PLATFORM_REVENUE",commission),
+                com.veyra.finance.LedgerService.Entry.credit("DRIVER_PAYABLE",driverNet)));
+        }
     }
     @Transactional void driverTransition(UUID id,String from,String to,String pin){
         UUID d=driver();

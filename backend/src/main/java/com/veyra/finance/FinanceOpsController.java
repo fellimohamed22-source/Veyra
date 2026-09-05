@@ -15,9 +15,11 @@ import java.util.*;
 @PreAuthorize("hasAnyRole('FINANCE','ADMIN')")
 public class FinanceOpsController {
   private final JdbcTemplate db;
+  private final LedgerService ledger;
 
-  public FinanceOpsController(JdbcTemplate db){
+  public FinanceOpsController(JdbcTemplate db, LedgerService ledger){
     this.db=db;
+    this.ledger=ledger;
   }
 
   @GetMapping("/cash-debts")
@@ -35,17 +37,24 @@ public class FinanceOpsController {
     if(amountMinor<=0) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_SETTLEMENT_AMOUNT");
 
     Map<String,Object> debt=db.queryForMap(
-        "select amount_minor,paid_amount_minor from driver_platform_debts where id=? for update",
+        "select amount_minor,paid_amount_minor,currency from driver_platform_debts where id=? for update",
         id);
     long total=((Number)debt.get("amount_minor")).longValue();
     long paid=((Number)debt.get("paid_amount_minor")).longValue();
     long next=Math.min(total,Math.addExact(paid,amountMinor));
+    long actuallyApplied=next-paid;
     String status=next>=total?"PAID":"PARTIALLY_PAID";
 
     db.update(
         "update driver_platform_debts set paid_amount_minor=?,status=? where id=?",
         next,status,id);
     audit("DRIVER_CASH_DEBT_SETTLED","DRIVER_PLATFORM_DEBT",id);
+
+    if(actuallyApplied>0){
+      ledger.post("DRIVER_CASH_DEBT_SETTLED",null,"Driver remitted cash commission owed",(String)debt.get("currency"),List.of(
+          LedgerService.Entry.debit("CASH_ON_HAND",actuallyApplied),
+          LedgerService.Entry.credit("DRIVER_PLATFORM_DEBT",actuallyApplied)));
+    }
 
     return Map.of("paidAmountMinor",next,"remainingMinor",Math.max(0,total-next),"status",status);
   }
@@ -89,6 +98,19 @@ public class FinanceOpsController {
             "on conflict(booking_id) do update set amount_minor=excluded.amount_minor,status='PAYABLE'",
             debt.get("driver_id"),debt.get("booking_id"),compensation,debt.get("currency"));
       }
+      // Booked once, at the exact moment this debt reaches PAID -- matches
+      // the timing of the driver_payable row above exactly (created here,
+      // not progressively on each partial payment). The full fee amount
+      // splits cleanly into platform's share + driver's compensation share
+      // (CancellationFinanceService computes platform = fee - driverComp),
+      // so the transaction balances against the full amount collected in
+      // cash, not just this final increment.
+      long platformShare=((Number)debt.get("amount_minor")).longValue()-compensation;
+      List<LedgerService.Entry> entries=new ArrayList<>();
+      entries.add(LedgerService.Entry.debit("CASH_ON_HAND",((Number)debt.get("amount_minor")).longValue()));
+      if(platformShare>0) entries.add(LedgerService.Entry.credit("PLATFORM_REVENUE",platformShare));
+      if(compensation>0) entries.add(LedgerService.Entry.credit("DRIVER_PAYABLE",compensation));
+      ledger.post("CUSTOMER_CASH_DEBT_PAID",(UUID)debt.get("booking_id"),"Cancellation fee collected in cash, split between platform revenue and driver compensation",(String)debt.get("currency"),entries);
     }
 
     audit("CUSTOMER_CASH_DEBT_SETTLED","CUSTOMER_PLATFORM_DEBT",id);
@@ -105,11 +127,18 @@ public class FinanceOpsController {
   @PostMapping("/payables/{id}/mark-paid")
   @Transactional
   public void markPayablePaid(@PathVariable UUID id){
-    int updated=db.update(
-        "update driver_payables set status='PAID' where id=? and status='PAYABLE'",
+    List<Map<String,Object>> rows=db.queryForList(
+        "select amount_minor,currency from driver_payables where id=? and status='PAYABLE' for update",
         id);
-    if(updated==0) throw new ApiException(HttpStatus.CONFLICT,"PAYABLE_NOT_AVAILABLE");
+    if(rows.isEmpty()) throw new ApiException(HttpStatus.CONFLICT,"PAYABLE_NOT_AVAILABLE");
+    Map<String,Object> payable=rows.getFirst();
+
+    db.update("update driver_payables set status='PAID' where id=?",id);
     audit("DRIVER_PAYABLE_PAID","DRIVER_PAYABLE",id);
+
+    ledger.post("DRIVER_PAYABLE_PAID",null,"Driver payable paid out",(String)payable.get("currency"),List.of(
+        LedgerService.Entry.debit("DRIVER_PAYABLE",((Number)payable.get("amount_minor")).longValue()),
+        LedgerService.Entry.credit("CASH_ON_HAND",((Number)payable.get("amount_minor")).longValue())));
   }
 
   private void audit(String action,String entityType,UUID entityId){
