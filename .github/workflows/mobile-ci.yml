@@ -8,6 +8,11 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: {channel: stable}
       - run: cd mobile-client && flutter pub get && flutter analyze && flutter test
+      - name: Build Client Android APK
+        run: |
+          cd mobile-client
+          flutter create . --platforms=android --org com.veyra --project-name veyra_client
+          flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:8080
   driver:
     runs-on: ubuntu-latest
     steps:
@@ -15,3 +20,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: {channel: stable}
       - run: cd mobile-driver && flutter pub get && flutter analyze && flutter test
+      - name: Build Driver Android APK
+        run: |
+          cd mobile-driver
+          flutter create . --platforms=android --org com.veyra --project-name veyra_driver
+          flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:8080
