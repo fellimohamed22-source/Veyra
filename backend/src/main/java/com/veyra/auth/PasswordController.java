@@ -1,7 +1,67 @@
 package com.veyra.auth;
-import org.springframework.http.*;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.mail.SimpleMailMessage;import org.springframework.mail.javamail.JavaMailSender;import org.springframework.security.crypto.password.PasswordEncoder;import org.springframework.web.bind.annotation.*;import java.nio.charset.StandardCharsets;import java.security.*;import java.time.*;import java.util.*;
-@RestController @RequestMapping("/api/v1/auth")public class PasswordController{private final JdbcTemplate db;private final JavaMailSender mail;private final PasswordEncoder enc;private final SecureRandom rnd=new SecureRandom();public PasswordController(JdbcTemplate d,JavaMailSender m,PasswordEncoder e){db=d;mail=m;enc=e;}public record Forgot(String email){}public record Reset(String token,String newPassword){}
- @PostMapping("/forgot-password")ResponseEntity<Void>forgot(@RequestBody Forgot r){List<UUID>u=db.queryForList("select id from users where email=?",UUID.class,r.email());if(!u.isEmpty()){String t=token();db.update("insert into password_reset_tokens(user_id,token_hash,expires_at) values (?,?,?)",u.getFirst(),sha(t),OffsetDateTime.now().plusMinutes(30));SimpleMailMessage m=new SimpleMailMessage();m.setTo(r.email());m.setSubject("Veyra — Réinitialisation du mot de passe");m.setText("Utilisez ce jeton pendant 30 minutes : "+t);try{mail.send(m);}catch(Exception ignored){}}return ResponseEntity.accepted().build();}
- @PostMapping("/reset-password")ResponseEntity<Void>reset(@RequestBody Reset r){if(r.newPassword()==null||r.newPassword().length()<10)return ResponseEntity.unprocessableEntity().build();List<UUID>x=db.queryForList("select id from password_reset_tokens where token_hash=? and consumed_at is null and expires_at>now()",UUID.class,sha(r.token()));if(x.isEmpty())return ResponseEntity.badRequest().build();UUID id=x.getFirst();UUID user=db.queryForObject("select user_id from password_reset_tokens where id=?",UUID.class,id);db.update("update users set password_hash=?,updated_at=now() where id=?",enc.encode(r.newPassword()),user);db.update("update password_reset_tokens set consumed_at=now() where id=?",id);db.update("update user_sessions set revoked_at=now() where user_id=? and revoked_at is null",user);return ResponseEntity.noContent().build();}
- private String token(){byte[]b=new byte[32];rnd.nextBytes(b);return Base64.getUrlEncoder().withoutPadding().encodeToString(b);}private String sha(String s){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
+import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+import java.nio.charset.StandardCharsets;
+import java.security.*;
+import java.time.*;
+import java.util.*;
+@RestController @RequestMapping("/api/v1/auth")public class PasswordController{
+    private final JdbcTemplate db;
+    private final JavaMailSender mail;
+    private final PasswordEncoder enc;
+    private final SecureRandom rnd=new SecureRandom();
+    public PasswordController(JdbcTemplate d,JavaMailSender m,PasswordEncoder e){
+        db=d;
+        mail=m;
+        enc=e;
+    }
+    public record Forgot(String email){
+    }
+    public record Reset(String token,String newPassword){
+    }
+    @PostMapping("/forgot-password")ResponseEntity<Void>forgot(@RequestBody Forgot r){
+        List<UUID>u=db.queryForList("select id from users where email=?",UUID.class,r.email());
+        if(!u.isEmpty()){
+            String t=token();
+            db.update("insert into password_reset_tokens(user_id,token_hash,expires_at) values (?,?,?)",u.getFirst(),sha(t),OffsetDateTime.now().plusMinutes(30));
+            SimpleMailMessage m=new SimpleMailMessage();
+            m.setTo(r.email());
+            m.setSubject("Veyra — Réinitialisation du mot de passe");
+            m.setText("Utilisez ce jeton pendant 30 minutes : "+t);
+            try{
+                mail.send(m);
+            }
+            catch(Exception ignored){
+            }
+        }
+        return ResponseEntity.accepted().build();
+    }
+    @PostMapping("/reset-password")ResponseEntity<Void>reset(@RequestBody Reset r){
+        if(r.newPassword()==null||r.newPassword().length()<10)return ResponseEntity.unprocessableEntity().build();
+        List<UUID>x=db.queryForList("select id from password_reset_tokens where token_hash=? and consumed_at is null and expires_at>now()",UUID.class,sha(r.token()));
+        if(x.isEmpty())return ResponseEntity.badRequest().build();
+        UUID id=x.getFirst();
+        UUID user=db.queryForObject("select user_id from password_reset_tokens where id=?",UUID.class,id);
+        db.update("update users set password_hash=?,updated_at=now() where id=?",enc.encode(r.newPassword()),user);
+        db.update("update password_reset_tokens set consumed_at=now() where id=?",id);
+        db.update("update user_sessions set revoked_at=now() where user_id=? and revoked_at is null",user);
+        return ResponseEntity.noContent().build();
+    }
+    private String token(){
+        byte[]b=new byte[32];
+        rnd.nextBytes(b);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+    private String sha(String s){
+        try{
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));
+        }
+        catch(Exception e){
+            throw new IllegalStateException(e);
+        }
+    }
 }
