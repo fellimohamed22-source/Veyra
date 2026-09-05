@@ -72,6 +72,11 @@ public class AdminController {
     db.update(
       "insert into partner_invoice_accounts(partner_id) values (?) on conflict do nothing",
       id);
+    db.update(
+      "insert into commission_policy_versions(id,scope_type,partner_id,commission_bps,version_no,status,effective_from) " +
+      "select gen_random_uuid(),'PARTNER',?,600,1,'ACTIVE',now() " +
+      "where not exists(select 1 from commission_policy_versions where scope_type='PARTNER' and partner_id=?)",
+      id,id);
     audit("PARTNER_APPROVED","PARTNER",id);
   }
 
