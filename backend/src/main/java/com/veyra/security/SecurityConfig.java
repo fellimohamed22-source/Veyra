@@ -15,14 +15,37 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+
+  // Same variable already used for the WebSocket endpoint
+  // (veyra.websocket.allowed-origins / VEYRA_ALLOWED_ORIGINS) so a single
+  // env var configures both REST and WS CORS instead of drifting apart.
+  @Bean
+  CorsConfigurationSource corsConfigurationSource(
+      @Value("${veyra.websocket.allowed-origins:http://localhost:4200,http://localhost:8080}") String origins) {
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowedOrigins(Arrays.stream(origins.split(",")).map(String::trim).toList());
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key"));
+    config.setAllowCredentials(true);
+    config.setMaxAge(3600L);
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/api/**", config);
+    return source;
+  }
 
   @Bean
   PasswordEncoder encoder() {
@@ -61,8 +84,9 @@ public class SecurityConfig {
   }
 
   @Bean
-  SecurityFilterChain chain(HttpSecurity http, OncePerRequestFilter jwtFilter) throws Exception {
+  SecurityFilterChain chain(HttpSecurity http, OncePerRequestFilter jwtFilter, CorsConfigurationSource corsConfigurationSource) throws Exception {
     return http
+        .cors(cors -> cors.configurationSource(corsConfigurationSource))
         .csrf(csrf -> csrf.disable())
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
