@@ -61,6 +61,11 @@ import {Api} from '../api';
           <option *ngFor="let c of categories" [value]="c.id">{{c.display_name}}</option>
         </select>
 
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label>Passagers</label><input [(ngModel)]="passengerCount" type="number" min="1" max="9"></div>
+          <div><label>Bagages</label><input [(ngModel)]="baggageCount" type="number" min="0" max="12"></div>
+        </div>
+
         <select [(ngModel)]="paymentMethod">
           <option value="CASH">Client paie Cash</option>
           <option value="ONLINE">Client/partenaire paie en ligne</option>
@@ -111,7 +116,7 @@ export class Partner implements OnInit{
   pickupText='';dropoffText='';
   pickup:any=null;dropoff:any=null;
   pickupSuggestions:any[]=[];dropoffSuggestions:any[]=[];
-  scheduledAt='';categoryId='';paymentMethod='CASH';
+  scheduledAt='';categoryId='';paymentMethod='CASH';passengerCount=1;baggageCount=0;
   categories:any[]=[];bookings:any[]=[];offers:any[]=[];
   selectedBookingId='';
   finance:any=null;
@@ -182,7 +187,9 @@ export class Partner implements OnInit{
         payerType:this.paymentMethod==='PARTNER_INVOICE'?'PARTNER':'GUEST',
         partnerId:this.partnerId,
         beneficiaryName:this.guestName,
-        beneficiaryPhone:this.guestPhone
+        beneficiaryPhone:this.guestPhone,
+        passengerCount:this.passengerCount,
+        baggageCount:this.baggageCount
       });
       this.publishMessage='Demande publiée. Les chauffeurs éligibles vont être notifiés.';
       await this.loadBookings();
