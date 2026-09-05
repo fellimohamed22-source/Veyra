@@ -302,6 +302,8 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
           items:const [
             DropdownMenuItem(value:'date',child:Text('Date de départ')),
             DropdownMenuItem(value:'newest',child:Text('Plus récentes')),
+            DropdownMenuItem(value:'pickup',child:Text('Lieu de départ (A → Z)')),
+            DropdownMenuItem(value:'destination',child:Text('Destination (A → Z)')),
           ],
           onChanged:(v){if(v!=null){sort=v;reload();}},
         ),
