@@ -25,7 +25,7 @@ public class DriverBookingController {
       states = "('COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW')";
     }
     return db.queryForList(
-        "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status," +
+        "select sb.id,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,sb.scheduled_at,sb.status," +
         "sb.payment_method,sb.passenger_count,sb.baggage_count,bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency " +
         "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "where sb.selected_driver_id=? and sb.status in " + states + " order by sb.scheduled_at asc",
@@ -36,7 +36,7 @@ public class DriverBookingController {
   public Map<String, Object> detail(@PathVariable UUID bookingId) {
     UUID driverId = driverId();
     List<Map<String, Object>> rows = db.queryForList(
-        "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.payment_method," +
+        "select sb.id,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,sb.scheduled_at,sb.status,sb.payment_method," +
         "coalesce(sb.beneficiary_name_snapshot,concat(cu.first_name,' ',coalesce(cu.last_name,''))) as customer_name," +
         "coalesce(sb.beneficiary_phone_snapshot,cu.phone) as customer_phone,sb.passenger_count,sb.baggage_count,sb.customer_notes," +
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency " +
