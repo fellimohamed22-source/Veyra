@@ -9,12 +9,31 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
 
+bool pushHandlersConfigured=false;
+
+void openPush(RemoteMessage message){
+  final bookingId=message.data['bookingId'];
+  if(bookingId==null)return;
+  final template=message.data['templateCode'];
+  if(template=='NEW_OFFER'){
+    router.go('/offers/'+bookingId);
+  }else{
+    router.go('/booking/'+bookingId);
+  }
+}
+
 Future<void> configurePush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
     if(token!=null)await api.registerDevice(token);
+    if(!pushHandlersConfigured){
+      pushHandlersConfigured=true;
+      FirebaseMessaging.onMessageOpenedApp.listen(openPush);
+      final initial=await FirebaseMessaging.instance.getInitialMessage();
+      if(initial!=null)openPush(initial);
+    }
   }catch(_){}
 }
 
