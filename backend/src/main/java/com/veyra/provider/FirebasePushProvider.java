@@ -41,6 +41,9 @@ public class FirebasePushProvider implements PushProvider {
       case "NEW_BOOKING" -> "Nouvelle demande Veyra";
       case "NEW_OFFER" -> "Nouvelle offre chauffeur";
       case "OFFER_ACCEPTED" -> "Votre offre a été choisie";
+      case "DRIVER_BOOKING_REMINDER" -> "Rappel course Veyra";
+      case "CUSTOMER_BOOKING_REMINDER" -> "Rappel réservation Veyra";
+      case "PIN_AVAILABLE" -> "Votre PIN Veyra est disponible";
       default -> "Veyra";
     };
   }
@@ -50,6 +53,9 @@ public class FirebasePushProvider implements PushProvider {
       case "NEW_BOOKING" -> "Une nouvelle réservation programmée est disponible.";
       case "NEW_OFFER" -> "Un chauffeur vient de proposer un prix.";
       case "OFFER_ACCEPTED" -> "Une réservation vous a été attribuée.";
+      case "DRIVER_BOOKING_REMINDER" -> "Votre prochaine course programmée approche.";
+      case "CUSTOMER_BOOKING_REMINDER" -> "Votre réservation programmée approche.";
+      case "PIN_AVAILABLE" -> "Le PIN 4 chiffres de démarrage est maintenant disponible.";
       default -> "Une réservation Veyra a été mise à jour.";
     };
   }
