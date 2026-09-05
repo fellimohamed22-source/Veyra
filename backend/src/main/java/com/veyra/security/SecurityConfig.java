@@ -3,6 +3,7 @@ package com.veyra.security;
 import com.veyra.auth.JwtService;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -15,9 +16,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.*;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.*;
 import java.util.UUID;
 
 @Configuration
@@ -27,6 +30,31 @@ public class SecurityConfig {
   @Bean
   PasswordEncoder encoder() {
     return new BCryptPasswordEncoder(12);
+  }
+
+  @Bean
+  CorsConfigurationSource corsConfigurationSource(
+      @Value("${veyra.websocket.allowed-origins:http://localhost:4200,http://localhost:8080}") String origins) {
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOriginPatterns(Arrays.stream(origins.split(","))
+        .map(String::trim)
+        .filter(value -> !value.isBlank())
+        .toList());
+    configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    configuration.setAllowedHeaders(List.of(
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "Stripe-Signature",
+        "X-Requested-With"));
+    configuration.setExposedHeaders(List.of("Location"));
+    configuration.setAllowCredentials(true);
+    configuration.setMaxAge(3600L);
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/api/**", configuration);
+    source.registerCorsConfiguration("/actuator/**", configuration);
+    return source;
   }
 
   @Bean
@@ -61,9 +89,13 @@ public class SecurityConfig {
   }
 
   @Bean
-  SecurityFilterChain chain(HttpSecurity http, OncePerRequestFilter jwtFilter) throws Exception {
+  SecurityFilterChain chain(
+      HttpSecurity http,
+      OncePerRequestFilter jwtFilter,
+      CorsConfigurationSource corsConfigurationSource) throws Exception {
     return http
         .csrf(csrf -> csrf.disable())
+        .cors(cors -> cors.configurationSource(corsConfigurationSource))
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers(
