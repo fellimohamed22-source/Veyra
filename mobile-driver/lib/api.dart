@@ -214,6 +214,9 @@ class Api {
     });
   }
 
+  Future<List<dynamic>> notifications() async =>
+      List<dynamic>.from((await dio.get('/api/v1/notifications')).data);
+
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);
 
