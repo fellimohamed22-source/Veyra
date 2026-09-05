@@ -331,17 +331,14 @@ class _AddressScreenState extends State<AddressScreen>{
       ),
       const SizedBox(height:18),
       const Text('Paiement',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
-      RadioListTile<String>(
-        value:'CASH',groupValue:paymentMethod,
-        title:const Text('Cash'),
-        subtitle:const Text('Le total inclut la commission Veyra.'),
-        onChanged:(v)=>setState(()=>paymentMethod=v!),
-      ),
-      RadioListTile<String>(
-        value:'ONLINE',groupValue:paymentMethod,
-        title:const Text('En ligne'),
-        subtitle:const Text('Paiement sécurisé avant le démarrage de la course.'),
-        onChanged:(v)=>setState(()=>paymentMethod=v!),
+      DropdownButtonFormField<String>(
+        initialValue:paymentMethod,
+        decoration:const InputDecoration(labelText:'Mode de paiement'),
+        items:const [
+          DropdownMenuItem(value:'CASH',child:Text('Cash — le total inclut la commission Veyra')),
+          DropdownMenuItem(value:'ONLINE',child:Text('En ligne — paiement sécurisé')),
+        ],
+        onChanged:(v){if(v!=null)setState(()=>paymentMethod=v);},
       ),
       if(error!=null)Padding(
         padding:const EdgeInsets.symmetric(vertical:12),
