@@ -38,6 +38,8 @@ public class AdminController {
     db.update(
       "update drivers set kyc_status='APPROVED',status='ACTIVE',marketplace_enabled=true where id=?",
       id);
+    db.update("update driver_documents set status='APPROVED' where driver_id=? and status='SUBMITTED'",id);
+    db.update("update vehicles set status='APPROVED' where driver_id=? and status='PENDING'",id);
     audit("DRIVER_KYC_APPROVED","DRIVER",id);
   }
 
@@ -48,6 +50,7 @@ public class AdminController {
     db.update(
       "update drivers set kyc_status='REJECTED',status='PENDING_KYC',marketplace_enabled=false where id=?",
       id);
+    db.update("update driver_documents set status='REJECTED',rejection_reason_code=? where driver_id=? and status='SUBMITTED'",request.reasonCode(),id);
     db.update(
       "insert into kyc_reviews(driver_id,reviewer_id,decision,reason_code) values (?,?,'REJECTED',?)",
       id,CurrentUser.id(),request.reasonCode());
