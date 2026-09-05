@@ -10,11 +10,49 @@ class Api {
     connectTimeout:const Duration(seconds:10),
     receiveTimeout:const Duration(seconds:15),
   )){
-    dio.interceptors.add(InterceptorsWrapper(onRequest:(o,h)async{
-      final t=await storage.read(key:'accessToken');
-      if(t!=null)o.headers['Authorization']='Bearer $t';
-      h.next(o);
-    }));
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest:(o,h)async{
+        final t=await storage.read(key:'accessToken');
+        if(t!=null)o.headers['Authorization']='Bearer $t';
+        h.next(o);
+      },
+      onError:(e,h)async{
+        final request=e.requestOptions;
+        final isAuth=request.path.contains('/api/v1/auth/');
+        if(e.response?.statusCode==401 && !isAuth && request.extra['retried']!=true){
+          final refreshed=await _refreshToken();
+          if(refreshed){
+            final token=await storage.read(key:'accessToken');
+            request.headers['Authorization']='Bearer $token';
+            request.extra['retried']=true;
+            try{
+              final response=await dio.fetch(request);
+              h.resolve(response);
+              return;
+            }catch(_){}
+          }
+        }
+        h.next(e);
+      },
+    ));
+  }
+
+  Future<bool> _refreshToken() async {
+    final refresh=await storage.read(key:'refreshToken');
+    if(refresh==null||refresh.isEmpty)return false;
+    try{
+      final raw=Dio(BaseOptions(baseUrl:dio.options.baseUrl));
+      final r=await raw.post('/api/v1/auth/refresh',data:{
+        'refreshToken':refresh,
+        'deviceName':'mobile',
+      });
+      await storage.write(key:'accessToken',value:r.data['accessToken']);
+      await storage.write(key:'refreshToken',value:r.data['refreshToken']);
+      return true;
+    }catch(_){
+      await storage.deleteAll();
+      return false;
+    }
   }
 
   Future<void> register({
