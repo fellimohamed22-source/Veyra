@@ -117,8 +117,8 @@ public class BookingModificationController {
           bookingId);
 
       OffsetDateTime now=OffsetDateTime.now();
-      long minutes=Duration.between(now,targetScheduled).toMinutes();
-      OffsetDateTime close=minutes>=240
+      long remainingMinutes=Duration.between(now,targetScheduled).toMinutes();
+      OffsetDateTime close=remainingMinutes>=240
           ?earlier(targetScheduled.minusMinutes(normalCloseBeforeMinutes),now.plusHours(maxOfferWindowHours))
           :targetScheduled.minusMinutes(shortCloseBeforeMinutes);
 
