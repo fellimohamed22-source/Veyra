@@ -26,7 +26,7 @@ public class DriverBookingController {
     }
     return db.queryForList(
         "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status," +
-        "sb.payment_method,sb.passenger_count,sb.baggage_count,bfs.driver_net_amount_minor,bfs.currency " +
+        "sb.payment_method,sb.passenger_count,sb.baggage_count,bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency " +
         "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "where sb.selected_driver_id=? and sb.status in " + states + " order by sb.scheduled_at asc",
         driverId);
@@ -39,7 +39,7 @@ public class DriverBookingController {
         "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.payment_method," +
         "coalesce(sb.beneficiary_name_snapshot,concat(cu.first_name,' ',coalesce(cu.last_name,''))) as customer_name," +
         "coalesce(sb.beneficiary_phone_snapshot,cu.phone) as customer_phone,sb.passenger_count,sb.baggage_count,sb.customer_notes," +
-        "bfs.driver_net_amount_minor,bfs.currency " +
+        "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency " +
         "from scheduled_bookings sb " +
         "join users cu on cu.id=sb.creator_user_id " +
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
