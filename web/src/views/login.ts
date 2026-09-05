@@ -23,7 +23,16 @@ export class Login{
   constructor(private api:Api,private router:Router){}
   async login(){
     this.loading=true;this.error='';
-    try{await this.api.login(this.email,this.password);await this.router.navigateByUrl('/admin');}
+    try{
+      await this.api.login(this.email,this.password);
+      const me=await this.api.me();
+      const roles=(me.roles||[]) as string[];
+      if(roles.includes('ADMIN'))await this.router.navigateByUrl('/admin');
+      else if(roles.includes('FINANCE'))await this.router.navigateByUrl('/finance');
+      else if(roles.includes('SUPPORT'))await this.router.navigateByUrl('/support');
+      else if(roles.some(r=>r.startsWith('PARTNER_')))await this.router.navigateByUrl('/partner');
+      else this.error='Ce compte n’a pas accès au portail web.';
+    }
     catch{this.error='Identifiants invalides ou service indisponible.';}
     finally{this.loading=false;}
   }
