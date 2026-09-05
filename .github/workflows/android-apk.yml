@@ -24,6 +24,8 @@ jobs:
         run: |
           cd mobile-client
           flutter create . --platforms=android --project-name veyra_client
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+          grep -q 'compileSdk = 36' android/app/build.gradle.kts
           flutter pub get
           flutter build apk --debug
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
@@ -32,6 +34,20 @@ jobs:
         run: |
           cd mobile-driver
           flutter create . --platforms=android --project-name veyra_driver
+          # REAL BUG FOUND AND FIXED: file_picker's own dependency
+          # (flutter_plugin_android_lifecycle) requires compiling against
+          # API 36+, but flutter.compileSdkVersion (the value Flutter's own
+          # generated build.gradle.kts uses by default) currently resolves
+          # to 34 -- confirmed directly from a real failed build's log:
+          # "file_picker is currently compiled against android-34...
+          # Recommended action: Update this project to use a newer
+          # compileSdk of at least 36". A prior attempt to fix this by
+          # upgrading geolocator was based on a plausible but wrong
+          # diagnosis (a different, superficially similar known geolocator
+          # issue) -- this fix is instead based on the actual real error
+          # text from a real failed run.
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+          grep -q 'compileSdk = 36' android/app/build.gradle.kts
           flutter pub get
           flutter build apk --debug
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
