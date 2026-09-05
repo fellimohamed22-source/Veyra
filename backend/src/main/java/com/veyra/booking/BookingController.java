@@ -17,7 +17,7 @@ import com.veyra.booking.BookingDtos.*;import com.veyra.security.CurrentUser;imp
  }
  @GetMapping("/scheduled-bookings") List<Map<String,Object>> mine(){return db.queryForList("select id,creator_type,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id from scheduled_bookings where creator_user_id=? order by scheduled_at desc",CurrentUser.id());}
  @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(@RequestParam(defaultValue="date")String sort){
-  UUID d=driver();eligible(d);String order=switch(sort){case "date"->"scheduled_at asc";case "newest"->"created_at desc";default->"scheduled_at asc";};
+  UUID d=driver();eligible(d);String order=switch(sort){case "date"->"scheduled_at asc";case "newest"->"created_at desc";case "pickup"->"pickup_address asc, scheduled_at asc";case "destination"->"dropoff_address asc, scheduled_at asc";default->"scheduled_at asc";};
   return db.queryForList("select id,pickup_address,dropoff_address,scheduled_at,category_id,status,offer_window_ends_at from scheduled_bookings where status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now() order by "+order+" limit 100");
  }
  @PostMapping("/driver/opportunities/{bookingId}/offers") @Transactional ResponseEntity<Map<String,Object>> offer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
