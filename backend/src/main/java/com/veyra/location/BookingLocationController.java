@@ -21,8 +21,10 @@ public class BookingLocationController {
   public Map<String,Object> current(@PathVariable UUID bookingId){
     authorize(bookingId);
     List<Map<String,Object>> rows=db.queryForList(
-      "select lat,lng,accuracy_m,heading,speed_mps,sequence_no,recorded_at,updated_at " +
-      "from current_driver_locations where booking_id=?",
+      "select cdl.lat,cdl.lng,cdl.accuracy_m,cdl.heading,cdl.speed_mps,cdl.sequence_no,cdl.recorded_at,cdl.updated_at " +
+      "from current_driver_locations cdl join scheduled_bookings sb on sb.id=cdl.booking_id " +
+      "where cdl.booking_id=? and sb.status in ('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS') " +
+      "and (sb.scheduled_at at time zone 'Europe/Paris')::date=(now() at time zone 'Europe/Paris')::date",
       bookingId);
     if(rows.isEmpty()){
       return Map.of("available",false);

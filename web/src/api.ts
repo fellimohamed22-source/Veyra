@@ -90,6 +90,7 @@ export class Api {
   generatePartnerInvoice(partnerId:string,from:string,to:string){return this.request('/finance/partners/'+partnerId+'/invoices/generate?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{method:'POST'});}
   supportTimeline(id:string){return this.request('/support/bookings/'+id+'/timeline');}
   createPartner(body:any){return this.request('/partner/organizations',{method:'POST',body:JSON.stringify(body)});}
+  partnerOrganizations(){return this.request('/partner/organizations');}
   partnerFinance(id:string){return this.request('/partner/'+id+'/finance');}
   partnerBookings(id:string){return this.request('/partner/'+id+'/bookings');}
   autocomplete(q:string){return this.request('/addresses/autocomplete?q='+encodeURIComponent(q));}

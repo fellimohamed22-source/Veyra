@@ -14,6 +14,17 @@ import {Api} from '../api';
       <div class="card">
         <h3>Compte partenaire</h3>
         <ng-container *ngIf="!partnerId; else existing">
+          <ng-container *ngIf="organizations.length">
+            <label>Organisation existante</label>
+            <select [(ngModel)]="selectedOrganizationId">
+              <option value="">Choisir une organisation</option>
+              <option *ngFor="let organization of organizations" [value]="organization.id">
+                {{organization.name}} • {{organization.status}}
+              </option>
+            </select>
+            <button (click)="useOrganization()" [disabled]="!selectedOrganizationId">Ouvrir</button>
+            <hr>
+          </ng-container>
           <input [(ngModel)]="name" placeholder="Nom établissement">
           <select [(ngModel)]="type">
             <option value="HOTEL">Hôtel</option>
@@ -111,6 +122,8 @@ import {Api} from '../api';
 export class Partner implements OnInit{
   name='';type='HOTEL';billingEmail='';
   partnerId=localStorage.getItem('partnerId')||'';
+  organizations:any[]=[];
+  selectedOrganizationId='';
   loading=false;message='';
 
   guestName='';guestPhone='';
@@ -127,7 +140,28 @@ export class Partner implements OnInit{
 
   async ngOnInit(){
     try{this.categories=await this.api.vehicleCategories();}catch{}
+    await this.loadOrganizations();
+    if(this.partnerId){
+      const stillMember=this.organizations.some(o=>o.id===this.partnerId);
+      if(!stillMember)this.partnerId='';
+    }
+    if(!this.partnerId&&this.organizations.length===1){
+      this.partnerId=this.organizations[0].id;
+      localStorage.setItem('partnerId',this.partnerId);
+    }
     if(this.partnerId)await this.loadBookings();
+  }
+
+  async loadOrganizations(){
+    try{this.organizations=await this.api.partnerOrganizations();}catch{this.organizations=[];}
+  }
+
+  async useOrganization(){
+    if(!this.selectedOrganizationId)return;
+    this.partnerId=this.selectedOrganizationId;
+    localStorage.setItem('partnerId',this.partnerId);
+    this.selectedOrganizationId='';
+    await this.loadBookings();
   }
 
   async createPartner(){
@@ -137,13 +171,14 @@ export class Partner implements OnInit{
       const r=await this.api.createPartner({name:this.name,partnerType:this.type,billingEmail:this.billingEmail});
       this.partnerId=r.partnerId;
       localStorage.setItem('partnerId',this.partnerId);
+      await this.loadOrganizations();
       this.message='Compte partenaire créé. Validation Veyra requise avant PARTNER_INVOICE.';
     }catch{this.message='Création impossible.';}
     finally{this.loading=false;}
   }
 
   clearPartner(){
-    this.partnerId='';localStorage.removeItem('partnerId');this.bookings=[];this.offers=[];
+    this.partnerId='';localStorage.removeItem('partnerId');this.bookings=[];this.offers=[];this.selectedBookingId='';
   }
 
   async searchAddress(isPickup:boolean){
