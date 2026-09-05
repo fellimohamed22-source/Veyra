@@ -47,6 +47,7 @@ export class Api {
   cashDebts(){return this.request('/finance/cash-debts');}
   payables(){return this.request('/finance/payables');}
   settleDebt(id:string,amountMinor:number){return this.request('/finance/cash-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
+  generatePartnerInvoice(partnerId:string,from:string,to:string){return this.request('/finance/partners/'+partnerId+'/invoices/generate?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{method:'POST'});}
   supportTimeline(id:string){return this.request('/support/bookings/'+id+'/timeline');}
   createPartner(body:any){return this.request('/partner/organizations',{method:'POST',body:JSON.stringify(body)});}
   partnerFinance(id:string){return this.request('/partner/'+id+'/finance');}
