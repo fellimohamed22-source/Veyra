@@ -10,12 +10,31 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
 
+bool driverPushHandlersConfigured=false;
+
+void openDriverPush(RemoteMessage message){
+  final bookingId=message.data['bookingId'];
+  if(bookingId==null)return;
+  final template=message.data['templateCode'];
+  if(template=='NEW_BOOKING'){
+    router.go('/request/'+bookingId);
+  }else{
+    router.go('/ride/'+bookingId);
+  }
+}
+
 Future<void> configureDriverPush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
     if(token!=null)await api.registerDevice(token);
+    if(!driverPushHandlersConfigured){
+      driverPushHandlersConfigured=true;
+      FirebaseMessaging.onMessageOpenedApp.listen(openDriverPush);
+      final initial=await FirebaseMessaging.instance.getInitialMessage();
+      if(initial!=null)openDriverPush(initial);
+    }
   }catch(_){}
 }
 
