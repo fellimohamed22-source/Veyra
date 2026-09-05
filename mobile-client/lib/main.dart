@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -199,6 +201,7 @@ class _AddressScreenState extends State<AddressScreen>{
   late Future<List<dynamic>> categories;
   bool loadingPickup=false;
   bool loadingDropoff=false;
+  bool locating=false;
   bool submitting=false;
   String? error;
 
@@ -223,6 +226,41 @@ class _AddressScreenState extends State<AddressScreen>{
     }
   }
 
+  Future<void> useMyLocation()async{
+    if(!await Geolocator.isLocationServiceEnabled()){
+      if(mounted)setState(()=>error='Activez la localisation du téléphone.');
+      return;
+    }
+    var permission=await Geolocator.checkPermission();
+    if(permission==LocationPermission.denied){
+      permission=await Geolocator.requestPermission();
+    }
+    if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
+      if(mounted)setState(()=>error='La localisation est nécessaire pour utiliser votre position actuelle.');
+      return;
+    }
+    setState(()=>locating=true);
+    try{
+      final p=await Geolocator.getCurrentPosition(
+        locationSettings:const LocationSettings(accuracy:LocationAccuracy.high),
+      );
+      final place=await api.reverseGeocode(p.latitude,p.longitude);
+      if(place==null){
+        if(mounted)setState(()=>error='Aucune adresse trouvée pour votre position actuelle.');
+        return;
+      }
+      if(mounted)setState((){
+        pickup.text=place['label']?.toString()??'';
+        pickupPlace=place;
+        pickupResults=[];
+      });
+    }catch(_){
+      if(mounted)setState(()=>error='Impossible d’obtenir votre position actuelle.');
+    }finally{
+      if(mounted)setState(()=>locating=false);
+    }
+  }
+
   Widget addressField(bool isPickup){
     final controller=isPickup?pickup:dropoff;
     final results=isPickup?pickupResults:dropoffResults;
@@ -240,7 +278,10 @@ class _AddressScreenState extends State<AddressScreen>{
           suffixIcon:loading?const Padding(
             padding:EdgeInsets.all(14),
             child:SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)),
-          ):null,
+          ):isPickup?(locating?const Padding(
+            padding:EdgeInsets.all(14),
+            child:SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)),
+          ):IconButton(icon:const Icon(Icons.my_location),tooltip:'Utiliser ma position actuelle',onPressed:useMyLocation)):null,
         ),
       ),
       for(final item in results.take(5))
@@ -527,6 +568,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   late Future<Map<String,dynamic>> future;
   String? pin;
   String? message;
+  int ratingScore=0;
+  bool ratingSubmitting=false;
+  bool ratingSubmitted=false;
 
   @override void initState(){
     super.initState();
@@ -541,6 +585,22 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
       if(mounted)setState(()=>pin=value);
     }catch(_){
       if(mounted)setState(()=>message='Le PIN sera disponible à H-1.');
+    }
+  }
+
+  Future<void> submitRating()async{
+    if(ratingScore<1)return;
+    setState(()=>ratingSubmitting=true);
+    try{
+      await api.rate(widget.bookingId,ratingScore);
+      if(mounted)setState((){ratingSubmitted=true;ratingSubmitting=false;});
+    }on DioException catch(e){
+      final alreadyRated=(e.response?.data is Map)&&((e.response?.data as Map)['code']=='ALREADY_RATED');
+      if(mounted)setState((){
+        if(alreadyRated)ratingSubmitted=true;
+        else message='Impossible d’envoyer la note pour le moment.';
+        ratingSubmitting=false;
+      });
     }
   }
 
@@ -596,6 +656,16 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             OutlinedButton(onPressed:loadPin,child:Text(pin==null?'Afficher le PIN':'PIN : '+pin!)),
             TextButton(onPressed:cancel,child:const Text('Annuler la réservation')),
           ],
+          if({'COMPLETED','CLOSED'}.contains(status))
+            Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?const Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text('Merci pour votre avis !')]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              const Text('Noter le chauffeur',style:TextStyle(fontWeight:FontWeight.bold)),
+              const SizedBox(height:8),
+              Row(children:[for(int i=1;i<=5;i++)IconButton(
+                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
+                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
+              )]),
+              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?'Envoi…':'Envoyer la note')),
+            ]))),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(message!)),
         ]);
       },

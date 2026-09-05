@@ -23,4 +23,24 @@ public class AddressController {
         "lng",p.lng()))
       .toList();
   }
+
+  @GetMapping("/reverse")
+  public Map<String,Object> reverse(
+      @RequestParam double lat,
+      @RequestParam double lng){
+    GeocodingProvider.Place p=geocoding.reverse(lat,lng);
+    if(p==null){
+      // Never make the client fall back to raw coordinates -- an empty
+      // result is a real, distinct outcome the app must show as "address
+      // not found here", not silently substitute lat/lng as if it were
+      // an address.
+      return Map.of("found",false);
+    }
+    return Map.of(
+      "found",true,
+      "providerId",p.providerId(),
+      "label",p.label(),
+      "lat",p.lat(),
+      "lng",p.lng());
+  }
 }

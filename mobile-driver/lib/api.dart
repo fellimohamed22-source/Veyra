@@ -190,6 +190,15 @@ class Api {
 
   Future<void> noShow(String id) async => dio.post('/api/v1/bookings/$id/no-show');
 
+  Future<void> rate(String bookingId,int score,{String? comment}) async {
+    await dio.post('/api/v1/bookings/$bookingId/ratings',data:{
+      'score':score,'comment':comment
+    });
+  }
+
+  Future<List<dynamic>> ratings(String bookingId) async =>
+      List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/ratings')).data);
+
   Future<Map<String,dynamic>> cancelAssignedBooking(String id,{String reasonCode='DRIVER_CANCELLED'}) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/driver/bookings/$id/cancel',data:{'reasonCode':reasonCode})).data);
 

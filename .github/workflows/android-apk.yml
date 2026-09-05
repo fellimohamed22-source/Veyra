@@ -26,8 +26,21 @@ jobs:
           flutter create . --platforms=android --project-name veyra_client
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          # Location permissions needed for the "use my current location"
+          # address field (geolocator) -- flutter create's own template
+          # never adds these on its own, for either debug or release
+          # builds, since it has no way to know the app will use location
+          # at all. Same real gap already found and fixed once for the
+          # driver app's own manifest permission needs earlier this
+          # project's history (INTERNET on a different, unrelated app) --
+          # applied proactively here rather than discovered via another
+          # broken build.
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
           flutter pub get
-          flutter build apk --debug
+          flutter build apk --debug --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
 
       - name: Build Driver APK

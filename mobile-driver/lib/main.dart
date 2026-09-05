@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -496,6 +497,9 @@ class _RideScreenState extends State<RideScreen>{
   Map<String,dynamic>? etaInfo;
   int sequence=0;
   DateTime? lastEtaRefresh;
+  int ratingScore=0;
+  bool ratingSubmitting=false;
+  bool ratingSubmitted=false;
 
   @override void initState(){
     super.initState();
@@ -508,6 +512,22 @@ class _RideScreenState extends State<RideScreen>{
   }
 
   void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
+
+  Future<void> submitRating()async{
+    if(ratingScore<1)return;
+    setState(()=>ratingSubmitting=true);
+    try{
+      await api.rate(widget.bookingId,ratingScore);
+      if(mounted)setState((){ratingSubmitted=true;ratingSubmitting=false;});
+    }on DioException catch(e){
+      final alreadyRated=(e.response?.data is Map)&&((e.response?.data as Map)['code']=='ALREADY_RATED');
+      if(mounted)setState((){
+        if(alreadyRated)ratingSubmitted=true;
+        else error='Impossible d’envoyer la note pour le moment.';
+        ratingSubmitting=false;
+      });
+    }
+  }
 
   Future<bool> ensureLocationPermission()async{
     if(!await Geolocator.isLocationServiceEnabled()){
@@ -731,6 +751,16 @@ class _RideScreenState extends State<RideScreen>{
           ],
           if(status=='IN_PROGRESS')
             FilledButton(onPressed:busy?null:()=>action(()=>api.complete(widget.bookingId),stopGps:true),child:const Text('Terminer la course')),
+          if({'COMPLETED','CLOSED'}.contains(status))
+            Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?const Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text('Merci pour votre avis !')]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              const Text('Noter le client',style:TextStyle(fontWeight:FontWeight.bold)),
+              const SizedBox(height:8),
+              Row(children:[for(int i=1;i<=5;i++)IconButton(
+                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
+                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
+              )]),
+              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?'Envoi…':'Envoyer la note')),
+            ]))),
           const SizedBox(height:10),
           OutlinedButton.icon(
             onPressed:phone==null||phone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:phone)),

@@ -132,6 +132,12 @@ class Api {
     return List<dynamic>.from((await dio.get('/api/v1/addresses/autocomplete',queryParameters:{'q':query.trim()})).data);
   }
 
+  Future<Map<String,dynamic>?> reverseGeocode(double lat,double lng) async {
+    final r=await dio.get('/api/v1/addresses/reverse',queryParameters:{'lat':lat,'lng':lng});
+    final data=Map<String,dynamic>.from(r.data);
+    return data['found']==true?data:null;
+  }
+
   Future<List<dynamic>> vehicleCategories() async =>
       List<dynamic>.from((await dio.get('/api/v1/reference/vehicle-categories')).data);
 
@@ -153,11 +159,14 @@ class Api {
   Future<Map<String,dynamic>> currentLocation(String bookingId) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/location')).data);
 
-  Future<void> rate(String bookingId,String ratedUserId,int score,{String? comment}) async {
-    await dio.post('/api/v1/bookings/$bookingId/rating',data:{
-      'score':score,'comment':comment,'ratedUserId':ratedUserId
+  Future<void> rate(String bookingId,int score,{String? comment}) async {
+    await dio.post('/api/v1/bookings/$bookingId/ratings',data:{
+      'score':score,'comment':comment
     });
   }
+
+  Future<List<dynamic>> ratings(String bookingId) async =>
+      List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/ratings')).data);
 
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);

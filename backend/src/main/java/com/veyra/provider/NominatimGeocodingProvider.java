@@ -32,4 +32,19 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
     }
     return out;
   }
+
+  @Override
+  public Place reverse(double lat,double lng){
+    Map<?,?> raw=http.get().uri(u->u.path("/reverse")
+      .queryParam("lat",lat)
+      .queryParam("lon",lng)
+      .queryParam("format","jsonv2")
+      .build()).accept(MediaType.APPLICATION_JSON).retrieve().body(Map.class);
+    if(raw==null || raw.get("display_name")==null) return null;
+    return new Place(
+      String.valueOf(raw.get("place_id")),
+      String.valueOf(raw.get("display_name")),
+      Double.parseDouble(String.valueOf(raw.get("lat"))),
+      Double.parseDouble(String.valueOf(raw.get("lon"))));
+  }
 }
