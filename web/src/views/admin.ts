@@ -62,6 +62,35 @@ import {Api} from '../api';
     </div>
 
     <div class="card">
+      <h3>Politique annulation / no-show</h3>
+      <div class="grid">
+        <label>Annulation gratuite jusqu'à H- (heures)
+          <input type="number" min="0" [(ngModel)]="cancellationFreeHours">
+        </label>
+        <label>Fenêtre intermédiaire jusqu'à H- (heures)
+          <input type="number" min="0" [(ngModel)]="cancellationMidHours">
+        </label>
+        <label>Frais H-6 → H-2 (% du prix chauffeur)
+          <input type="number" min="0" max="100" [(ngModel)]="cancellationMidPercent">
+        </label>
+        <label>Minimum frais intermédiaires (€)
+          <input type="number" min="0" [(ngModel)]="cancellationMidMinEuro">
+        </label>
+        <label>Frais &lt; H-2 (%)
+          <input type="number" min="0" max="100" [(ngModel)]="cancellationLatePercent">
+        </label>
+        <label>No-show (%)
+          <input type="number" min="0" max="100" [(ngModel)]="noShowPercent">
+        </label>
+        <label>Plafond no-show (€)
+          <input type="number" min="1" [(ngModel)]="noShowCapEuro">
+        </label>
+      </div>
+      <button (click)="saveCancellationPolicy()">Enregistrer la politique</button>
+      <p *ngIf="policyMessage">{{policyMessage}}</p>
+    </div>
+
+    <div class="card">
       <h3>Réservations récentes</h3>
       <p *ngIf="bookings.length===0">Aucune réservation.</p>
       <table *ngIf="bookings.length" style="width:100%;border-collapse:collapse">
@@ -89,10 +118,18 @@ export class Admin implements OnInit{
   partnerCommissionPercent:Record<string,number>={};
   partnerCreditEuro:Record<string,number>={};
   configMessage='';
+  cancellationFreeHours=6;
+  cancellationMidHours=2;
+  cancellationMidPercent=10;
+  cancellationMidMinEuro=5;
+  cancellationLatePercent=25;
+  noShowPercent=50;
+  noShowCapEuro=100;
+  policyMessage='';
 
   constructor(private api:Api){}
 
-  ngOnInit(){this.load();}
+  ngOnInit(){this.load();this.loadCancellationPolicy();}
 
   async load(){
     this.loading=true;this.error='';
@@ -149,6 +186,41 @@ export class Admin implements OnInit{
       await this.load();
     }catch{
       this.configMessage='Impossible de modifier le crédit partenaire.';
+    }
+  }
+
+  async loadCancellationPolicy(){
+    try{
+      const p=await this.api.getCancellationPolicy();
+      this.cancellationFreeHours=(p.free_until_minutes||360)/60;
+      this.cancellationMidHours=(p.mid_window_from_minutes||120)/60;
+      this.cancellationMidPercent=(p.mid_fee_bps||1000)/100;
+      this.cancellationMidMinEuro=(p.mid_fee_min_minor||500)/100;
+      this.cancellationLatePercent=(p.late_fee_bps||2500)/100;
+      this.noShowPercent=(p.no_show_fee_bps||5000)/100;
+      this.noShowCapEuro=(p.no_show_cap_minor||10000)/100;
+    }catch{}
+  }
+
+  async saveCancellationPolicy(){
+    this.policyMessage='';
+    try{
+      await this.api.setCancellationPolicy({
+        freeUntilMinutes:Math.round(this.cancellationFreeHours*60),
+        midWindowFromMinutes:Math.round(this.cancellationMidHours*60),
+        midFeeBps:Math.round(this.cancellationMidPercent*100),
+        lateFeeBps:Math.round(this.cancellationLatePercent*100),
+        noShowFeeBps:Math.round(this.noShowPercent*100),
+        driverShareMidBps:7000,
+        driverShareLateBps:8000,
+        driverShareNoShowBps:8000,
+        midFeeMinMinor:Math.round(this.cancellationMidMinEuro*100),
+        noShowCapMinor:Math.round(this.noShowCapEuro*100),
+      });
+      this.policyMessage='Politique mise à jour et versionnée.';
+      await this.loadCancellationPolicy();
+    }catch{
+      this.policyMessage='Politique invalide ou mise à jour impossible.';
     }
   }
 }
