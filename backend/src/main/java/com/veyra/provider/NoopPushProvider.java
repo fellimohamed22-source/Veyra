@@ -10,6 +10,9 @@ import java.util.UUID;
 @ConditionalOnProperty(name="veyra.firebase.enabled",havingValue="false",matchIfMissing=true)
 public class NoopPushProvider implements PushProvider {
   @Override
+  public boolean available(){ return false; }
+
+  @Override
   public boolean send(UUID userId,String templateCode,Map<String,Object> data){
     return false;
   }
