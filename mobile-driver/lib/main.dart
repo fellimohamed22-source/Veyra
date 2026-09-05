@@ -283,10 +283,19 @@ class OpportunitiesScreen extends StatefulWidget{
 }
 class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
   String sort='date';
+  final pickupFilter=TextEditingController();
+  final destinationFilter=TextEditingController();
+  int? minPassengers;
   late Future<List<dynamic>> future;
 
-  @override void initState(){super.initState();future=api.opportunities(sort:sort);}
-  void reload()=>setState(()=>future=api.opportunities(sort:sort));
+  @override void initState(){super.initState();future=load();}
+  Future<List<dynamic>> load()=>api.opportunities(
+    sort:sort,
+    pickupQuery:pickupFilter.text,
+    destinationQuery:destinationFilter.text,
+    minPassengers:minPassengers,
+  );
+  void reload()=>setState(()=>future=load());
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('Demandes disponibles'),actions:[
@@ -308,6 +317,28 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
           onChanged:(v){if(v!=null){sort=v;reload();}},
         ),
         const SizedBox(height:10),
+        ExpansionTile(
+          tilePadding:EdgeInsets.zero,
+          title:const Text('Filtres'),
+          children:[
+            TextField(controller:pickupFilter,decoration:const InputDecoration(labelText:'Lieu de départ contient')),
+            const SizedBox(height:8),
+            TextField(controller:destinationFilter,decoration:const InputDecoration(labelText:'Destination contient')),
+            const SizedBox(height:8),
+            DropdownButtonFormField<int?>(
+              initialValue:minPassengers,
+              decoration:const InputDecoration(labelText:'Minimum passagers'),
+              items:[const DropdownMenuItem<int?>(value:null,child:Text('Tous')), ...List.generate(8,(i)=>DropdownMenuItem<int?>(value:i+1,child:Text('${i+1}+')))],
+              onChanged:(v)=>setState(()=>minPassengers=v),
+            ),
+            const SizedBox(height:10),
+            Row(children:[
+              Expanded(child:OutlinedButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState(()=>minPassengers=null);reload();},child:const Text('Réinitialiser'))),
+              const SizedBox(width:8),
+              Expanded(child:FilledButton(onPressed:reload,child:const Text('Appliquer'))),
+            ]),
+          ],
+        ),
         const Text('Aucun tri par proximité. Les chauffeurs ne voient jamais les prix concurrents.'),
         const SizedBox(height:16),
         FutureBuilder<List<dynamic>>(
