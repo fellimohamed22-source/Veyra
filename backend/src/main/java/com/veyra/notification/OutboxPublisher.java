@@ -3,6 +3,7 @@ package com.veyra.notification;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -15,10 +16,11 @@ public class OutboxPublisher {
   }
 
   @Scheduled(fixedDelayString="${veyra.outbox.poll-ms:2000}")
+  @Transactional
   public void publish(){
     List<Map<String,Object>> rows=db.queryForList(
         "select id,event_type,aggregate_id,payload from outbox_events " +
-        "where published_at is null order by occurred_at asc limit 100");
+        "where published_at is null order by occurred_at asc limit 100 for update skip locked");
 
     for(Map<String,Object> row:rows){
       UUID eventId=(UUID)row.get("id");
