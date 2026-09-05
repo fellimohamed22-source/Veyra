@@ -44,6 +44,15 @@ public class PartnerController {
     return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("partnerId",partnerId));
   }
 
+  @GetMapping("/organizations")
+  public List<Map<String,Object>> organizations(){
+    return db.queryForList(
+      "select po.id,po.name,po.partner_type,po.status,po.billing_email,po.credit_status,po.credit_limit_minor,po.currency,pu.partner_role " +
+      "from partner_organizations po join partner_users pu on pu.partner_id=po.id " +
+      "where pu.user_id=? and pu.status='ACTIVE' order by po.created_at desc",
+      CurrentUser.id());
+  }
+
   @PostMapping("/{partnerId}/beneficiaries")
   public ResponseEntity<Map<String,UUID>> createBeneficiary(
       @PathVariable UUID partnerId,
