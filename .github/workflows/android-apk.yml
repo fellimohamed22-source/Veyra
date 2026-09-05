@@ -21,6 +21,8 @@ jobs:
           cache: true
 
       - name: Build Client APK
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           cd mobile-client
           flutter create . --platforms=android --project-name veyra_client
@@ -39,11 +41,40 @@ jobs:
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
+          # Firebase wiring: google-services.json declares package_name
+          # "com.veyra.client" (the real Firebase Android app registered
+          # for this project) -- flutter create's own default
+          # namespace/applicationId is "com.example.veyra_client", which
+          # would silently mismatch and make FCM registration fail at
+          # runtime with no build-time error at all (the plugin would
+          # apply, but resource generation keys off the applicationId
+          # actually matching an entry in google-services.json). Both
+          # namespace and applicationId need the fix, not just one --
+          # Firebase's own docs are explicit that they must match.
+          sed -i 's/namespace = "com.example.veyra_client"/namespace = "com.veyra.client"/' android/app/build.gradle.kts
+          sed -i 's/applicationId = "com.example.veyra_client"/applicationId = "com.veyra.client"/' android/app/build.gradle.kts
+          grep -q 'namespace = "com.veyra.client"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.client"' android/app/build.gradle.kts
+          # Google Services Gradle plugin -- required to actually process
+          # google-services.json into usable Android resources; having
+          # firebase_core/firebase_messaging as Dart dependencies alone
+          # does not apply this plugin (that's a separate, manual Gradle-
+          # level step even flutter create doesn't automate). Real,
+          # current instructions confirmed directly (Firebase's own docs +
+          # multiple current FlutterFire setup guides for the Kotlin DSL
+          # template this project actually uses), not guessed.
+          sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
+          sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
+          echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          grep -q 'com.veyra.client' android/app/google-services.json
           flutter pub get
           flutter build apk --debug --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
 
       - name: Build Driver APK
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           cd mobile-driver
           flutter create . --platforms=android --project-name veyra_driver
@@ -61,6 +92,17 @@ jobs:
           # text from a real failed run.
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          # Same real package-name mismatch fix as the client build --
+          # google-services.json declares "com.veyra.driver" for this app.
+          sed -i 's/namespace = "com.example.veyra_driver"/namespace = "com.veyra.driver"/' android/app/build.gradle.kts
+          sed -i 's/applicationId = "com.example.veyra_driver"/applicationId = "com.veyra.driver"/' android/app/build.gradle.kts
+          grep -q 'namespace = "com.veyra.driver"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.driver"' android/app/build.gradle.kts
+          sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
+          sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
+          echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          grep -q 'com.veyra.driver' android/app/google-services.json
           flutter pub get
           flutter build apk --debug
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
