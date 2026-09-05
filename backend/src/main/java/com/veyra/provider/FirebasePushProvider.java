@@ -5,6 +5,7 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
+import com.google.firebase.messaging.Notification;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,6 +36,24 @@ public class FirebasePushProvider implements PushProvider {
     }
   }
 
+  private String title(String code){
+    return switch(code){
+      case "NEW_BOOKING" -> "Nouvelle demande Veyra";
+      case "NEW_OFFER" -> "Nouvelle offre chauffeur";
+      case "OFFER_ACCEPTED" -> "Votre offre a été choisie";
+      default -> "Veyra";
+    };
+  }
+
+  private String body(String code){
+    return switch(code){
+      case "NEW_BOOKING" -> "Une nouvelle réservation programmée est disponible.";
+      case "NEW_OFFER" -> "Un chauffeur vient de proposer un prix.";
+      case "OFFER_ACCEPTED" -> "Une réservation vous a été attribuée.";
+      default -> "Une réservation Veyra a été mise à jour.";
+    };
+  }
+
   @Override
   public boolean send(UUID userId,String templateCode,Map<String,Object> data){
     List<String> tokens=db.queryForList(
@@ -46,6 +65,10 @@ public class FirebasePushProvider implements PushProvider {
       try{
         Message.Builder builder=Message.builder()
           .setToken(token)
+          .setNotification(Notification.builder()
+            .setTitle(title(templateCode))
+            .setBody(body(templateCode))
+            .build())
           .putData("templateCode",templateCode);
         for(var entry:data.entrySet()){
           if(entry.getValue()!=null) builder.putData(entry.getKey(),String.valueOf(entry.getValue()));
