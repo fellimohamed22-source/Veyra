@@ -35,6 +35,12 @@ public class RefundProcessor {
         db.update(
             "update refunds set status='SUCCEEDED',provider_ref=?,failure_message=null,updated_at=now() where id=?",
             refund.getId(),refundId);
+        db.update(
+            "update payments p set status=case " +
+            "when (select coalesce(sum(r.amount_minor),0) from refunds r where r.payment_id=p.id and r.status='SUCCEEDED')>=p.amount_minor " +
+            "then 'REFUNDED' else 'PARTIALLY_REFUNDED' end " +
+            "where p.id=(select payment_id from refunds where id=?)",
+            refundId);
       }catch(Exception e){
         String message=e.getMessage();
         if(message!=null && message.length()>450) message=message.substring(0,450);
