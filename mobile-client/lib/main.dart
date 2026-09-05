@@ -191,6 +191,8 @@ class _AddressScreenState extends State<AddressScreen>{
   Map<String,dynamic>? dropoffPlace;
   DateTime? scheduledAt;
   String paymentMethod='CASH';
+  int passengerCount=1;
+  int baggageCount=0;
   String? categoryId;
   late Future<List<dynamic>> categories;
   bool loadingPickup=false;
@@ -304,6 +306,8 @@ class _AddressScreenState extends State<AddressScreen>{
         'categoryId':categoryId,
         'paymentMethod':paymentMethod,
         'payerType':'CLIENT',
+        'passengerCount':passengerCount,
+        'baggageCount':baggageCount,
       });
       if(mounted)context.go('/home');
     }catch(_){
@@ -348,6 +352,22 @@ class _AddressScreenState extends State<AddressScreen>{
           );
         },
       ),
+      const SizedBox(height:18),
+      Row(children:[
+        Expanded(child:DropdownButtonFormField<int>(
+          initialValue:passengerCount,
+          decoration:const InputDecoration(labelText:'Passagers'),
+          items:List.generate(8,(i)=>DropdownMenuItem(value:i+1,child:Text('${i+1}'))),
+          onChanged:(v){if(v!=null)setState(()=>passengerCount=v);},
+        )),
+        const SizedBox(width:12),
+        Expanded(child:DropdownButtonFormField<int>(
+          initialValue:baggageCount,
+          decoration:const InputDecoration(labelText:'Bagages'),
+          items:List.generate(7,(i)=>DropdownMenuItem(value:i,child:Text('$i'))),
+          onChanged:(v){if(v!=null)setState(()=>baggageCount=v);},
+        )),
+      ]),
       const SizedBox(height:18),
       const Text('Paiement',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
       DropdownButtonFormField<String>(
