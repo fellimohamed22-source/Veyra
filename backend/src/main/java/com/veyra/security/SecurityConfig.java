@@ -3,6 +3,7 @@ package com.veyra.security;
 import com.veyra.auth.JwtService;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -91,7 +92,7 @@ public class SecurityConfig {
   @Bean
   SecurityFilterChain chain(
       HttpSecurity http,
-      OncePerRequestFilter jwtFilter,
+      @Qualifier("jwtFilter") OncePerRequestFilter jwtFilter,
       AuthRateLimitFilter authRateLimitFilter,
       CorsConfigurationSource corsConfigurationSource) throws Exception {
     return http
