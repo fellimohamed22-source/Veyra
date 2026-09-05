@@ -497,7 +497,7 @@ class _RideScreenState extends State<RideScreen>{
         final lat=position?.latitude??43.2965;
         final lng=position?.longitude??5.3698;
 
-        if(Set.of('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS').contains(status)&&gpsTimer==null){
+        if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status)&&gpsTimer==null){
           WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)startTracking();});
         }
 
