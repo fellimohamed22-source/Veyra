@@ -873,7 +873,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done){
-            return const ListView(children:[SizedBox(height:220),Center(child:CircularProgressIndicator())]);
+            return ListView(children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
           }
           if(s.hasError){
             return ListView(children:[
@@ -885,7 +885,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
           }
           final items=s.data??[];
           if(items.isEmpty){
-            return const ListView(children:[
+            return ListView(children:const [
               SizedBox(height:160),
               Icon(Icons.notifications_none,size:56),
               Center(child:Text('Aucune notification pour le moment.')),
