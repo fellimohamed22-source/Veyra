@@ -657,8 +657,10 @@ class LiveLocationScreen extends StatefulWidget{
 }
 class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Timer? timer;
+  Timer? etaTimer;
   Map<String,dynamic>? location;
   Map<String,dynamic>? bookingMap;
+  Map<String,dynamic>? etaInfo;
   String? error;
 
   @override void initState(){
@@ -668,10 +670,12 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     }).catchError((_){});
     refresh();
     timer=Timer.periodic(const Duration(seconds:10),(_)=>refresh());
+    etaTimer=Timer.periodic(const Duration(seconds:30),(_)=>refreshEta());
   }
 
   @override void dispose(){
     timer?.cancel();
+    etaTimer?.cancel();
     super.dispose();
   }
 
@@ -679,9 +683,27 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     try{
       final value=await api.currentLocation(widget.bookingId);
       if(mounted)setState((){location=value;error=null;});
+      await refreshEta();
     }catch(_){
       if(mounted)setState(()=>error='Position en cours de mise à jour.');
     }
+  }
+
+  Future<void> refreshEta()async{
+    final live=location;
+    final booking=bookingMap;
+    if(live?['available']!=true||booking==null)return;
+    final toLat=(booking['dropoff_lat'] as num?)?.toDouble();
+    final toLng=(booking['dropoff_lng'] as num?)?.toDouble();
+    if(toLat==null||toLng==null)return;
+    try{
+      final eta=await api.routeEstimate(
+        fromLat:(live!['lat'] as num).toDouble(),
+        fromLng:(live['lng'] as num).toDouble(),
+        toLat:toLat,toLng:toLng,
+      );
+      if(mounted)setState(()=>etaInfo=eta);
+    }catch(_){}
   }
 
   @override Widget build(BuildContext context){
@@ -728,6 +750,11 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
             child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
               Text(available?'Position actuelle du chauffeur':'Position indisponible',style:const TextStyle(fontWeight:FontWeight.bold)),
               Text(error??(available?'Mise à jour automatique toutes les 10 secondes.':'En attente de la première position GPS.')),
+              if(etaInfo!=null)Text(
+                'ETA destination : '+(((etaInfo!['durationSeconds']??0) as num).toDouble()/60).ceil().toString()+
+                ' min • '+(((etaInfo!['distanceMeters']??0) as num).toDouble()/1000).toStringAsFixed(1)+' km',
+                style:const TextStyle(fontWeight:FontWeight.w600),
+              ),
               if(available&&location!['recorded_at']!=null)Text('Dernière position : '+location!['recorded_at'].toString()),
             ]),
           )),
