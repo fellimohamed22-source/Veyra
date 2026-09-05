@@ -23,6 +23,7 @@ jobs:
       - name: Build Client APK
         run: |
           cd mobile-client
+          flutter create . --platforms=android --project-name veyra_client
           flutter pub get
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk ../veyra-client-release.apk
@@ -30,6 +31,7 @@ jobs:
       - name: Build Driver APK
         run: |
           cd mobile-driver
+          flutter create . --platforms=android --project-name veyra_driver
           flutter pub get
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk ../veyra-driver-release.apk
