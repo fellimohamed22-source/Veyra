@@ -4,7 +4,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
+import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.Notification;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -81,6 +83,11 @@ public class FirebasePushProvider implements PushProvider {
         }
         FirebaseMessaging.getInstance().send(builder.build());
         success=true;
+      }catch(FirebaseMessagingException e){
+        MessagingErrorCode code=e.getMessagingErrorCode();
+        if(code==MessagingErrorCode.UNREGISTERED || code==MessagingErrorCode.INVALID_ARGUMENT){
+          db.update("update user_devices set active=false where user_id=? and push_token=?",userId,token);
+        }
       }catch(Exception ignored){}
     }
     return success;

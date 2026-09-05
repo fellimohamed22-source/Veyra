@@ -1,5 +1,6 @@
 package com.veyra.payment;
 
+import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
 import com.stripe.net.Webhook;
@@ -30,7 +31,12 @@ public class StripeWebhookController {
       return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
 
-    Event event = Webhook.constructEvent(payload, signature, webhookSecret);
+    Event event;
+    try {
+      event = Webhook.constructEvent(payload, signature, webhookSecret);
+    } catch (SignatureVerificationException e) {
+      return ResponseEntity.badRequest().build();
+    }
     Object object = event.getDataObjectDeserializer().getObject().orElse(null);
 
     if (object instanceof PaymentIntent paymentIntent) {

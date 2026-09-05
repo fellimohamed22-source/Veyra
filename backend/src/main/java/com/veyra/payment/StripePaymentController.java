@@ -49,10 +49,14 @@ public class StripePaymentController {
     }
 
     List<Map<String, Object>> existing = db.queryForList(
-        "select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?",
+        "select id,booking_id,payer_user_id,provider_payment_id,status,amount_minor,currency " +
+        "from payments where idempotency_key=?",
         idempotencyKey);
     if (!existing.isEmpty()) {
       Map<String, Object> p = existing.getFirst();
+      if (!bookingId.equals(p.get("booking_id")) || !CurrentUser.id().equals(p.get("payer_user_id"))) {
+        throw new ApiException(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_REUSED");
+      }
       PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
       return Map.of(
           "paymentId", p.get("id"),

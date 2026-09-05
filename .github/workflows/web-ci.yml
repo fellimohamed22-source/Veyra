@@ -8,3 +8,5 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
       - run: cd web && npm install && npm run build
+      - name: Build web container
+        run: docker build -t veyra-web-ci ./web
