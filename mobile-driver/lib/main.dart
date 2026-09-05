@@ -61,6 +61,7 @@ final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/ride/:id',builder:(c,s)=>RideScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/wallet',builder:(c,s)=>const WalletScreen()),
   GoRoute(path:'/chat/:id',builder:(c,s)=>DriverChatScreen(bookingId:s.pathParameters['id']!)),
+  GoRoute(path:'/notifications',builder:(c,s)=>const DriverNotificationsScreen()),
 ]);
 
 class LoginScreen extends StatefulWidget{
@@ -299,6 +300,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('Demandes disponibles'),actions:[
+      IconButton(onPressed:()=>context.go('/notifications'),icon:const Icon(Icons.notifications_outlined)),
       IconButton(onPressed:()=>context.go('/agenda'),icon:const Icon(Icons.calendar_month)),
       IconButton(onPressed:()=>context.go('/wallet'),icon:const Icon(Icons.account_balance_wallet)),
     ]),
@@ -835,5 +837,69 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
         ]),
       )),
     ]),
+  );
+}
+
+
+class DriverNotificationsScreen extends StatefulWidget{
+  const DriverNotificationsScreen({super.key});
+  @override State<DriverNotificationsScreen> createState()=>_DriverNotificationsScreenState();
+}
+
+class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
+  late Future<List<dynamic>> future;
+  @override void initState(){super.initState();future=api.notifications();}
+  void reload()=>setState(()=>future=api.notifications());
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('Notifications')),
+    body:RefreshIndicator(
+      onRefresh:()async{reload();await future;},
+      child:FutureBuilder<List<dynamic>>(
+        future:future,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done){
+            return const ListView(children:[SizedBox(height:220),Center(child:CircularProgressIndicator())]);
+          }
+          if(s.hasError){
+            return ListView(children:[
+              const SizedBox(height:160),
+              const Icon(Icons.cloud_off,size:48),
+              const Center(child:Text('Notifications indisponibles.')),
+              Center(child:TextButton(onPressed:reload,child:const Text('Réessayer'))),
+            ]);
+          }
+          final items=s.data??[];
+          if(items.isEmpty){
+            return const ListView(children:[
+              SizedBox(height:160),
+              Icon(Icons.notifications_none,size:56),
+              Center(child:Text('Aucune notification pour le moment.')),
+            ]);
+          }
+          return ListView.separated(
+            padding:const EdgeInsets.all(16),
+            itemCount:items.length,
+            separatorBuilder:(_,__)=>const SizedBox(height:8),
+            itemBuilder:(context,index){
+              final x=Map<String,dynamic>.from(items[index] as Map);
+              final data=x['data'] is Map?Map<String,dynamic>.from(x['data'] as Map):<String,dynamic>{};
+              final bookingId=data['bookingId']?.toString();
+              final template=(x['template_code']??'').toString();
+              return Card(child:ListTile(
+                leading:const Icon(Icons.notifications_active_outlined),
+                title:Text(template.replaceAll('_',' ')),
+                subtitle:Text((x['created_at']??'').toString()),
+                trailing:bookingId==null?null:const Icon(Icons.chevron_right),
+                onTap:bookingId==null?null:(){
+                  if(template=='NEW_BOOKING')context.go('/request/'+bookingId);
+                  else context.go('/ride/'+bookingId);
+                },
+              ));
+            },
+          );
+        },
+      ),
+    ),
   );
 }
