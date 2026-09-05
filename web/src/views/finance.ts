@@ -20,9 +20,20 @@ import {Api} from '../api';
         </div>
       </div>
       <div class="card">
+        <h3>Créances Client / annulation CASH</h3>
+        <p *ngIf="!customerDebts.length">Aucune créance.</p>
+        <div *ngFor="let d of customerDebts" style="margin-bottom:14px">
+          <div>{{d.email}} — {{(d.amount_minor-d.paid_amount_minor)/100}} € restant — {{d.status}}</div>
+          <button *ngIf="d.status!=='PAID'" (click)="settleCustomer(d)">Marquer réglée</button>
+        </div>
+      </div>
+      <div class="card">
         <h3>Payables Chauffeurs</h3>
         <p *ngIf="!payables.length">Aucun payable.</p>
-        <div *ngFor="let p of payables">{{p.driver_id}} — {{p.amount_minor/100}} € — {{p.status}}</div>
+        <div *ngFor="let p of payables" style="margin-bottom:14px">
+          <span>{{p.driver_id}} — {{p.amount_minor/100}} € — {{p.status}}</span>
+          <button *ngIf="p.status==='PAYABLE'" (click)="markPaid(p)">Marquer payé</button>
+        </div>
       </div>
       <div class="card">
         <h3>Facturation partenaire</h3>
@@ -41,19 +52,29 @@ import {Api} from '../api';
     </div>`
 })
 export class Finance implements OnInit{
-  debts:any[]=[];payables:any[]=[];loading=false;error='';
+  debts:any[]=[];customerDebts:any[]=[];payables:any[]=[];loading=false;error='';
   invoicePartnerId='';invoiceFrom='';invoiceTo='';invoiceLoading=false;invoiceResult:any=null;
   constructor(private api:Api){}
   ngOnInit(){this.load();}
   async load(){
     this.loading=true;this.error='';
-    try{this.debts=await this.api.cashDebts();this.payables=await this.api.payables();}
+    try{this.debts=await this.api.cashDebts();this.customerDebts=await this.api.customerDebts();this.payables=await this.api.payables();}
     catch{this.error='Impossible de charger les données finance.';}
     finally{this.loading=false;}
   }
   async settle(d:any){
     const remaining=Math.max(0,(d.amount_minor||0)-(d.paid_amount_minor||0));
     if(remaining>0){await this.api.settleDebt(d.id,remaining);await this.load();}
+  }
+
+  async settleCustomer(d:any){
+    const remaining=Math.max(0,(d.amount_minor||0)-(d.paid_amount_minor||0));
+    if(remaining>0){await this.api.settleCustomerDebt(d.id,remaining);await this.load();}
+  }
+
+  async markPaid(p:any){
+    await this.api.markPayablePaid(p.id);
+    await this.load();
   }
 
   async generateInvoice(){
