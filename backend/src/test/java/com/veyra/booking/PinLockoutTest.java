@@ -135,7 +135,13 @@ class PinLockoutTest {
   @Test
   void lockThatHasAlreadyExpiredAllowsANewAttempt() {
     stubDriverLookup();
-    stubBookingRow(5, OffsetDateTime.now().minusMinutes(1));
+    // Low attempts count deliberately: the attempts counter only resets to
+    // 0 on a *successful* PIN match (see driverTransition's valid-PIN
+    // branch), never merely because pin_locked_until has passed -- a
+    // stubBookingRow(5, expired) here would re-trigger PIN_TEMPORARILY_LOCKED
+    // via the attempts>=5 escalation, not the lock-expiry check this test
+    // actually means to isolate.
+    stubBookingRow(1, OffsetDateTime.now().minusMinutes(1));
     when(enc.matches(eq("1234"), eq("some-hash"))).thenReturn(false);
 
     ApiException ex = assertThrows(ApiException.class,
