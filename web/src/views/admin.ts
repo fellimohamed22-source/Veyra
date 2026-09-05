@@ -91,6 +91,24 @@ import {Api} from '../api';
     </div>
 
     <div class="card">
+      <h3>Zone de service</h3>
+      <p>Lorsqu'au moins une zone est active, le départ d'une réservation doit être couvert par un polygone actif.</p>
+      <label>Code</label>
+      <input [(ngModel)]="zoneCode" placeholder="PACA_PILOT">
+      <label>Nom</label>
+      <input [(ngModel)]="zoneName" placeholder="Marseille → Menton">
+      <label>Polygone WKT (longitude latitude)</label>
+      <textarea [(ngModel)]="zoneWkt" rows="5" placeholder="POLYGON((5.0 43.0, 7.8 43.0, 7.8 44.2, 5.0 44.2, 5.0 43.0))"></textarea>
+      <button (click)="saveZone()">Créer / versionner la zone</button>
+      <p *ngIf="zoneMessage">{{zoneMessage}}</p>
+      <div *ngFor="let z of zones" style="border-top:1px solid #e5e7eb;padding:12px 0">
+        <strong>{{z.name}}</strong>
+        <div>{{z.code}} • {{z.status}}</div>
+        <button *ngIf="z.status==='ACTIVE'" (click)="deactivateZone(z.id)">Désactiver</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>Réservations récentes</h3>
       <p *ngIf="bookings.length===0">Aucune réservation.</p>
       <table *ngIf="bookings.length" style="width:100%;border-collapse:collapse">
@@ -126,10 +144,15 @@ export class Admin implements OnInit{
   noShowPercent=50;
   noShowCapEuro=100;
   policyMessage='';
+  zones:any[]=[];
+  zoneCode='PACA_PILOT';
+  zoneName='Marseille → Menton';
+  zoneWkt='';
+  zoneMessage='';
 
   constructor(private api:Api){}
 
-  ngOnInit(){this.load();this.loadCancellationPolicy();}
+  ngOnInit(){this.load();this.loadCancellationPolicy();this.loadZones();}
 
   async load(){
     this.loading=true;this.error='';
@@ -200,6 +223,34 @@ export class Admin implements OnInit{
       this.noShowPercent=(p.no_show_fee_bps||5000)/100;
       this.noShowCapEuro=(p.no_show_cap_minor||10000)/100;
     }catch{}
+  }
+
+  async loadZones(){
+    try{this.zones=await this.api.serviceZones();}catch{this.zones=[];}
+  }
+
+  async saveZone(){
+    this.zoneMessage='';
+    if(!this.zoneCode.trim()||!this.zoneName.trim()||!this.zoneWkt.trim()){
+      this.zoneMessage='Code, nom et polygone sont obligatoires.';
+      return;
+    }
+    try{
+      await this.api.saveServiceZone({
+        code:this.zoneCode.trim(),
+        name:this.zoneName.trim(),
+        polygonWkt:this.zoneWkt.trim(),
+      });
+      this.zoneMessage='Zone active enregistrée et versionnée.';
+      await this.loadZones();
+    }catch{
+      this.zoneMessage='Polygone invalide ou enregistrement impossible.';
+    }
+  }
+
+  async deactivateZone(id:string){
+    await this.api.deactivateServiceZone(id);
+    await this.loadZones();
   }
 
   async saveCancellationPolicy(){
