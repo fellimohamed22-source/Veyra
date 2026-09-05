@@ -25,6 +25,16 @@ import {Api} from '../api';
         <div *ngFor="let p of payables">{{p.driver_id}} — {{p.amount_minor/100}} € — {{p.status}}</div>
       </div>
       <div class="card">
+        <h3>Facturation partenaire</h3>
+        <input [(ngModel)]="invoicePartnerId" placeholder="UUID partenaire">
+        <label>Du</label>
+        <input [(ngModel)]="invoiceFrom" type="date">
+        <label>Au</label>
+        <input [(ngModel)]="invoiceTo" type="date">
+        <button (click)="generateInvoice()" [disabled]="invoiceLoading">Générer facture</button>
+        <pre *ngIf="invoiceResult">{{invoiceResult | json}}</pre>
+      </div>
+      <div class="card">
         <h3>Règles CASH</h3>
         <p>Alerte 50 € • restriction CASH 100 € • blocage 150 €</p>
       </div>
@@ -32,6 +42,7 @@ import {Api} from '../api';
 })
 export class Finance implements OnInit{
   debts:any[]=[];payables:any[]=[];loading=false;error='';
+  invoicePartnerId='';invoiceFrom='';invoiceTo='';invoiceLoading=false;invoiceResult:any=null;
   constructor(private api:Api){}
   ngOnInit(){this.load();}
   async load(){
@@ -43,5 +54,18 @@ export class Finance implements OnInit{
   async settle(d:any){
     const remaining=Math.max(0,(d.amount_minor||0)-(d.paid_amount_minor||0));
     if(remaining>0){await this.api.settleDebt(d.id,remaining);await this.load();}
+  }
+
+  async generateInvoice(){
+    if(!this.invoicePartnerId.trim()||!this.invoiceFrom||!this.invoiceTo)return;
+    this.invoiceLoading=true;this.invoiceResult=null;
+    try{
+      this.invoiceResult=await this.api.generatePartnerInvoice(
+        this.invoicePartnerId.trim(),this.invoiceFrom,this.invoiceTo);
+    }catch(e:any){
+      this.invoiceResult={error:e?.code||'GENERATION_FAILED'};
+    }finally{
+      this.invoiceLoading=false;
+    }
   }
 }
