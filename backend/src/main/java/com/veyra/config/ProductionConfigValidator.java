@@ -43,7 +43,8 @@ public class ProductionConfigValidator {
     if(allowedOrigins==null || allowedOrigins.isBlank() ||
         Arrays.stream(allowedOrigins.split(","))
             .map(String::trim)
-            .anyMatch(origin->origin.isBlank() || origin.contains("localhost") || "*".equals(origin))){
+            .anyMatch(origin->origin.isBlank() || !origin.startsWith("https://") ||
+                origin.contains("localhost") || "*".equals(origin))){
       throw new IllegalStateException("Production allowed origins must be explicit HTTPS application origins");
     }
   }
