@@ -30,18 +30,18 @@ class CancellationFinanceServiceTest {
   @Mock JdbcTemplate db;
 
   private Map<String, Object> policy() {
-    return Map.of(
-        "id", UUID.randomUUID(),
-        "free_until_minutes", 1440,
-        "mid_window_from_minutes", 120,
-        "mid_fee_bps", 3000,
-        "driver_share_mid_bps", 5000,
-        "mid_fee_min_minor", 500,
-        "late_fee_bps", 8000,
-        "driver_share_late_bps", 7000,
-        "no_show_fee_bps", 10000,
-        "driver_share_no_show_bps", 8000,
-        "no_show_cap_minor", 5000L);
+    return Map.ofEntries(
+        Map.entry("id", UUID.randomUUID()),
+        Map.entry("free_until_minutes", 1440),
+        Map.entry("mid_window_from_minutes", 120),
+        Map.entry("mid_fee_bps", 3000),
+        Map.entry("driver_share_mid_bps", 5000),
+        Map.entry("mid_fee_min_minor", 500),
+        Map.entry("late_fee_bps", 8000),
+        Map.entry("driver_share_late_bps", 7000),
+        Map.entry("no_show_fee_bps", 10000),
+        Map.entry("driver_share_no_show_bps", 8000),
+        Map.entry("no_show_cap_minor", 5000L));
   }
 
   private void stubPolicyAndBooking(UUID bookingId, UUID driverId, long driverProposedAmountMinor, String paymentMethod) {
