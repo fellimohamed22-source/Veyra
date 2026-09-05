@@ -658,10 +658,14 @@ class LiveLocationScreen extends StatefulWidget{
 class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Timer? timer;
   Map<String,dynamic>? location;
+  Map<String,dynamic>? bookingMap;
   String? error;
 
   @override void initState(){
     super.initState();
+    api.bookingDetail(widget.bookingId).then((value){
+      if(mounted)setState(()=>bookingMap=value);
+    }).catchError((_){});
     refresh();
     timer=Timer.periodic(const Duration(seconds:10),(_)=>refresh());
   }
@@ -682,8 +686,12 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
 
   @override Widget build(BuildContext context){
     final available=location?['available']==true;
-    final lat=available?((location!['lat'] as num).toDouble()):43.2965;
-    final lng=available?((location!['lng'] as num).toDouble()):5.3698;
+    final pickupLat=(bookingMap?['pickup_lat'] as num?)?.toDouble();
+    final pickupLng=(bookingMap?['pickup_lng'] as num?)?.toDouble();
+    final dropoffLat=(bookingMap?['dropoff_lat'] as num?)?.toDouble();
+    final dropoffLng=(bookingMap?['dropoff_lng'] as num?)?.toDouble();
+    final lat=available?((location!['lat'] as num).toDouble()):(pickupLat??43.2965);
+    final lng=available?((location!['lng'] as num).toDouble()):(pickupLng??5.3698);
     return Scaffold(
       appBar:AppBar(title:const Text('Suivi en direct')),
       body:Stack(children:[
@@ -694,12 +702,22 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
               urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName:'com.veyra.client',
             ),
-            if(available)MarkerLayer(markers:[
-              Marker(
+            MarkerLayer(markers:[
+              if(pickupLat!=null&&pickupLng!=null)Marker(
+                point:LatLng(pickupLat,pickupLng),
+                width:44,height:44,
+                child:const Icon(Icons.trip_origin,size:34),
+              ),
+              if(dropoffLat!=null&&dropoffLng!=null)Marker(
+                point:LatLng(dropoffLat,dropoffLng),
+                width:44,height:44,
+                child:const Icon(Icons.location_on,size:38),
+              ),
+              if(available)Marker(
                 point:LatLng(lat,lng),
                 width:56,height:56,
                 child:const Icon(Icons.local_taxi,size:44),
-              )
+              ),
             ]),
           ],
         ),
