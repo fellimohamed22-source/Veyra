@@ -25,27 +25,27 @@ jobs:
           cd mobile-client
           flutter create . --platforms=android --project-name veyra_client
           flutter pub get
-          flutter build apk --release
-          cp build/app/outputs/flutter-apk/app-release.apk ../veyra-client-release.apk
+          flutter build apk --debug
+          cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
 
       - name: Build Driver APK
         run: |
           cd mobile-driver
           flutter create . --platforms=android --project-name veyra_driver
           flutter pub get
-          flutter build apk --release
-          cp build/app/outputs/flutter-apk/app-release.apk ../veyra-driver-release.apk
+          flutter build apk --debug
+          cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
 
       - name: Upload Client APK
         uses: actions/upload-artifact@v4
         with:
           name: veyra-client-apk
-          path: veyra-client-release.apk
+          path: veyra-client-debug.apk
           if-no-files-found: error
 
       - name: Upload Driver APK
         uses: actions/upload-artifact@v4
         with:
           name: veyra-driver-apk
-          path: veyra-driver-release.apk
+          path: veyra-driver-debug.apk
           if-no-files-found: error
