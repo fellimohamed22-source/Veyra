@@ -51,8 +51,24 @@ class Api {
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);
   }
 
-  Future<List<dynamic>> opportunities({String sort='date'}) async =>
-      List<dynamic>.from((await dio.get('/api/v1/driver/opportunities',queryParameters:{'sort':sort})).data);
+  Future<List<dynamic>> opportunities({
+    String sort='date',
+    String? categoryId,
+    DateTime? from,
+    DateTime? to,
+    int? minPassengers,
+    String? pickupQuery,
+    String? destinationQuery,
+  }) async {
+    final query=<String,dynamic>{'sort':sort};
+    if(categoryId!=null&&categoryId.isNotEmpty)query['categoryId']=categoryId;
+    if(from!=null)query['from']=from.toUtc().toIso8601String();
+    if(to!=null)query['to']=to.toUtc().toIso8601String();
+    if(minPassengers!=null)query['minPassengers']=minPassengers;
+    if(pickupQuery!=null&&pickupQuery.trim().isNotEmpty)query['pickupQuery']=pickupQuery.trim();
+    if(destinationQuery!=null&&destinationQuery.trim().isNotEmpty)query['destinationQuery']=destinationQuery.trim();
+    return List<dynamic>.from((await dio.get('/api/v1/driver/opportunities',queryParameters:query)).data);
+  }
 
   Future<Map<String,dynamic>> opportunityDetail(String bookingId) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/opportunities/$bookingId')).data);
