@@ -49,4 +49,19 @@ public class StripePaymentService {
     configure();
     return PaymentIntent.retrieve(paymentIntentId);
   }
+
+  public com.stripe.model.Refund refund(
+      String paymentIntentId,
+      long amountMinor,
+      String idempotencyKey) throws Exception {
+    configure();
+    var params=com.stripe.param.RefundCreateParams.builder()
+        .setPaymentIntent(paymentIntentId)
+        .setAmount(amountMinor)
+        .build();
+    var options=RequestOptions.builder()
+        .setIdempotencyKey(idempotencyKey)
+        .build();
+    return com.stripe.model.Refund.create(params,options);
+  }
 }
