@@ -37,6 +37,19 @@ import {Api} from '../api';
         <div>{{p.partner_type}} • {{p.status}} • crédit {{p.credit_status}}</div>
         <button *ngIf="p.status!=='APPROVED'" (click)="approvePartner(p.id)">Approuver</button>
         <button *ngIf="p.status==='APPROVED'" (click)="suspendPartner(p.id)">Suspendre</button>
+        <div *ngIf="p.status==='APPROVED'" style="margin-top:10px">
+          <label>Commission partenaire (%)</label>
+          <input type="number" min="0" max="30" step="0.1"
+            [ngModel]="partnerCommissionPercent[p.id] ?? 6"
+            (ngModelChange)="partnerCommissionPercent[p.id]=$event">
+          <button (click)="savePartnerCommission(p.id)">Enregistrer commission</button>
+
+          <label>Plafond PARTNER_INVOICE (€)</label>
+          <input type="number" min="0" step="100"
+            [ngModel]="partnerCreditEuro[p.id] ?? ((p.credit_limit_minor||0)/100)"
+            (ngModelChange)="partnerCreditEuro[p.id]=$event">
+          <button (click)="savePartnerCredit(p.id)">Enregistrer crédit</button>
+        </div>
       </div>
     </div>
 
@@ -73,6 +86,8 @@ export class Admin implements OnInit{
   loading=false;
   error='';
   standardCommissionPercent=10;
+  partnerCommissionPercent:Record<string,number>={};
+  partnerCreditEuro:Record<string,number>={};
   configMessage='';
 
   constructor(private api:Api){}
@@ -113,6 +128,27 @@ export class Admin implements OnInit{
       this.configMessage='Commission standard mise à jour.';
     }catch{
       this.configMessage='Impossible de modifier la commission.';
+    }
+  }
+
+  async savePartnerCommission(id:string){
+    const value=this.partnerCommissionPercent[id] ?? 6;
+    try{
+      await this.api.setPartnerCommission(id,Math.round(value*100));
+      this.configMessage='Commission partenaire mise à jour.';
+    }catch{
+      this.configMessage='Impossible de modifier la commission partenaire.';
+    }
+  }
+
+  async savePartnerCredit(id:string){
+    const euro=this.partnerCreditEuro[id] ?? 0;
+    try{
+      await this.api.setPartnerCredit(id,Math.round(euro*100),30,'MONTHLY');
+      this.configMessage='Plafond PARTNER_INVOICE mis à jour.';
+      await this.load();
+    }catch{
+      this.configMessage='Impossible de modifier le crédit partenaire.';
     }
   }
 }
