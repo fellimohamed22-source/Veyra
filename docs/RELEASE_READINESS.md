@@ -11,3 +11,6 @@ Email/password/JWT, refresh rotation, BCrypt, RBAC, object authorization, WebSoc
 
 ## Pilote public
 Nécessite des credentials réels pour paiement online, push mobile, SMTP production, éventuellement SMS, ainsi qu'une capacité cartographie/routing adaptée au volume. Les CGU, politique de confidentialité, règles VTC et rétention doivent être validées juridiquement avant production.
+
+## Validation finale
+Cette branche déclenche la validation CI du dernier état fonctionnel du MVP.
