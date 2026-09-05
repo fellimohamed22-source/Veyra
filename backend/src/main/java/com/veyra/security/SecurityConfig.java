@@ -92,6 +92,7 @@ public class SecurityConfig {
   SecurityFilterChain chain(
       HttpSecurity http,
       OncePerRequestFilter jwtFilter,
+      AuthRateLimitFilter authRateLimitFilter,
       CorsConfigurationSource corsConfigurationSource) throws Exception {
     return http
         .csrf(csrf -> csrf.disable())
@@ -105,7 +106,8 @@ public class SecurityConfig {
             .permitAll()
             .anyRequest()
             .authenticated())
-        .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+        .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+        .addFilterAfter(jwtFilter, AuthRateLimitFilter.class)
         .build();
   }
 }
