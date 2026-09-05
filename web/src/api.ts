@@ -80,8 +80,11 @@ export class Api {
   setPartnerCommission(id:string,bps:number){return this.request('/admin/config/commission/partner/'+id,{method:'POST',body:JSON.stringify({bps})});}
   setPartnerCredit(id:string,creditLimitMinor:number,paymentTermsDays:number,billingCycle:string){return this.request('/admin/partners/'+id+'/credit',{method:'PUT',body:JSON.stringify({creditLimitMinor,paymentTermsDays,billingCycle})});}
   cashDebts(){return this.request('/finance/cash-debts');}
+  customerDebts(){return this.request('/finance/customer-debts');}
   payables(){return this.request('/finance/payables');}
   settleDebt(id:string,amountMinor:number){return this.request('/finance/cash-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
+  settleCustomerDebt(id:string,amountMinor:number){return this.request('/finance/customer-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
+  markPayablePaid(id:string){return this.request('/finance/payables/'+id+'/mark-paid',{method:'POST'});}
   generatePartnerInvoice(partnerId:string,from:string,to:string){return this.request('/finance/partners/'+partnerId+'/invoices/generate?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{method:'POST'});}
   supportTimeline(id:string){return this.request('/support/bookings/'+id+'/timeline');}
   createPartner(body:any){return this.request('/partner/organizations',{method:'POST',body:JSON.stringify(body)});}
