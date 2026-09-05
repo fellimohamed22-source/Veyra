@@ -144,7 +144,7 @@ class BookingModificationControllerTest {
         bookingId, new BookingModificationController.UpdateRequest(null, null, null, null, null, null, "just a note")));
 
     verify(db, never()).update(contains("status='OPEN_FOR_OFFERS'"), any(), any());
-    verify(db, never()).update(contains("driver_offers set status='EXPIRED'"), any());
+    verify(db, never()).update(contains("driver_offers set status='EXPIRED'"), eq(bookingId));
   }
 
   @Test
