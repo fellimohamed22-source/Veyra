@@ -16,9 +16,34 @@ import com.veyra.booking.BookingDtos.*;import com.veyra.security.CurrentUser;imp
   event(id,"booking.published");return ResponseEntity.status(201).body(Map.of("id",id,"status","OPEN_FOR_OFFERS","offerWindowEndsAt",close));
  }
  @GetMapping("/scheduled-bookings") List<Map<String,Object>> mine(){return db.queryForList("select id,creator_type,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id from scheduled_bookings where creator_user_id=? order by scheduled_at desc",CurrentUser.id());}
- @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(@RequestParam(defaultValue="date")String sort){
-  UUID d=driver();eligible(d);String order=switch(sort){case "date"->"scheduled_at asc";case "newest"->"created_at desc";case "pickup"->"pickup_address asc, scheduled_at asc";case "destination"->"dropoff_address asc, scheduled_at asc";default->"scheduled_at asc";};
-  return db.queryForList("select id,pickup_address,dropoff_address,scheduled_at,category_id,passenger_count,baggage_count,status,offer_window_ends_at from scheduled_bookings where status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now() order by "+order+" limit 100");
+ @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(
+    @RequestParam(defaultValue="date")String sort,
+    @RequestParam(required=false)UUID categoryId,
+    @RequestParam(required=false)OffsetDateTime from,
+    @RequestParam(required=false)OffsetDateTime to,
+    @RequestParam(required=false)Integer minPassengers,
+    @RequestParam(required=false)String pickupQuery,
+    @RequestParam(required=false)String destinationQuery){
+  UUID d=driver();eligible(d);
+  String order=switch(sort){
+    case "date"->"scheduled_at asc";
+    case "newest"->"created_at desc";
+    case "pickup"->"pickup_address asc, scheduled_at asc";
+    case "destination"->"dropoff_address asc, scheduled_at asc";
+    case "passengers"->"passenger_count desc, scheduled_at asc";
+    case "baggage"->"baggage_count desc, scheduled_at asc";
+    default->"scheduled_at asc";
+  };
+  StringBuilder sql=new StringBuilder("select id,pickup_address,dropoff_address,scheduled_at,category_id,passenger_count,baggage_count,status,offer_window_ends_at from scheduled_bookings where status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now()");
+  List<Object> params=new ArrayList<>();
+  if(categoryId!=null){sql.append(" and category_id=?");params.add(categoryId);}
+  if(from!=null){sql.append(" and scheduled_at>=?");params.add(from);}
+  if(to!=null){sql.append(" and scheduled_at<=?");params.add(to);}
+  if(minPassengers!=null){sql.append(" and passenger_count>=?");params.add(Math.max(1,Math.min(minPassengers,9)));}
+  if(pickupQuery!=null&&!pickupQuery.isBlank()){sql.append(" and pickup_address ilike ?");params.add("%"+pickupQuery.trim()+"%");}
+  if(destinationQuery!=null&&!destinationQuery.isBlank()){sql.append(" and dropoff_address ilike ?");params.add("%"+destinationQuery.trim()+"%");}
+  sql.append(" order by ").append(order).append(" limit 100");
+  return db.queryForList(sql.toString(),params.toArray());
  }
  @PostMapping("/driver/opportunities/{bookingId}/offers") @Transactional ResponseEntity<Map<String,Object>> offer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
   UUID d=driver();eligible(d);Map<String,Object>b=one("select status,offer_window_ends_at,scheduled_at from scheduled_bookings where id=? for update",bookingId);if(!Set.of("OPEN_FOR_OFFERS","OFFERS_RECEIVED").contains(b.get("status"))||((OffsetDateTime)b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
