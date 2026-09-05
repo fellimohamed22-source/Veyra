@@ -78,6 +78,8 @@ export class Api {
   suspendPartner(id:string){return this.request('/admin/partners/'+id+'/suspend',{method:'POST'});}
   setStandardCommission(bps:number){return this.request('/admin/config/commission/standard',{method:'POST',body:JSON.stringify({bps})});}
   setPartnerCommission(id:string,bps:number){return this.request('/admin/config/commission/partner/'+id,{method:'POST',body:JSON.stringify({bps})});}
+  getCancellationPolicy(){return this.request('/admin/config/cancellation-policy');}
+  setCancellationPolicy(body:any){return this.request('/admin/config/cancellation-policy',{method:'POST',body:JSON.stringify(body)});}
   setPartnerCredit(id:string,creditLimitMinor:number,paymentTermsDays:number,billingCycle:string){return this.request('/admin/partners/'+id+'/credit',{method:'PUT',body:JSON.stringify({creditLimitMinor,paymentTermsDays,billingCycle})});}
   cashDebts(){return this.request('/finance/cash-debts');}
   customerDebts(){return this.request('/finance/customer-debts');}
