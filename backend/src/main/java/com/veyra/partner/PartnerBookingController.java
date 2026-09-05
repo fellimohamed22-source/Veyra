@@ -21,7 +21,7 @@ public class PartnerBookingController {
   public List<Map<String,Object>> list(@PathVariable UUID partnerId){
     assertMember(partnerId);
     return db.queryForList(
-        "select id,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id,beneficiary_name_snapshot " +
+        "select id,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id,beneficiary_name_snapshot,passenger_count,baggage_count,customer_notes " +
         "from scheduled_bookings where partner_id=? order by scheduled_at desc limit 500",
         partnerId);
   }
