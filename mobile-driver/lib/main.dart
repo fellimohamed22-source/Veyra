@@ -585,8 +585,12 @@ class _RideScreenState extends State<RideScreen>{
         final driverNet=money(x['driver_net_amount_minor']);
         final commission=money(x['platform_commission_amount_minor']);
         final customerTotal=money(x['customer_total_amount_minor']);
-        final lat=position?.latitude??43.2965;
-        final lng=position?.longitude??5.3698;
+        final pickupLat=(x['pickup_lat'] as num?)?.toDouble();
+        final pickupLng=(x['pickup_lng'] as num?)?.toDouble();
+        final dropoffLat=(x['dropoff_lat'] as num?)?.toDouble();
+        final dropoffLng=(x['dropoff_lng'] as num?)?.toDouble();
+        final lat=position?.latitude??pickupLat??43.2965;
+        final lng=position?.longitude??pickupLng??5.3698;
 
         if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status)&&gpsTimer==null){
           WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)startTracking();});
@@ -604,11 +608,19 @@ class _RideScreenState extends State<RideScreen>{
                     urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName:'com.veyra.driver',
                   ),
-                  if(position!=null)MarkerLayer(markers:[
-                    Marker(
+                  MarkerLayer(markers:[
+                    if(pickupLat!=null&&pickupLng!=null)Marker(
+                      point:LatLng(pickupLat,pickupLng),width:44,height:44,
+                      child:const Icon(Icons.trip_origin,size:34),
+                    ),
+                    if(dropoffLat!=null&&dropoffLng!=null)Marker(
+                      point:LatLng(dropoffLat,dropoffLng),width:44,height:44,
+                      child:const Icon(Icons.location_on,size:38),
+                    ),
+                    if(position!=null)Marker(
                       point:LatLng(lat,lng),width:56,height:56,
                       child:const Icon(Icons.local_taxi,size:44),
-                    )
+                    ),
                   ]),
                 ],
               ),
