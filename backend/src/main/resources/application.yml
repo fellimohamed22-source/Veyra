@@ -3,6 +3,13 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/veyra}
     username: ${DB_USER:veyra}
     password: ${DB_PASSWORD:veyra}
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties.mail.smtp.auth: true
+    properties.mail.smtp.starttls.enable: true
   jpa:
     open-in-view: false
     hibernate.ddl-auto: validate
