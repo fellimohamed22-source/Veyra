@@ -22,7 +22,7 @@ public class BookingQueryController {
     UUID userId=CurrentUser.id();
     List<Map<String,Object>> rows=db.queryForList(
         "select sb.id,sb.creator_type,sb.creator_user_id,sb.partner_id,sb.beneficiary_name_snapshot," +
-        "sb.beneficiary_phone_snapshot,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status," +
+        "sb.beneficiary_phone_snapshot,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.status," +
         "sb.payment_method,sb.offer_window_ends_at,sb.selected_driver_id," +
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
         "du.first_name as driver_first_name,du.last_name as driver_last_name,du.phone as driver_phone,d.rating as driver_rating," +
