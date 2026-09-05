@@ -346,8 +346,14 @@ class RequestScreen extends StatefulWidget{
 }
 class _RequestScreenState extends State<RequestScreen>{
   final amount=TextEditingController();
+  late Future<Map<String,dynamic>> detail;
   bool sending=false;
   String? error;
+
+  @override void initState(){
+    super.initState();
+    detail=api.opportunityDetail(widget.bookingId);
+  }
 
   Future<void> submit()async{
     final euros=double.tryParse(amount.text.replaceAll(',','.'));
@@ -366,6 +372,32 @@ class _RequestScreenState extends State<RequestScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('Proposer un prix')),
     body:ListView(padding:const EdgeInsets.all(20),children:[
+      FutureBuilder<Map<String,dynamic>>(
+        future:detail,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
+          if(s.hasError)return Card(child:ListTile(
+            leading:const Icon(Icons.error_outline),
+            title:const Text('Demande indisponible'),
+            subtitle:const Text('Elle a peut-être déjà été fermée.'),
+            trailing:TextButton(onPressed:()=>setState(()=>detail=api.opportunityDetail(widget.bookingId)),child:const Text('Réessayer')),
+          ));
+          final x=s.data??{};
+          return Column(children:[
+            Card(child:ListTile(
+              leading:const Icon(Icons.route),
+              title:Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString()),
+              subtitle:Text((x['scheduled_at']??'').toString()+'\n'+(x['category_name']??'').toString()),
+              isThreeLine:true,
+            )),
+            Card(child:ListTile(
+              leading:const Icon(Icons.luggage_outlined),
+              title:Text((x['passenger_count']??1).toString()+' passager(s)'),
+              subtitle:Text((x['baggage_count']??0).toString()+' bagage(s)'+((x['customer_notes']??'').toString().isEmpty?'':' • '+x['customer_notes'].toString())),
+            )),
+          ]);
+        },
+      ),
       const Card(child:ListTile(
         leading:Icon(Icons.visibility_off_outlined),title:Text('Offre privée'),
         subtitle:Text('Les offres des autres chauffeurs et le meilleur prix ne sont jamais affichés.'),
