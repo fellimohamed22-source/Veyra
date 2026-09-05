@@ -578,6 +578,11 @@ class _RideScreenState extends State<RideScreen>{
         final x=s.data??{};
         final status=(x['status']??'').toString();
         final phone=x['customer_phone']?.toString();
+        final paymentMethod=(x['payment_method']??'').toString();
+        double money(dynamic value)=>((value??0) as num).toDouble()/100;
+        final driverNet=money(x['driver_net_amount_minor']);
+        final commission=money(x['platform_commission_amount_minor']);
+        final customerTotal=money(x['customer_total_amount_minor']);
         final lat=position?.latitude??43.2965;
         final lng=position?.longitude??5.3698;
 
@@ -612,6 +617,21 @@ class _RideScreenState extends State<RideScreen>{
             style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           Text('Statut : '+status),
           if(x['customer_name']!=null)Text('Client : '+x['customer_name'].toString()),
+          if(paymentMethod=='CASH')Card(child:ListTile(
+            leading:const Icon(Icons.payments_outlined),
+            title:Text('Montant à encaisser au client : '+customerTotal.toStringAsFixed(2)+' €'),
+            subtitle:Text('Votre montant net : '+driverNet.toStringAsFixed(2)+' € • Commission Veyra : '+commission.toStringAsFixed(2)+' € (dette CASH après la course)'),
+          )),
+          if(paymentMethod=='ONLINE')Card(child:ListTile(
+            leading:const Icon(Icons.credit_card),
+            title:Text('Paiement en ligne • Net chauffeur '+driverNet.toStringAsFixed(2)+' €'),
+            subtitle:const Text('Le paiement doit être capturé avant le démarrage de la course.'),
+          )),
+          if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
+            leading:const Icon(Icons.receipt_long),
+            title:Text('Facturation partenaire • Net chauffeur '+driverNet.toStringAsFixed(2)+' €'),
+            subtitle:const Text('Le partenaire est facturé par Veyra selon son contrat.'),
+          )),
           if(error!=null)Padding(
             padding:const EdgeInsets.symmetric(vertical:10),
             child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
