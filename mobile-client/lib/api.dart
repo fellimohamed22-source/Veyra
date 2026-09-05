@@ -16,8 +16,43 @@ class Api {
         if(t!=null)o.headers['Authorization']='Bearer $t';
         h.next(o);
       },
-      onError:(e,h)=>h.next(e),
+      onError:(e,h)async{
+        final request=e.requestOptions;
+        final isAuth=request.path.contains('/api/v1/auth/');
+        if(e.response?.statusCode==401 && !isAuth && request.extra['retried']!=true){
+          final refreshed=await _refreshToken();
+          if(refreshed){
+            final token=await storage.read(key:'accessToken');
+            request.headers['Authorization']='Bearer $token';
+            request.extra['retried']=true;
+            try{
+              final response=await dio.fetch(request);
+              h.resolve(response);
+              return;
+            }catch(_){}
+          }
+        }
+        h.next(e);
+      },
     ));
+  }
+
+  Future<bool> _refreshToken() async {
+    final refresh=await storage.read(key:'refreshToken');
+    if(refresh==null||refresh.isEmpty)return false;
+    try{
+      final raw=Dio(BaseOptions(baseUrl:dio.options.baseUrl));
+      final r=await raw.post('/api/v1/auth/refresh',data:{
+        'refreshToken':refresh,
+        'deviceName':'mobile',
+      });
+      await storage.write(key:'accessToken',value:r.data['accessToken']);
+      await storage.write(key:'refreshToken',value:r.data['refreshToken']);
+      return true;
+    }catch(_){
+      await storage.deleteAll();
+      return false;
+    }
   }
 
   Future<void> register({
