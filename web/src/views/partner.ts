@@ -192,7 +192,7 @@ export class Partner implements OnInit{
   }
 
   async loadBookings(){
-    try{this.bookings=await this.api.myBookings();}catch{this.bookings=[];}
+    try{this.bookings=await this.api.partnerBookings(this.partnerId);}catch{this.bookings=[];}
   }
 
   async loadOffers(id:string){
