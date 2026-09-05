@@ -6,11 +6,11 @@
 - RBAC backend; ne jamais faire confiance au rôle envoyé par le frontend.
 - Autorisation objet sur Booking/Partner/Driver/Chat.
 - Offre concurrente jamais exposée à un chauffeur.
-- PIN hashé; jamais dans logs.
+- PIN hashé + chiffré; jamais dans logs.
 - Documents non publics, UUID storage key, extension whitelist, limite 10 MB.
 - Paramètres SQL: JdbcTemplate placeholders; les seuls ORDER BY dynamiques sont whitelistés.
 - Idempotency-Key obligatoire pour paiement.
-- WebSocket doit recevoir une authentification JWT avant production publique; le simple broker est MVP/pilote.
+- WebSocket STOMP: JWT Bearer obligatoire au CONNECT et autorisation par réservation sur les topics chat/location.
 - HTTPS obligatoire hors localhost.
 - Secrets uniquement via variables d'environnement.
-- Audit des actions Admin/Finance à compléter avant production réglementée.
+- Les actions privilégiées Admin et Finance sont tracées dans audit_logs.
