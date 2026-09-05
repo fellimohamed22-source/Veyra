@@ -32,20 +32,24 @@ public class CancellationFinanceService {
     int midFrom=((Number)policy.get("mid_window_from_minutes")).intValue();
 
     if(minutesToDeparture>=free){
-      return charge(bookingId,policy,0,0);
+      return charge(bookingId,policy,0,0,0,null);
     }
     if(minutesToDeparture>=midFrom){
       return charge(
           bookingId,
           policy,
           ((Number)policy.get("mid_fee_bps")).intValue(),
-          ((Number)policy.get("driver_share_mid_bps")).intValue());
+          ((Number)policy.get("driver_share_mid_bps")).intValue(),
+          ((Number)policy.get("mid_fee_min_minor")).longValue(),
+          null);
     }
     return charge(
         bookingId,
         policy,
         ((Number)policy.get("late_fee_bps")).intValue(),
-        ((Number)policy.get("driver_share_late_bps")).intValue());
+        ((Number)policy.get("driver_share_late_bps")).intValue(),
+        0,
+        null);
   }
 
   @Transactional
@@ -55,7 +59,9 @@ public class CancellationFinanceService {
         bookingId,
         policy,
         ((Number)policy.get("no_show_fee_bps")).intValue(),
-        ((Number)policy.get("driver_share_no_show_bps")).intValue());
+        ((Number)policy.get("driver_share_no_show_bps")).intValue(),
+        0,
+        ((Number)policy.get("no_show_cap_minor")).longValue());
   }
 
   private Map<String,Object> activePolicy(){
@@ -72,7 +78,9 @@ public class CancellationFinanceService {
       UUID bookingId,
       Map<String,Object> policy,
       int feeBps,
-      int driverShareBps){
+      int driverShareBps,
+      long minimumFeeMinor,
+      Long maximumFeeMinor){
 
     List<Map<String,Object>> financialRows=db.queryForList(
         "select sb.payment_method,sb.selected_driver_id,bfs.driver_proposed_amount_minor," +
@@ -92,6 +100,9 @@ public class CancellationFinanceService {
 
     long base=((Number)financial.get("driver_proposed_amount_minor")).longValue();
     long fee=percentage(base,feeBps);
+    if(fee>0 && minimumFeeMinor>0) fee=Math.max(fee,minimumFeeMinor);
+    if(maximumFeeMinor!=null) fee=Math.min(fee,maximumFeeMinor);
+    fee=Math.min(fee,base);
     long driverComp=percentage(fee,driverShareBps);
     long platform=Math.max(0,fee-driverComp);
     String currency=(String)financial.get("currency");
