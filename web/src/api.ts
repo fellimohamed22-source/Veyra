@@ -3,19 +3,52 @@ import {Injectable} from '@angular/core';
 @Injectable({providedIn:'root'})
 export class Api {
   base='/api/v1';
+  private refreshPromise:Promise<boolean>|null=null;
 
-  async request(path:string,init:RequestInit={}){
+  async request(path:string,init:RequestInit={},retried=false):Promise<any>{
     const token=localStorage.getItem('accessToken');
     const headers=new Headers(init.headers);
     if(init.body)headers.set('Content-Type','application/json');
     if(token)headers.set('Authorization','Bearer '+token);
     const response=await fetch(this.base+path,{...init,headers});
+
+    if(response.status===401&&!retried&&!path.startsWith('/auth/')){
+      const refreshed=await this.refreshAccessToken();
+      if(refreshed)return this.request(path,init,true);
+    }
+
     if(!response.ok){
       let error:any={code:'HTTP_'+response.status};
       try{error=await response.json();}catch{}
       throw error;
     }
     return response.status===204?null:response.json();
+  }
+
+  private async refreshAccessToken():Promise<boolean>{
+    if(this.refreshPromise)return this.refreshPromise;
+    this.refreshPromise=(async()=>{
+      const refreshToken=localStorage.getItem('refreshToken');
+      if(!refreshToken)return false;
+      try{
+        const response=await fetch(this.base+'/auth/refresh',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({refreshToken,deviceName:'web'})
+        });
+        if(!response.ok)throw new Error('refresh failed');
+        const result=await response.json();
+        localStorage.setItem('accessToken',result.accessToken);
+        localStorage.setItem('refreshToken',result.refreshToken);
+        return true;
+      }catch{
+        this.logout();
+        return false;
+      }finally{
+        this.refreshPromise=null;
+      }
+    })();
+    return this.refreshPromise;
   }
 
   async login(email:string,password:string){
