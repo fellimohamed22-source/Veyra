@@ -42,6 +42,8 @@ jobs:
         with: {distribution: temurin, java-version: '21', cache: maven}
       - run: mvn -B -f backend/pom.xml test
       - run: mvn -B -f backend/pom.xml package -DskipTests
+      - name: Build backend container
+        run: docker build -t veyra-backend-ci ./backend
       - name: Smoke test Spring Boot startup and Flyway
         run: |
           java -jar backend/target/*.jar > /tmp/veyra-backend.log 2>&1 &
