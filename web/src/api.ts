@@ -51,6 +51,7 @@ export class Api {
   supportTimeline(id:string){return this.request('/support/bookings/'+id+'/timeline');}
   createPartner(body:any){return this.request('/partner/organizations',{method:'POST',body:JSON.stringify(body)});}
   partnerFinance(id:string){return this.request('/partner/'+id+'/finance');}
+  partnerBookings(id:string){return this.request('/partner/'+id+'/bookings');}
   autocomplete(q:string){return this.request('/addresses/autocomplete?q='+encodeURIComponent(q));}
   vehicleCategories(){return this.request('/reference/vehicle-categories');}
   createScheduledBooking(body:any){return this.request('/scheduled-bookings',{method:'POST',body:JSON.stringify(body)});}
