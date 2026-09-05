@@ -1,10 +1,11 @@
 import {CommonModule} from '@angular/common';
 import {Component,OnInit} from '@angular/core';
+import {FormsModule} from '@angular/forms';
 import {Api} from '../api';
 
 @Component({
   standalone:true,
-  imports:[CommonModule],
+  imports:[CommonModule,FormsModule],
   template:`
     <h1>Administration Veyra</h1>
 
@@ -40,6 +41,14 @@ import {Api} from '../api';
     </div>
 
     <div class="card">
+      <h3>Configuration commerciale</h3>
+      <label>Commission Client standard (%)</label>
+      <input type="number" min="0" max="30" step="0.1" [(ngModel)]="standardCommissionPercent">
+      <button (click)="saveStandardCommission()">Enregistrer</button>
+      <p *ngIf="configMessage">{{configMessage}}</p>
+    </div>
+
+    <div class="card">
       <h3>Réservations récentes</h3>
       <p *ngIf="bookings.length===0">Aucune réservation.</p>
       <table *ngIf="bookings.length" style="width:100%;border-collapse:collapse">
@@ -63,6 +72,8 @@ export class Admin implements OnInit{
   partners:any[]=[];
   loading=false;
   error='';
+  standardCommissionPercent=10;
+  configMessage='';
 
   constructor(private api:Api){}
 
@@ -95,4 +106,13 @@ export class Admin implements OnInit{
   }
   async approvePartner(id:string){await this.api.approvePartner(id);await this.load();}
   async suspendPartner(id:string){await this.api.suspendPartner(id);await this.load();}
+  async saveStandardCommission(){
+    const bps=Math.round(this.standardCommissionPercent*100);
+    try{
+      await this.api.setStandardCommission(bps);
+      this.configMessage='Commission standard mise à jour.';
+    }catch{
+      this.configMessage='Impossible de modifier la commission.';
+    }
+  }
 }
