@@ -22,6 +22,8 @@ public class ConfigController {
 
   public record Commission(int bps){}
 
+  public record ServiceZoneRequest(String code,String name,String polygonWkt){}
+
   public record CancellationPolicy(
       int freeUntilMinutes,
       int midWindowFromMinutes,
@@ -70,6 +72,67 @@ public class ConfigController {
         "values (gen_random_uuid(),'PARTNER',?,?,?,'ACTIVE',now())",
         partnerId,commission.bps(),version);
     audit("PARTNER_COMMISSION_UPDATED",partnerId);
+  }
+
+  @GetMapping("/service-zones")
+  public List<Map<String,Object>> serviceZones(){
+    return db.queryForList(
+        "select sz.id,sz.code,sz.name,sz.status,szv.id as version_id," +
+        "ST_AsGeoJSON(szv.polygon::geometry) as polygon_geojson,szv.effective_from,szv.effective_to " +
+        "from service_zones sz left join service_zone_versions szv on szv.zone_id=sz.id and szv.status='ACTIVE' " +
+        "order by sz.name");
+  }
+
+  @PostMapping("/service-zones")
+  @Transactional
+  public Map<String,Object> upsertServiceZone(@RequestBody ServiceZoneRequest request){
+    if(request.code()==null||request.code().isBlank()||
+        request.name()==null||request.name().isBlank()||
+        request.polygonWkt()==null||request.polygonWkt().isBlank()){
+      throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_SERVICE_ZONE");
+    }
+
+    Boolean valid=db.queryForObject(
+        "select ST_IsValid(ST_GeomFromText(?,4326)) " +
+        "and ST_GeometryType(ST_GeomFromText(?,4326))='ST_Polygon'",
+        Boolean.class,request.polygonWkt(),request.polygonWkt());
+    if(!Boolean.TRUE.equals(valid)){
+      throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_SERVICE_ZONE_POLYGON");
+    }
+
+    UUID zoneId=UUID.randomUUID();
+    db.update(
+        "insert into service_zones(id,code,name,status) values (?,?,?,'ACTIVE') " +
+        "on conflict(code) do update set name=excluded.name,status='ACTIVE'",
+        zoneId,request.code().trim().toUpperCase(Locale.ROOT),request.name().trim());
+    zoneId=db.queryForObject(
+        "select id from service_zones where code=?",
+        UUID.class,request.code().trim().toUpperCase(Locale.ROOT));
+
+    db.update(
+        "update service_zone_versions set status='INACTIVE',effective_to=now() " +
+        "where zone_id=? and status='ACTIVE'",
+        zoneId);
+
+    UUID versionId=UUID.randomUUID();
+    db.update(
+        "insert into service_zone_versions(id,zone_id,polygon,effective_from,status) " +
+        "values (?,?,ST_GeomFromText(?,4326)::geography,now(),'ACTIVE')",
+        versionId,zoneId,request.polygonWkt());
+
+    audit("SERVICE_ZONE_UPDATED",zoneId);
+    return Map.of("zoneId",zoneId,"versionId",versionId,"status","ACTIVE");
+  }
+
+  @DeleteMapping("/service-zones/{zoneId}")
+  @Transactional
+  public void deactivateServiceZone(@PathVariable UUID zoneId){
+    db.update("update service_zones set status='INACTIVE' where id=?",zoneId);
+    db.update(
+        "update service_zone_versions set status='INACTIVE',effective_to=now() " +
+        "where zone_id=? and status='ACTIVE'",
+        zoneId);
+    audit("SERVICE_ZONE_DEACTIVATED",zoneId);
   }
 
   @GetMapping("/cancellation-policy")
