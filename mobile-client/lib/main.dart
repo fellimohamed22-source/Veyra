@@ -427,7 +427,12 @@ class _OffersScreenState extends State<OffersScreen>{
             return Card(child:ListTile(
               leading:const CircleAvatar(child:Icon(Icons.local_taxi)),
               title:Text(total.toStringAsFixed(2)+' € total'),
-              subtitle:Text('Prix chauffeur: '+driver.toStringAsFixed(2)+' € • Note: '+(x['rating']??'-').toString()),
+              subtitle:Text(
+                ((x['driverFirstName']??'Chauffeur').toString())+
+                ' • '+(x['vehicleCategory']??'VTC').toString()+
+                ' • '+[(x['vehicleBrand']??'').toString(),(x['vehicleModel']??'').toString()].where((v)=>v.isNotEmpty).join(' ')+
+                '\nPrix chauffeur: '+driver.toStringAsFixed(2)+' € • Note: '+(x['rating']??'-').toString()),
+              isThreeLine:true,
               trailing:FilledButton(
                 onPressed:()async{
                   await api.accept(widget.bookingId,x['offerId'].toString());
