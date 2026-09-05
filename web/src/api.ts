@@ -28,6 +28,8 @@ export class Api {
     return result;
   }
 
+  me(){return this.request('/me');}
+
   logout(){
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
