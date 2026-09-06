@@ -506,8 +506,13 @@ class _AddressScreenState extends State<AddressScreen>{
         'baggageCount':baggageCount,
       });
       if(mounted)context.go('/home');
+    }on DioException catch(e){
+      final code=(e.response?.data is Map)?(e.response?.data as Map)['code']?.toString():null;
+      if(mounted)setState(()=>error=code=='PICKUP_OUTSIDE_SERVICE_ZONE'
+        ?t('Cette adresse de départ est hors de la zone de service actuelle (Marseille → Menton).')
+        :t('La réservation n’a pas pu être publiée. Vérifiez les informations puis réessayez.')+(code==null?'':' ($code)'));
     }catch(_){
-      if(mounted)setState(()=>error='La réservation n’a pas pu être publiée. Vérifiez les informations puis réessayez.');
+      if(mounted)setState(()=>error=t('La réservation n’a pas pu être publiée. Vérifiez les informations puis réessayez.'));
     }finally{
       if(mounted)setState(()=>submitting=false);
     }

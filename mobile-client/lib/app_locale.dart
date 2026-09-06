@@ -89,6 +89,7 @@ class AppLocale {
     'Le départ doit être planifié au moins 2 heures à l’avance.': 'Departure must be scheduled at least 2 hours ahead.',
     'Complétez le trajet, la date et la catégorie.': 'Complete the route, date, and category.',
     'La réservation n’a pas pu être publiée. Vérifiez les informations puis réessayez.': 'The booking could not be published. Check the details and try again.',
+    'Cette adresse de départ est hors de la zone de service actuelle (Marseille → Menton).': 'This pickup address is outside the current service area (Marseille → Menton).',
     'Utiliser ma position actuelle': 'Use my current location',
     'Activez la localisation du téléphone.': 'Turn on the phone\'s location.',
     'La localisation est nécessaire pour utiliser votre position actuelle.': 'Location access is needed to use your current location.',
