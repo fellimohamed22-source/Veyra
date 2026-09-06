@@ -593,44 +593,63 @@ class _OffersScreenState extends State<OffersScreen>{
   @override void initState(){super.initState();future=api.offers(widget.bookingId);}
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Offres reçues'))),
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(title:Text(t('Offres reçues')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
     body:FutureBuilder<List<dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
         if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.offers(widget.bookingId)),child:Text(t('Réessayer'))));
         final items=s.data??[];
-        if(items.isEmpty)return Center(child:Padding(padding:EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.'))));
+        if(items.isEmpty)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.'))));
         return ListView(padding:const EdgeInsets.all(16),children:[
-          Text(t('Choisissez librement selon le prix, le véhicule et le chauffeur.')),
-          const SizedBox(height:12),
+          Text(t('Choisissez librement selon le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:Colors.black54)),
+          const SizedBox(height:14),
           for(final raw in items)Builder(builder:(context){
             final x=Map<String,dynamic>.from(raw as Map);
             final total=((x['totalMinor']??0) as num).toDouble()/100;
             final driver=((x['driverPriceMinor']??0) as num).toDouble()/100;
-            return Card(child:ListTile(
-              leading:const CircleAvatar(child:Icon(Icons.local_taxi)),
-              title:Text(total.toStringAsFixed(2)+' € total'),
-              subtitle:Text(
-                ((x['driverFirstName']??'Chauffeur').toString())+
-                ' • '+(x['vehicleCategory']??'VTC').toString()+
-                ' • '+[(x['vehicleBrand']??'').toString(),(x['vehicleModel']??'').toString()].where((v)=>v.isNotEmpty).join(' ')+
-                '\nPrix chauffeur: '+driver.toStringAsFixed(2)+' € • Note: '+(x['rating']??'-').toString()),
-              isThreeLine:true,
-              trailing:FilledButton(
-                onPressed:()async{
-                  await api.accept(widget.bookingId,x['offerId'].toString());
-                  final booking=await api.bookingDetail(widget.bookingId);
-                  if(!context.mounted)return;
-                  if(booking['payment_method']=='ONLINE'){
-                    context.push('/payment/'+widget.bookingId);
-                  }else{
-                    context.go('/home');
-                  }
-                },
-                child:Text(t('Choisir')),
-              ),
-            ));
+            final driverName=(x['driverFirstName']??'Chauffeur').toString();
+            final vehicle=[(x['vehicleBrand']??'').toString(),(x['vehicleModel']??'').toString()].where((v)=>v.isNotEmpty).join(' ');
+            final rating=(x['rating']??'-').toString();
+            return Card(
+              margin:const EdgeInsets.only(bottom:12),
+              shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16)),
+              child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Row(children:[
+                  CircleAvatar(radius:24,backgroundColor:const Color(0xFF1565C0).withValues(alpha:0.12),child:const Icon(Icons.local_taxi,color:Color(0xFF1565C0))),
+                  const SizedBox(width:12),
+                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Text(driverName,style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
+                    Row(children:[
+                      const Icon(Icons.star,color:Color(0xFFF59E0B),size:16),
+                      const SizedBox(width:2),
+                      Text(rating,style:const TextStyle(color:Colors.black54)),
+                      const SizedBox(width:8),
+                      Expanded(child:Text('${x['vehicleCategory']??'VTC'} • $vehicle',style:const TextStyle(color:Colors.black54,fontSize:12),overflow:TextOverflow.ellipsis)),
+                    ]),
+                  ])),
+                  Text('${total.toStringAsFixed(0)} €',style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
+                ]),
+                const SizedBox(height:4),
+                Text(t('Prix chauffeur: ')+driver.toStringAsFixed(2)+' €',style:const TextStyle(fontSize:12,color:Colors.black45)),
+                const SizedBox(height:12),
+                SizedBox(width:double.infinity,child:FilledButton(
+                  style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
+                  onPressed:()async{
+                    await api.accept(widget.bookingId,x['offerId'].toString());
+                    final booking=await api.bookingDetail(widget.bookingId);
+                    if(!context.mounted)return;
+                    if(booking['payment_method']=='ONLINE'){
+                      context.push('/payment/'+widget.bookingId);
+                    }else{
+                      context.go('/home');
+                    }
+                  },
+                  child:Text(t('Choisir')),
+                )),
+              ])),
+            );
           }),
         ]);
       },
