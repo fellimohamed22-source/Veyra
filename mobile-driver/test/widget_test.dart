@@ -1,1 +1,1 @@
-import 'package:flutter_test/flutter_test.dart';import 'package:veyra_driver/main.dart';void main(){testWidgets('login',(t)async{await t.pumpWidget(const DriverApp());expect(find.text('Veyra Chauffeur'),findsOneWidget);});}
+import 'package:flutter_test/flutter_test.dart';import 'package:veyra_driver/main.dart';void main(){testWidgets('login',(t)async{await t.pumpWidget(const DriverApp());expect(find.text('Veyra'),findsOneWidget);expect(find.text('Se connecter'),findsOneWidget);});}
