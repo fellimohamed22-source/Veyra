@@ -103,7 +103,7 @@ class AppLocale {
     'Meilleure offre visible': 'Best offer visible',
     'Meilleure offre actuelle des autres chauffeurs': 'Current best offer from other drivers',
     'Aucune autre offre active pour le moment.': 'No other active offer at the moment.',
-    'Aucune autre offre active pour le moment. Vous serez informé si la vôtre est battue.': 'No other active offer at the moment. You\\'ll be notified if yours is beaten.',
+    'Aucune autre offre active pour le moment. Vous serez informé si la vôtre est battue.': 'No other active offer at the moment. You will be notified if yours is beaten.',
     'Votre offre est supérieure de': 'Your offer is higher by',
     'à la meilleure offre actuelle': 'than the current best offer',
     'Vous proposez actuellement le meilleur prix': 'You currently offer the best price',
