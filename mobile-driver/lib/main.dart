@@ -6,10 +6,15 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
+import 'app_locale.dart';
+
+/// Short alias used throughout this file.
+String t(String french) => AppLocale.t(french);
 
 bool driverPushHandlersConfigured=false;
 
@@ -41,14 +46,43 @@ Future<void> configureDriverPush() async {
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
 
-void main()=>runApp(const DriverApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Never gate the first frame on anything async that could stall --
+  // same lesson as the client app's Stripe fix. French remains correct
+  // as the default until this background read resolves.
+  unawaited(AppLocale.load());
+  runApp(const DriverApp());
+}
+
+/// Same widget/design as the client app's LanguageSwitch.
+class LanguageSwitch extends StatelessWidget{
+  const LanguageSwitch({super.key});
+  @override Widget build(BuildContext context)=>ValueListenableBuilder<String>(
+    valueListenable:AppLocale.code,
+    builder:(context,code,_)=>TextButton(
+      onPressed:()=>AppLocale.set(code=='fr'?'en':'fr'),
+      child:Text(code=='fr'?'FR':'EN',style:const TextStyle(fontWeight:FontWeight.bold)),
+    ),
+  );
+}
 
 class DriverApp extends StatelessWidget{
   const DriverApp({super.key});
-  @override Widget build(BuildContext context)=>MaterialApp.router(
-    title:'Veyra Chauffeur',
-    theme:ThemeData(useMaterial3:true,colorSchemeSeed:Colors.teal),
-    routerConfig:router,
+  @override Widget build(BuildContext context)=>ValueListenableBuilder<String>(
+    valueListenable:AppLocale.code,
+    builder:(context,localeCode,_)=>MaterialApp.router(
+      title:'Veyra Chauffeur',
+      theme:ThemeData(useMaterial3:true,colorSchemeSeed:const Color(0xFF1565C0)),
+      locale:Locale(localeCode),
+      supportedLocales:const [Locale('fr'),Locale('en')],
+      localizationsDelegates:const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      routerConfig:router,
+    ),
   );
 }
 
@@ -97,17 +131,17 @@ class _LoginScreenState extends State<LoginScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Veyra Chauffeur')),
+    appBar:AppBar(title:Text(t('Veyra Chauffeur')),actions:const [LanguageSwitch(),SizedBox(width:8)]),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
       const Text('Espace Chauffeur VTC',style:TextStyle(fontSize:28,fontWeight:FontWeight.bold)),
       const SizedBox(height:24),
-      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:const InputDecoration(labelText:'Email')),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
       const SizedBox(height:12),
-      TextField(controller:password,obscureText:true,decoration:const InputDecoration(labelText:'Mot de passe')),
+      TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'))),
       if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:20),
-      FilledButton(onPressed:loading?null:submit,child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2)):const Text('Se connecter')),
-      TextButton(onPressed:()=>context.go('/register'),child:const Text('Créer un compte Chauffeur')),
+      FilledButton(onPressed:loading?null:submit,child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2)):Text(t('Se connecter'))),
+      TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte Chauffeur'))),
     ])),
   );
 }
@@ -191,7 +225,7 @@ class _KycScreenState extends State<KycScreen>{
     try{
       await api.uploadDocument(type,result.files.single.path!);
       if(mounted)setState((){
-        message='Document envoyé. Il sera vérifié par Veyra.';
+        message=t('Document envoyé. Il sera vérifié par Veyra.');
         future=api.onboardingStatus();
       });
     }catch(_){
@@ -202,7 +236,7 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Dossier Chauffeur VTC')),
+    appBar:AppBar(title:Text(t('Dossier Chauffeur VTC'))),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
@@ -213,16 +247,16 @@ class _KycScreenState extends State<KycScreen>{
         return ListView(padding:const EdgeInsets.all(20),children:[
           Card(child:ListTile(
             leading:Icon(approved?Icons.verified:Icons.pending_actions),
-            title:Text(approved?'Dossier approuvé':'Vérification en cours'),
+            title:Text(approved?t('Dossier approuvé'):t('Vérification en cours')),
             subtitle:Text('Statut KYC : '+(status['kyc_status']??'DRAFT').toString()),
           )),
           const SizedBox(height:16),
           const Text('Informations professionnelles',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-          TextField(controller:legalName,decoration:const InputDecoration(labelText:'Raison sociale')),
+          TextField(controller:legalName,decoration:InputDecoration(labelText:t('Raison sociale'))),
           TextField(controller:siren,decoration:const InputDecoration(labelText:'SIREN')),
           TextField(controller:siret,decoration:const InputDecoration(labelText:'SIRET')),
-          TextField(controller:registrationNumber,decoration:const InputDecoration(labelText:'N° inscription registre VTC')),
-          TextField(controller:cardNumber,decoration:const InputDecoration(labelText:'N° carte professionnelle VTC')),
+          TextField(controller:registrationNumber,decoration:InputDecoration(labelText:t('N° inscription registre VTC'))),
+          TextField(controller:cardNumber,decoration:InputDecoration(labelText:t('N° carte professionnelle VTC'))),
           const SizedBox(height:12),
           const Text('Véhicule',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           FutureBuilder<List<dynamic>>(
@@ -232,7 +266,7 @@ class _KycScreenState extends State<KycScreen>{
               final items=cs.data??[];
               return DropdownButtonFormField<String>(
                 initialValue:categoryId,
-                decoration:const InputDecoration(labelText:'Catégorie'),
+                decoration:InputDecoration(labelText:t('Catégorie')),
                 items:items.map((raw){
                   final x=Map<String,dynamic>.from(raw as Map);
                   return DropdownMenuItem<String>(
@@ -244,13 +278,13 @@ class _KycScreenState extends State<KycScreen>{
               );
             },
           ),
-          TextField(controller:brand,decoration:const InputDecoration(labelText:'Marque')),
-          TextField(controller:model,decoration:const InputDecoration(labelText:'Modèle')),
-          TextField(controller:year,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'Année')),
-          TextField(controller:plate,decoration:const InputDecoration(labelText:'Immatriculation')),
-          TextField(controller:color,decoration:const InputDecoration(labelText:'Couleur')),
+          TextField(controller:brand,decoration:InputDecoration(labelText:t('Marque'))),
+          TextField(controller:model,decoration:InputDecoration(labelText:t('Modèle'))),
+          TextField(controller:year,keyboardType:TextInputType.number,decoration:InputDecoration(labelText:t('Année'))),
+          TextField(controller:plate,decoration:InputDecoration(labelText:t('Immatriculation'))),
+          TextField(controller:color,decoration:InputDecoration(labelText:t('Couleur'))),
           const SizedBox(height:12),
-          FilledButton(onPressed:saving?null:saveProfessionalData,child:Text(saving?'Enregistrement…':'Enregistrer les informations')),
+          FilledButton(onPressed:saving?null:saveProfessionalData,child:Text(saving?t('Enregistrement…'):t('Enregistrer les informations'))),
           const SizedBox(height:24),
           const Text('Documents obligatoires',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           for(final item in const [
@@ -262,15 +296,15 @@ class _KycScreenState extends State<KycScreen>{
           ])
             Card(child:ListTile(
               title:Text(item.$2),
-              subtitle:const Text('PDF, JPG ou PNG — 10 Mo max'),
+              subtitle:Text(t('PDF, JPG ou PNG — 10 Mo max')),
               trailing:uploadingType==item.$1
                 ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2))
                 :IconButton(onPressed:()=>upload(item.$1),icon:const Icon(Icons.upload_file)),
             )),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
-          if(approved)FilledButton(onPressed:()=>context.go('/home'),child:const Text('Accéder aux demandes')),
-          if(!approved)const Text(
-            'Après envoi, l’équipe Veyra vérifie le dossier avant d’activer l’accès aux demandes.',
+          if(approved)FilledButton(onPressed:()=>context.go('/home'),child:Text(t('Accéder aux demandes'))),
+          if(!approved)Text(
+            t('Après envoi, l’équipe Veyra vérifie le dossier avant d’activer l’accès aux demandes.'),
             textAlign:TextAlign.center,
           ),
         ]);
@@ -300,62 +334,62 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
   void reload()=>setState(()=>future=load());
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Demandes disponibles'),actions:[
-      IconButton(onPressed:()=>context.go('/notifications'),icon:const Icon(Icons.notifications_outlined)),
-      IconButton(onPressed:()=>context.go('/agenda'),icon:const Icon(Icons.calendar_month)),
-      IconButton(onPressed:()=>context.go('/wallet'),icon:const Icon(Icons.account_balance_wallet)),
+    appBar:AppBar(title:Text(t('Demandes disponibles')),actions:[
+      IconButton(onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_outlined)),
+      IconButton(onPressed:()=>context.push('/agenda'),icon:const Icon(Icons.calendar_month)),
+      IconButton(onPressed:()=>context.push('/wallet'),icon:const Icon(Icons.account_balance_wallet)),
     ]),
     body:RefreshIndicator(
       onRefresh:()async{reload();await future;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         DropdownButtonFormField<String>(
           initialValue:sort,
-          decoration:const InputDecoration(labelText:'Trier les demandes'),
-          items:const [
-            DropdownMenuItem(value:'date',child:Text('Date de départ')),
-            DropdownMenuItem(value:'newest',child:Text('Plus récentes')),
-            DropdownMenuItem(value:'pickup',child:Text('Lieu de départ (A → Z)')),
-            DropdownMenuItem(value:'destination',child:Text('Destination (A → Z)')),
+          decoration:InputDecoration(labelText:t('Trier les demandes')),
+          items:[
+            DropdownMenuItem(value:'date',child:Text(t('Date de départ'))),
+            DropdownMenuItem(value:'newest',child:Text(t('Plus récentes'))),
+            DropdownMenuItem(value:'pickup',child:Text(t('Lieu de départ (A → Z)'))),
+            DropdownMenuItem(value:'destination',child:Text(t('Destination (A → Z)'))),
           ],
           onChanged:(v){if(v!=null){sort=v;reload();}},
         ),
         const SizedBox(height:10),
         ExpansionTile(
           tilePadding:EdgeInsets.zero,
-          title:const Text('Filtres'),
+          title:Text(t('Filtres')),
           children:[
-            TextField(controller:pickupFilter,decoration:const InputDecoration(labelText:'Lieu de départ contient')),
+            TextField(controller:pickupFilter,decoration:InputDecoration(labelText:t('Lieu de départ contient'))),
             const SizedBox(height:8),
-            TextField(controller:destinationFilter,decoration:const InputDecoration(labelText:'Destination contient')),
+            TextField(controller:destinationFilter,decoration:InputDecoration(labelText:t('Destination contient'))),
             const SizedBox(height:8),
             DropdownButtonFormField<int?>(
               initialValue:minPassengers,
-              decoration:const InputDecoration(labelText:'Minimum passagers'),
-              items:[const DropdownMenuItem<int?>(value:null,child:Text('Tous')), ...List.generate(8,(i)=>DropdownMenuItem<int?>(value:i+1,child:Text('${i+1}+')))],
+              decoration:InputDecoration(labelText:t('Minimum passagers')),
+              items:[DropdownMenuItem<int?>(value:null,child:Text(t('Tous'))), ...List.generate(8,(i)=>DropdownMenuItem<int?>(value:i+1,child:Text('${i+1}+')))],
               onChanged:(v)=>setState(()=>minPassengers=v),
             ),
             const SizedBox(height:10),
             Row(children:[
-              Expanded(child:OutlinedButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState(()=>minPassengers=null);reload();},child:const Text('Réinitialiser'))),
+              Expanded(child:OutlinedButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState(()=>minPassengers=null);reload();},child:Text(t('Réinitialiser')))),
               const SizedBox(width:8),
-              Expanded(child:FilledButton(onPressed:reload,child:const Text('Appliquer'))),
+              Expanded(child:FilledButton(onPressed:reload,child:Text(t('Appliquer')))),
             ]),
           ],
         ),
-        const Text('Aucun tri par proximité. Les chauffeurs ne voient jamais les prix concurrents.'),
+        Text(t('Aucun tri par proximité. Les chauffeurs ne voient jamais les prix concurrents.')),
         const SizedBox(height:16),
         FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
             if(s.connectionState!=ConnectionState.done)return const Center(child:Padding(padding:EdgeInsets.all(32),child:CircularProgressIndicator()));
             if(s.hasError)return Card(child:ListTile(
-              leading:const Icon(Icons.error_outline),title:const Text('Impossible de charger les demandes'),
-              trailing:TextButton(onPressed:reload,child:const Text('Réessayer')),
+              leading:const Icon(Icons.error_outline),title:Text(t('Impossible de charger les demandes')),
+              trailing:TextButton(onPressed:reload,child:Text(t('Réessayer'))),
             ));
             final items=s.data??[];
-            if(items.isEmpty)return const Card(child:ListTile(
-              leading:Icon(Icons.inbox_outlined),title:Text('Aucune demande ouverte'),
-              subtitle:Text('Les nouvelles demandes apparaîtront ici.'),
+            if(items.isEmpty)return Card(child:ListTile(
+              leading:Icon(Icons.inbox_outlined),title:Text(t('Aucune demande ouverte')),
+              subtitle:Text(t('Les nouvelles demandes apparaîtront ici.')),
             ));
             return Column(children:items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
@@ -363,7 +397,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               return Card(child:ListTile(
                 title:Text(title),subtitle:Text((x['scheduled_at']??'').toString()),
-                trailing:const Icon(Icons.chevron_right),onTap:()=>context.go('/request/'+id),
+                trailing:const Icon(Icons.chevron_right),onTap:()=>context.push('/request/'+id),
               ));
             }).toList());
           },
@@ -404,7 +438,7 @@ class _RequestScreenState extends State<RequestScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Proposer un prix')),
+    appBar:AppBar(title:Text(t('Proposer un prix'))),
     body:ListView(padding:const EdgeInsets.all(20),children:[
       FutureBuilder<Map<String,dynamic>>(
         future:detail,
@@ -412,9 +446,9 @@ class _RequestScreenState extends State<RequestScreen>{
           if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
           if(s.hasError)return Card(child:ListTile(
             leading:const Icon(Icons.error_outline),
-            title:const Text('Demande indisponible'),
-            subtitle:const Text('Elle a peut-être déjà été fermée.'),
-            trailing:TextButton(onPressed:()=>setState(()=>detail=api.opportunityDetail(widget.bookingId)),child:const Text('Réessayer')),
+            title:Text(t('Demande indisponible')),
+            subtitle:Text(t('Elle a peut-être déjà été fermée.')),
+            trailing:TextButton(onPressed:()=>setState(()=>detail=api.opportunityDetail(widget.bookingId)),child:Text(t('Réessayer'))),
           ));
           final x=s.data??{};
           return Column(children:[
@@ -432,21 +466,21 @@ class _RequestScreenState extends State<RequestScreen>{
           ]);
         },
       ),
-      const Card(child:ListTile(
-        leading:Icon(Icons.visibility_off_outlined),title:Text('Offre privée'),
-        subtitle:Text('Les offres des autres chauffeurs et le meilleur prix ne sont jamais affichés.'),
+      Card(child:ListTile(
+        leading:Icon(Icons.visibility_off_outlined),title:Text(t('Offre privée')),
+        subtitle:Text(t('Les offres des autres chauffeurs et le meilleur prix ne sont jamais affichés.')),
       )),
       TextField(
         controller:amount,
         keyboardType:const TextInputType.numberWithOptions(decimal:true),
-        decoration:const InputDecoration(
-          labelText:'Votre prix net (€)',
-          helperText:'C’est le montant exact que vous devez recevoir pour la course.',
+        decoration:InputDecoration(
+          labelText:t('Votre prix net (€)'),
+          helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
         ),
       ),
       if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:20),
-      FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():const Text('Envoyer mon offre')),
+      FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Envoyer mon offre'))),
     ]),
   );
 }
@@ -460,21 +494,21 @@ class _AgendaScreenState extends State<AgendaScreen>{
   @override void initState(){super.initState();future=api.bookings();}
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Mes courses à venir')),
+    appBar:AppBar(title:Text(t('Mes courses à venir'))),
     body:FutureBuilder<List<dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.bookings()),child:const Text('Réessayer')));
+        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.bookings()),child:Text(t('Réessayer'))));
         final items=s.data??[];
-        if(items.isEmpty)return const Center(child:Text('Aucune course confirmée.'));
+        if(items.isEmpty)return Center(child:Text(t('Aucune course confirmée.')));
         return ListView(padding:const EdgeInsets.all(16),children:items.map((raw){
           final x=Map<String,dynamic>.from(raw as Map);
           return Card(child:ListTile(
             title:Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString()),
             subtitle:Text((x['scheduled_at']??'').toString()+' • '+(x['status']??'').toString()),
             trailing:const Icon(Icons.chevron_right),
-            onTap:()=>context.go('/ride/'+x['id'].toString()),
+            onTap:()=>context.push('/ride/'+x['id'].toString()),
           ));
         }).toList());
       },
@@ -523,7 +557,7 @@ class _RideScreenState extends State<RideScreen>{
       final alreadyRated=(e.response?.data is Map)&&((e.response?.data as Map)['code']=='ALREADY_RATED');
       if(mounted)setState((){
         if(alreadyRated)ratingSubmitted=true;
-        else error='Impossible d’envoyer la note pour le moment.';
+        else error=t('Impossible d’envoyer la note pour le moment.');
         ratingSubmitting=false;
       });
     }
@@ -618,12 +652,12 @@ class _RideScreenState extends State<RideScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Course')),
+    appBar:AppBar(title:Text(t('Course'))),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:const Text('Réessayer')));
+        if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:Text(t('Réessayer'))));
         final x=s.data??{};
         final status=(x['status']??'').toString();
         final phone=x['customer_phone']?.toString();
@@ -691,29 +725,29 @@ class _RideScreenState extends State<RideScreen>{
           if(paymentMethod=='ONLINE')Card(child:ListTile(
             leading:const Icon(Icons.credit_card),
             title:Text('Paiement en ligne • Net chauffeur '+driverNet.toStringAsFixed(2)+' €'),
-            subtitle:const Text('Le paiement doit être capturé avant le démarrage de la course.'),
+            subtitle:Text(t('Le paiement doit être capturé avant le démarrage de la course.')),
           )),
           if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
             leading:const Icon(Icons.receipt_long),
             title:Text('Facturation partenaire • Net chauffeur '+driverNet.toStringAsFixed(2)+' €'),
-            subtitle:const Text('Le partenaire est facturé par Veyra selon son contrat.'),
+            subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
           )),
           if(error!=null)Padding(
             padding:const EdgeInsets.symmetric(vertical:10),
             child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
           ),
           if(status=='CONFIRMED')...[
-            FilledButton(onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),child:const Text('Je suis en route')),
+            FilledButton(onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),child:Text(t('Je suis en route'))),
             TextButton(
               onPressed:busy?null:()async{
                 final confirm=await showDialog<bool>(
                   context:context,
                   builder:(dialogContext)=>AlertDialog(
-                    title:const Text('Annuler cette course ?'),
-                    content:const Text('La réservation sera republiée en priorité si le délai le permet. Cette annulation impactera votre qualité chauffeur.'),
+                    title:Text(t('Annuler cette course ?')),
+                    content:Text(t('La réservation sera republiée en priorité si le délai le permet. Cette annulation impactera votre qualité chauffeur.')),
                     actions:[
-                      TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:const Text('Garder la course')),
-                      FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:const Text('Confirmer l’annulation')),
+                      TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Garder la course'))),
+                      FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
                     ],
                   ),
                 );
@@ -725,8 +759,8 @@ class _RideScreenState extends State<RideScreen>{
                   if(mounted){
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content:Text(result['republished']==true
-                        ?'Course annulée et demande republiée.'
-                        :'Course annulée. Le support Veyra a été alerté.')),
+                        ?t('Course annulée et demande republiée.')
+                        :t('Course annulée. Le support Veyra a été alerté.'))),
                     );
                     context.go('/agenda');
                   }
@@ -736,37 +770,37 @@ class _RideScreenState extends State<RideScreen>{
                   if(mounted)setState(()=>busy=false);
                 }
               },
-              child:const Text('Annuler ma prise en charge'),
+              child:Text(t('Annuler ma prise en charge')),
             ),
           ],
           if(status=='DRIVER_EN_ROUTE')
-            FilledButton(onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),child:const Text('Je suis arrivé')),
+            FilledButton(onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),child:Text(t('Je suis arrivé'))),
           if(status=='DRIVER_ARRIVED')...[
             TextField(
               controller:pin,maxLength:4,keyboardType:TextInputType.number,
-              decoration:const InputDecoration(labelText:'PIN client (4 chiffres)'),
+              decoration:InputDecoration(labelText:t('PIN client (4 chiffres)')),
             ),
-            FilledButton(onPressed:busy?null:()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),child:const Text('Démarrer la course')),
-            TextButton(onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),child:const Text('Signaler un no-show')),
+            FilledButton(onPressed:busy?null:()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),child:Text(t('Démarrer la course'))),
+            TextButton(onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),child:Text(t('Signaler un no-show'))),
           ],
           if(status=='IN_PROGRESS')
-            FilledButton(onPressed:busy?null:()=>action(()=>api.complete(widget.bookingId),stopGps:true),child:const Text('Terminer la course')),
+            FilledButton(onPressed:busy?null:()=>action(()=>api.complete(widget.bookingId),stopGps:true),child:Text(t('Terminer la course'))),
           if({'COMPLETED','CLOSED'}.contains(status))
-            Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?const Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text('Merci pour votre avis !')]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               const Text('Noter le client',style:TextStyle(fontWeight:FontWeight.bold)),
               const SizedBox(height:8),
               Row(children:[for(int i=1;i<=5;i++)IconButton(
                 icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
                 onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
               )]),
-              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?'Envoi…':'Envoyer la note')),
+              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
             ]))),
           const SizedBox(height:10),
           OutlinedButton.icon(
             onPressed:phone==null||phone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:phone)),
-            icon:const Icon(Icons.phone_outlined),label:const Text('Appeler le client'),
+            icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler le client')),
           ),
-          OutlinedButton.icon(onPressed:()=>context.go('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:const Text('Chat Veyra')),
+          OutlinedButton.icon(onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Chat Veyra'))),
         ]);
       },
     ),
@@ -782,20 +816,20 @@ class _WalletScreenState extends State<WalletScreen>{
   @override void initState(){super.initState();future=api.wallet();}
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Portefeuille')),
+    appBar:AppBar(title:Text(t('Portefeuille'))),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.wallet()),child:const Text('Réessayer')));
+        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.wallet()),child:Text(t('Réessayer'))));
         final x=s.data??{};
         double money(dynamic v)=>((v??0) as num).toDouble()/100;
         return ListView(padding:const EdgeInsets.all(20),children:[
-          Card(child:ListTile(title:const Text('À recevoir (ONLINE)'),trailing:Text(money(x['onlinePayableMinor']).toStringAsFixed(2)+' €'))),
-          Card(child:ListTile(title:const Text('Dette commission CASH'),trailing:Text(money(x['cashDebtMinor']).toStringAsFixed(2)+' €'))),
-          if(x['cashWarning']==true)const Card(child:ListTile(
-            leading:Icon(Icons.warning_amber),title:Text('Seuil de dette atteint'),
-            subtitle:Text('Alerte 50 € • restriction CASH 100 € • blocage CASH 150 €'),
+          Card(child:ListTile(title:Text(t('À recevoir (ONLINE)')),trailing:Text(money(x['onlinePayableMinor']).toStringAsFixed(2)+' €'))),
+          Card(child:ListTile(title:Text(t('Dette commission CASH')),trailing:Text(money(x['cashDebtMinor']).toStringAsFixed(2)+' €'))),
+          if(x['cashWarning']==true)Card(child:ListTile(
+            leading:Icon(Icons.warning_amber),title:Text(t('Seuil de dette atteint')),
+            subtitle:Text(t('Alerte 50 € • restriction CASH 100 € • blocage CASH 150 €')),
           )),
         ]);
       },
@@ -842,20 +876,20 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Créer un compte Chauffeur')),
+    appBar:AppBar(title:Text(t('Créer un compte Chauffeur'))),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
-      TextField(controller:firstName,decoration:const InputDecoration(labelText:'Prénom')),
+      TextField(controller:firstName,decoration:InputDecoration(labelText:t('Prénom'))),
       const SizedBox(height:12),
-      TextField(controller:lastName,decoration:const InputDecoration(labelText:'Nom')),
+      TextField(controller:lastName,decoration:InputDecoration(labelText:t('Nom'))),
       const SizedBox(height:12),
-      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:const InputDecoration(labelText:'Téléphone')),
+      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
       const SizedBox(height:12),
-      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:const InputDecoration(labelText:'Email')),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
       const SizedBox(height:12),
-      TextField(controller:password,obscureText:true,decoration:const InputDecoration(labelText:'Mot de passe',helperText:'10 caractères minimum')),
+      TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),helperText:'10 caractères minimum')),
       if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:16),
-      FilledButton(onPressed:loading?null:submit,child:loading?const Text('Création…'):const Text('Continuer vers mon dossier VTC')),
+      FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Continuer vers mon dossier VTC'))),
     ])),
   );
 }
@@ -888,15 +922,15 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Chat Veyra')),
+    appBar:AppBar(title:Text(t('Chat Veyra'))),
     body:Column(children:[
       Expanded(child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-          if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:const Text('Réessayer')));
+          if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:Text(t('Réessayer'))));
           final items=s.data??[];
-          if(items.isEmpty)return const Center(child:Text('Aucun message pour le moment.'));
+          if(items.isEmpty)return Center(child:Text(t('Aucun message pour le moment.')));
           return ListView(padding:const EdgeInsets.all(12),children:items.map((raw){
             final x=Map<String,dynamic>.from(raw as Map);
             return Card(child:ListTile(title:Text((x['body']??'').toString()),subtitle:Text((x['sent_at']??'').toString())));
@@ -906,7 +940,7 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
       SafeArea(child:Padding(
         padding:const EdgeInsets.all(12),
         child:Row(children:[
-          Expanded(child:TextField(controller:input,maxLength:2000,decoration:const InputDecoration(hintText:'Votre message',counterText:''))),
+          Expanded(child:TextField(controller:input,maxLength:2000,decoration:InputDecoration(hintText:t('Votre message'),counterText:''))),
           IconButton(onPressed:sending?null:send,icon:const Icon(Icons.send)),
         ]),
       )),
@@ -926,7 +960,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
   void reload()=>setState(()=>future=api.notifications());
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Notifications')),
+    appBar:AppBar(title:Text(t('Notifications'))),
     body:RefreshIndicator(
       onRefresh:()async{reload();await future;},
       child:FutureBuilder<List<dynamic>>(
@@ -939,16 +973,16 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
             return ListView(children:[
               const SizedBox(height:160),
               const Icon(Icons.cloud_off,size:48),
-              const Center(child:Text('Notifications indisponibles.')),
-              Center(child:TextButton(onPressed:reload,child:const Text('Réessayer'))),
+              Center(child:Text(t('Notifications indisponibles.'))),
+              Center(child:TextButton(onPressed:reload,child:Text(t('Réessayer')))),
             ]);
           }
           final items=s.data??[];
           if(items.isEmpty){
-            return ListView(children:const [
+            return ListView(children:[
               SizedBox(height:160),
               Icon(Icons.notifications_none,size:56),
-              Center(child:Text('Aucune notification pour le moment.')),
+              Center(child:Text(t('Aucune notification pour le moment.'))),
             ]);
           }
           return ListView.separated(
@@ -966,8 +1000,8 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
                 subtitle:Text((x['created_at']??'').toString()),
                 trailing:bookingId==null?null:const Icon(Icons.chevron_right),
                 onTap:bookingId==null?null:(){
-                  if(template=='NEW_BOOKING')context.go('/request/'+bookingId);
-                  else context.go('/ride/'+bookingId);
+                  if(template=='NEW_BOOKING')context.push('/request/'+bookingId);
+                  else context.push('/ride/'+bookingId);
                 },
               ));
             },
