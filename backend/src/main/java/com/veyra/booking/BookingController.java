@@ -193,7 +193,7 @@ import java.util.*;
         String pin=String.format("%04d",rnd.nextInt(10000));
         db.update("update driver_offers set status=case when id=? then 'ACCEPTED' else 'REJECTED_BY_SELECTION' end where booking_id=? and status='ACTIVE'",offerId,bookingId);
         db.update("update scheduled_bookings set selected_offer_id=?,selected_driver_id=?,pin_hash=?,pin_encrypted=?,status='CONFIRMED',updated_at=now() where id=?",offerId,d,enc.encode(pin),pinCrypto.encrypt(pin),bookingId);
-        UUID policy=db.queryForObject("select id from commission_policy_versions where status='ACTIVE' and ((? is not null and scope_type='PARTNER' and partner_id=?) or scope_type='STANDARD') order by case when scope_type='PARTNER' then 0 else 1 end,version_no desc limit 1",UUID.class,b.get("partner_id"),b.get("partner_id"));
+        UUID policy=db.queryForObject("select id from commission_policy_versions where status='ACTIVE' and ((?::uuid is not null and scope_type='PARTNER' and partner_id=?) or scope_type='STANDARD') order by case when scope_type='PARTNER' then 0 else 1 end,version_no desc limit 1",UUID.class,b.get("partner_id"),b.get("partner_id"));
         db.update("insert into booking_financial_snapshots values (?,?,?,?,?,?,?,?,?,?)",bookingId,offerId,policy,rate,p,c,total,p,o.get("currency"),b.get("payment_method"));
         event(bookingId,"booking.confirmed");
         return Map.of("bookingId",bookingId,"status","CONFIRMED","driverId",d,"driverNetMinor",p,"commissionMinor",c,"totalMinor",total,"currency",o.get("currency"));
