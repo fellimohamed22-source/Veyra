@@ -605,7 +605,36 @@ class OffersScreen extends StatefulWidget{
 }
 class _OffersScreenState extends State<OffersScreen>{
   late Future<List<dynamic>> future;
+  String? error;
+  String? acceptingOfferId;
   @override void initState(){super.initState();future=api.offers(widget.bookingId);}
+
+  Future<void> chooseOffer(String offerId)async{
+    setState((){acceptingOfferId=offerId;error=null;});
+    try{
+      await api.accept(widget.bookingId,offerId);
+      final booking=await api.bookingDetail(widget.bookingId);
+      if(!mounted)return;
+      if(booking['payment_method']=='ONLINE'){
+        context.push('/payment/'+widget.bookingId);
+      }else{
+        context.go('/home');
+      }
+    }on DioException catch(e){
+      final code=(e.response?.data is Map)?(e.response?.data as Map)['code']?.toString():null;
+      final message=switch(code){
+        'BOOKING_CLOSED'=>t('Cette réservation n’est plus ouverte aux offres.'),
+        'OFFER_CLOSED'=>t('Cette offre n’est plus disponible.'),
+        'PARTNER_CREDIT_LIMIT_EXCEEDED'=>t('Limite de crédit partenaire dépassée pour cette réservation.'),
+        _=>t('Impossible de choisir cette offre pour le moment.')+(code==null?'':' ($code)'),
+      };
+      if(mounted)setState(()=>error=message);
+    }catch(_){
+      if(mounted)setState(()=>error=t('Impossible de choisir cette offre pour le moment.'));
+    }finally{
+      if(mounted)setState(()=>acceptingOfferId=null);
+    }
+  }
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
@@ -619,6 +648,7 @@ class _OffersScreenState extends State<OffersScreen>{
         if(items.isEmpty)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.'))));
         return ListView(padding:const EdgeInsets.all(16),children:[
           Text(t('Choisissez librement selon le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:Colors.black54)),
+          if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
           const SizedBox(height:14),
           for(final raw in items)Builder(builder:(context){
             final x=Map<String,dynamic>.from(raw as Map);
@@ -651,17 +681,10 @@ class _OffersScreenState extends State<OffersScreen>{
                 const SizedBox(height:12),
                 SizedBox(width:double.infinity,child:FilledButton(
                   style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-                  onPressed:()async{
-                    await api.accept(widget.bookingId,x['offerId'].toString());
-                    final booking=await api.bookingDetail(widget.bookingId);
-                    if(!context.mounted)return;
-                    if(booking['payment_method']=='ONLINE'){
-                      context.push('/payment/'+widget.bookingId);
-                    }else{
-                      context.go('/home');
-                    }
-                  },
-                  child:Text(t('Choisir')),
+                  onPressed:acceptingOfferId!=null?null:()=>chooseOffer(x['offerId'].toString()),
+                  child:acceptingOfferId==x['offerId'].toString()
+                    ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
+                    :Text(t('Choisir')),
                 )),
               ])),
             );
