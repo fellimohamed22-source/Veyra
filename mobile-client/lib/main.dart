@@ -412,6 +412,16 @@ class _AddressScreenState extends State<AddressScreen>{
       TextField(
         controller:controller,
         onChanged:(q){
+          // Real bug fixed here: setting controller.text programmatically
+          // (in the suggestion onTap below) also fires this onChanged --
+          // resetting the place unconditionally meant the just-selected
+          // address was wiped out the instant it was chosen, even though
+          // the field still visibly showed the selected text. Only treat
+          // this as the user genuinely editing/clearing their selection
+          // when the new text actually differs from the selected place's
+          // own label.
+          final current=isPickup?pickupPlace:dropoffPlace;
+          if(current!=null&&current['label']==q)return;
           if(isPickup)pickupPlace=null;else dropoffPlace=null;
           search(isPickup,q);
         },
