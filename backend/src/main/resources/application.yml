@@ -17,6 +17,7 @@ spring:
   flyway.enabled: true
 server.port: ${PORT:8080}
 management.endpoints.web.exposure.include: health,info,prometheus
+management.health.mail.enabled: false
 veyra:
   locationiq:
     token: ${LOCATIONIQ_TOKEN:}
