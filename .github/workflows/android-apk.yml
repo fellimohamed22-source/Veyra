@@ -20,6 +20,28 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Use a fixed debug keystore across builds
+        run: |
+          # REAL BUG FOUND AND FIXED: neither app's android/ folder is
+          # committed to the repo -- both are regenerated from scratch by
+          # `flutter create .` on every single run, on a fresh ubuntu-latest
+          # VM with no persisted ~/.android directory. The Android Gradle
+          # Plugin auto-generates a brand new, randomly-keyed
+          # ~/.android/debug.keystore the first time it's needed if none
+          # exists, so every CI run has produced an APK signed with a
+          # DIFFERENT debug key. Android refuses to install an update
+          # signed with a different key than the already-installed app
+          # (INSTALL_FAILED_UPDATE_INCOMPATIBLE) -- confirmed as the real
+          # explanation for reports of "the new build doesn't seem to
+          # contain any of the recent fixes" that kept surfacing even
+          # after a run had completed successfully: the install was
+          # silently failing and the previous APK kept running.
+          # Fix: commit one fixed debug keystore once and reuse it on
+          # every run, so all debug builds share the same signature and
+          # can update cleanly over each other.
+          mkdir -p ~/.android
+          cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
+
       - name: Build Client APK
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
