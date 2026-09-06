@@ -33,6 +33,8 @@ class AppLocale {
 
   static const Map<String, String> _en = {
     'Veyra Chauffeur': 'Veyra Driver',
+    'Espace Chauffeur': 'Driver space',
+    'Connectez-vous à votre compte': 'Sign in to your account',
     'Email': 'Email',
     'Mot de passe': 'Password',
     'Se connecter': 'Sign in',
