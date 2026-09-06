@@ -46,7 +46,17 @@ Future<void> main() async {
   const publishableKey=String.fromEnvironment('STRIPE_PUBLISHABLE_KEY',defaultValue:'');
   if(publishableKey.isNotEmpty){
     Stripe.publishableKey=publishableKey;
-    await Stripe.instance.applySettings();
+    // Real, confirmed bug (flutter-stripe/flutter_stripe#1892): on some
+    // Android devices, applySettings() hangs indefinitely with no error
+    // at all -- awaiting it here before runApp() means the very first
+    // frame never renders on those devices, which looks exactly like a
+    // stuck splash screen (the native launch screen never gets
+    // dismissed, since Flutter never gets to draw anything). Payment is
+    // only ever needed much later in the actual user journey (after
+    // login, after booking) by which point this background call has had
+    // plenty of time to finish -- there is no real reason for it to gate
+    // the app's very first screen.
+    unawaited(Stripe.instance.applySettings());
   }
   runApp(const App());
 }
