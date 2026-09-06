@@ -77,10 +77,12 @@ Future<void> main() async {
 /// than a full menu, since only two languages are supported; a menu with
 /// two items for a binary choice adds a tap without adding real clarity.
 class LanguageSwitch extends StatelessWidget{
-  const LanguageSwitch({super.key});
+  final ButtonStyle? style;
+  const LanguageSwitch({super.key,this.style});
   @override Widget build(BuildContext context)=>ValueListenableBuilder<String>(
     valueListenable:AppLocale.code,
     builder:(context,code,_)=>TextButton(
+      style:style,
       onPressed:()=>AppLocale.set(code=='fr'?'en':'fr'),
       child:Text(code=='fr'?'FR':'EN',style:const TextStyle(fontWeight:FontWeight.bold)),
     ),
@@ -143,20 +145,43 @@ class _LoginScreenState extends State<LoginScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Connexion Veyra')),actions:const [LanguageSwitch(),SizedBox(width:8)]),
-    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
-      const Text('Bienvenue',style:TextStyle(fontSize:30,fontWeight:FontWeight.bold)),
-      const SizedBox(height:24),
-      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
-      const SizedBox(height:12),
-      TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'))),
-      if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-      const SizedBox(height:20),
-      FilledButton(onPressed:loading?null:submit,child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2)):Text(t('Se connecter'))),
+    backgroundColor:const Color(0xFFF2F6FB),
+    body:SafeArea(child:Column(children:[
+      Container(
+        width:double.infinity,
+        padding:const EdgeInsets.fromLTRB(24,32,24,40),
+        decoration:const BoxDecoration(
+          gradient:LinearGradient(
+            begin:Alignment.topCenter,end:Alignment.bottomCenter,
+            colors:[Color(0xFF123A66),Color(0xFF1565C0)],
+          ),
+        ),
+        child:Column(children:[
+          Align(alignment:Alignment.topRight,child:LanguageSwitch(style:TextButton.styleFrom(foregroundColor:Colors.white))),
+          const Icon(Icons.location_on,color:Colors.white,size:40),
+          const SizedBox(height:8),
+          const Text('Veyra',style:TextStyle(color:Colors.white,fontSize:32,fontWeight:FontWeight.bold)),
+          const SizedBox(height:4),
+          Text(t('Plus qu\'un trajet, votre confiance'),style:const TextStyle(color:Colors.white70,fontSize:14)),
+        ]),
+      ),
+      Expanded(child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Text(t('Bienvenue'),style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold)),
+        const SizedBox(height:20),
+        TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+        const SizedBox(height:12),
+        TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),prefixIcon:const Icon(Icons.lock_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+        const SizedBox(height:20),
+        FilledButton(
+          style:FilledButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:16),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
+          onPressed:loading?null:submit,
+          child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)):Text(t('Se connecter')),
+        ),
       TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
       TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte'))),
-    ])),
-  );
+      ]))),
+    ])));
 }
 
 class HomeScreen extends StatefulWidget{
