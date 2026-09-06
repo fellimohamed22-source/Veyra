@@ -127,6 +127,7 @@ class AppLocale {
     'Signaler un no-show': 'Report a no-show',
     'Appeler le client': 'Call the customer',
     'Chat Veyra': 'Veyra chat',
+    'Message non envoyé, réessayez': 'Message not sent, try again',
     'Votre message': 'Your message',
     'Aucun message pour le moment.': 'No messages yet.',
     'Annuler ma prise en charge': 'Cancel my pickup',

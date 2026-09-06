@@ -120,6 +120,7 @@ class AppLocale {
     'Impossible de choisir cette offre pour le moment.': 'Could not choose this offer right now.',
     'Payer en ligne': 'Pay online',
     'Chat Veyra': 'Veyra chat',
+    'Message non envoyé, réessayez': 'Message not sent, try again',
     'Suivre la course': 'Track the ride',
     'Paiement': 'Payment',
     'Impossible de charger le paiement.': 'Could not load the payment.',

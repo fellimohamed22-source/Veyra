@@ -86,6 +86,7 @@ class Api {
   }
 
   Future<void> login(String email,String password) async {
+    _me=null;
     final r=await dio.post('/api/v1/auth/login',data:{
       'email':email.trim(),
       'password':password,
@@ -100,6 +101,7 @@ class Api {
     if(refresh!=null){
       try{await dio.post('/api/v1/auth/logout',data:{'refreshToken':refresh,'deviceName':'client-mobile'});}catch(_){}
     }
+    _me=null;
     await storage.deleteAll();
   }
 
@@ -171,7 +173,16 @@ class Api {
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);
 
-  Future<void> sendMessage(String bookingId,String body) async {
-    await dio.post('/api/v1/bookings/$bookingId/chat/messages',data:{'body':body});
+  Future<Map<String,dynamic>> sendMessage(String bookingId,String body) async {
+    final r=await dio.post('/api/v1/bookings/$bookingId/chat/messages',data:{'body':body});
+    return Map<String,dynamic>.from(r.data);
+  }
+
+  Map<String,dynamic>? _me;
+  Future<Map<String,dynamic>> me() async {
+    if(_me!=null)return _me!;
+    final r=await dio.get('/api/v1/me');
+    _me=Map<String,dynamic>.from(r.data);
+    return _me!;
   }
 }

@@ -12,6 +12,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
 import 'app_locale.dart';
+import 'chat_socket.dart';
 
 /// Short alias used throughout this file -- AppLocale.t() everywhere
 /// would be far noisier across ~100 call sites.
@@ -880,49 +881,171 @@ class ChatScreen extends StatefulWidget{
 }
 class _ChatScreenState extends State<ChatScreen>{
   final input=TextEditingController();
-  late Future<List<dynamic>> future;
+  final scrollController=ScrollController();
+  final List<Map<String,dynamic>> messages=[];
+  String? myUserId;
+  bool loading=true;
+  bool loadError=false;
   bool sending=false;
+  ChatSocket? socket;
 
-  @override void initState(){super.initState();future=api.chatMessages(widget.bookingId);}
-  void reload()=>setState(()=>future=api.chatMessages(widget.bookingId));
+  @override void initState(){
+    super.initState();
+    _load();
+  }
 
-  Future<void> send()async{
+  Future<void> _load() async {
+    setState((){loading=true;loadError=false;});
+    try{
+      final me=await api.me();
+      final history=await api.chatMessages(widget.bookingId);
+      if(!mounted)return;
+      setState((){
+        myUserId=(me['id']??'').toString();
+        messages
+          ..clear()
+          ..addAll(history.map((e)=>Map<String,dynamic>.from(e as Map)));
+        loading=false;
+      });
+      _scrollToBottom();
+      socket?.dispose();
+      socket=ChatSocket(api:api,bookingId:widget.bookingId,onMessage:_onIncoming)..connect();
+    }catch(_){
+      if(mounted)setState((){loading=false;loadError=true;});
+    }
+  }
+
+  bool _isDuplicate(Object? id)=>id!=null&&messages.any((m)=>(m['id']?.toString())==id.toString());
+
+  void _onIncoming(Map<String,dynamic> msg){
+    if(!mounted)return;
+    if(_isDuplicate(msg['id']))return;
+    setState(()=>messages.add(msg));
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom(){
+    WidgetsBinding.instance.addPostFrameCallback((_){
+      if(scrollController.hasClients){
+        scrollController.animateTo(
+          scrollController.position.maxScrollExtent,
+          duration:const Duration(milliseconds:250),
+          curve:Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  Future<void> send() async {
     final body=input.text.trim();
     if(body.isEmpty)return;
+    input.clear();
     setState(()=>sending=true);
     try{
-      await api.sendMessage(widget.bookingId,body);
-      input.clear();reload();
+      final sent=await api.sendMessage(widget.bookingId,body);
+      if(mounted&&!_isDuplicate(sent['id'])){
+        setState(()=>messages.add(sent));
+        _scrollToBottom();
+      }
+    }catch(_){
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t("Message non envoyé, réessayez"))));
+      }
     }finally{
       if(mounted)setState(()=>sending=false);
     }
   }
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Chat Veyra'))),
-    body:Column(children:[
-      Expanded(child:FutureBuilder<List<dynamic>>(
-        future:future,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-          if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:Text(t('Réessayer'))));
-          final items=s.data??[];
-          if(items.isEmpty)return Center(child:Text(t('Aucun message pour le moment.')));
-          return ListView(padding:const EdgeInsets.all(12),children:items.map((raw){
-            final x=Map<String,dynamic>.from(raw as Map);
-            return Card(child:ListTile(title:Text((x['body']??'').toString()),subtitle:Text((x['sent_at']??'').toString())));
-          }).toList());
-        },
-      )),
-      SafeArea(child:Padding(
-        padding:const EdgeInsets.all(12),
-        child:Row(children:[
-          Expanded(child:TextField(controller:input,maxLength:2000,decoration:InputDecoration(hintText:t('Votre message'),counterText:''))),
-          IconButton(onPressed:sending?null:send,icon:const Icon(Icons.send)),
-        ]),
-      )),
-    ]),
-  );
+  @override void dispose(){
+    socket?.dispose();
+    scrollController.dispose();
+    input.dispose();
+    super.dispose();
+  }
+
+  String? _timeLabel(Map<String,dynamic> m){
+    final raw=m['sentAt']??m['sent_at'];
+    if(raw==null)return null;
+    try{
+      final dt=DateTime.parse(raw.toString()).toLocal();
+      return '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+    }catch(_){return null;}
+  }
+
+  @override Widget build(BuildContext context){
+    final scheme=Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor:const Color(0xFFF2F6FB),
+      appBar:AppBar(title:Text(t('Chat Veyra'))),
+      body:Column(children:[
+        Expanded(child:
+          loading?const Center(child:CircularProgressIndicator())
+          :loadError?Center(child:FilledButton(onPressed:_load,child:Text(t('Réessayer'))))
+          :messages.isEmpty?Center(child:Text(t('Aucun message pour le moment.')))
+          :ListView.builder(
+              controller:scrollController,
+              padding:const EdgeInsets.symmetric(horizontal:12,vertical:16),
+              itemCount:messages.length,
+              itemBuilder:(context,i){
+                final m=messages[i];
+                final senderId=(m['senderUserId']??m['sender_user_id'])?.toString();
+                final isMine=myUserId!=null&&senderId==myUserId;
+                final time=_timeLabel(m);
+                return Align(
+                  alignment:isMine?Alignment.centerRight:Alignment.centerLeft,
+                  child:Container(
+                    margin:const EdgeInsets.symmetric(vertical:3),
+                    padding:const EdgeInsets.symmetric(horizontal:14,vertical:10),
+                    constraints:BoxConstraints(maxWidth:MediaQuery.of(context).size.width*0.75),
+                    decoration:BoxDecoration(
+                      color:isMine?scheme.primary:Colors.white,
+                      borderRadius:BorderRadius.only(
+                        topLeft:const Radius.circular(16),
+                        topRight:const Radius.circular(16),
+                        bottomLeft:Radius.circular(isMine?16:4),
+                        bottomRight:Radius.circular(isMine?4:16),
+                      ),
+                      boxShadow:[BoxShadow(color:Colors.black.withOpacity(0.06),blurRadius:4,offset:const Offset(0,2))],
+                    ),
+                    child:Column(crossAxisAlignment:CrossAxisAlignment.end,mainAxisSize:MainAxisSize.min,children:[
+                      Text((m['body']??'').toString(),style:TextStyle(color:isMine?Colors.white:const Color(0xFF1F2937))),
+                      if(time!=null)...[
+                        const SizedBox(height:4),
+                        Text(time,style:TextStyle(fontSize:11,color:isMine?Colors.white70:const Color(0xFF9CA3AF))),
+                      ],
+                    ]),
+                  ),
+                );
+              },
+            ),
+        ),
+        SafeArea(child:Padding(
+          padding:const EdgeInsets.all(12),
+          child:Row(children:[
+            Expanded(child:TextField(
+              controller:input,
+              maxLength:2000,
+              textCapitalization:TextCapitalization.sentences,
+              decoration:InputDecoration(
+                hintText:t('Votre message'),
+                counterText:'',
+                filled:true,
+                fillColor:Colors.white,
+                border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),
+                contentPadding:const EdgeInsets.symmetric(horizontal:16,vertical:10),
+              ),
+              onSubmitted:(_)=>sending?null:send(),
+            )),
+            const SizedBox(width:8),
+            CircleAvatar(radius:22,backgroundColor:scheme.primary,child:sending
+              ?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
+              :IconButton(onPressed:send,icon:const Icon(Icons.send,color:Colors.white,size:20)),
+            ),
+          ]),
+        )),
+      ]),
+    );
+  }
 }
 
 class LiveLocationScreen extends StatefulWidget{
