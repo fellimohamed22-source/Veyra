@@ -62,6 +62,27 @@ import {Api} from '../api';
     </div>
 
     <div class="card">
+      <h3>Visibilité des offres pour les chauffeurs</h3>
+      <p>
+        <strong>Offre privée</strong> : le chauffeur ne voit aucun prix concurrent, il saisit librement son prix.<br>
+        <strong>Meilleure offre visible</strong> : le chauffeur voit uniquement le prix le plus bas actuellement proposé par les autres chauffeurs (jamais leur identité), à titre indicatif — cela ne bloque jamais l'envoi de son offre.
+      </p>
+      <label>
+        <input type="radio" name="offerVisibility" value="PRIVATE" [(ngModel)]="offerVisibilityMode"> Offre privée (par défaut)
+      </label>
+      <label style="margin-left:16px">
+        <input type="radio" name="offerVisibility" value="BEST_VISIBLE" [(ngModel)]="offerVisibilityMode"> Meilleure offre visible
+      </label>
+      <div style="margin-top:10px">
+        <button (click)="saveOfferVisibility()">Enregistrer</button>
+      </div>
+      <p *ngIf="offerVisibilityMessage">{{offerVisibilityMessage}}</p>
+      <p style="color:#6b7280;font-size:13px">
+        S'applique à toute nouvelle réservation à partir de l'enregistrement — les réservations déjà en cours d'enchère gardent le mode qui était actif à leur création.
+      </p>
+    </div>
+
+    <div class="card">
       <h3>Politique annulation / no-show</h3>
       <div class="grid">
         <label>Annulation gratuite jusqu'à H- (heures)
@@ -118,6 +139,8 @@ export class Admin implements OnInit{
   partnerCommissionPercent:Record<string,number>={};
   partnerCreditEuro:Record<string,number>={};
   configMessage='';
+  offerVisibilityMode='PRIVATE';
+  offerVisibilityMessage='';
   cancellationFreeHours=6;
   cancellationMidHours=2;
   cancellationMidPercent=10;
@@ -129,7 +152,7 @@ export class Admin implements OnInit{
 
   constructor(private api:Api){}
 
-  ngOnInit(){this.load();this.loadCancellationPolicy();}
+  ngOnInit(){this.load();this.loadCancellationPolicy();this.loadOfferVisibility();}
 
   async load(){
     this.loading=true;this.error='';
@@ -186,6 +209,23 @@ export class Admin implements OnInit{
       await this.load();
     }catch{
       this.configMessage='Impossible de modifier le crédit partenaire.';
+    }
+  }
+
+  async loadOfferVisibility(){
+    try{
+      const p=await this.api.getOfferVisibility();
+      this.offerVisibilityMode=p.mode||'PRIVATE';
+    }catch{}
+  }
+
+  async saveOfferVisibility(){
+    this.offerVisibilityMessage='';
+    try{
+      await this.api.setOfferVisibility(this.offerVisibilityMode);
+      this.offerVisibilityMessage='Mode de visibilité des offres mis à jour.';
+    }catch{
+      this.offerVisibilityMessage='Impossible de modifier ce réglage.';
     }
   }
 

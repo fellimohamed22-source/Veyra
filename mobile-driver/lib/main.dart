@@ -454,7 +454,24 @@ class _RequestScreenState extends State<RequestScreen>{
     if(euros==null||euros<=0){setState(()=>error='Saisissez un prix valide.');return;}
     setState((){sending=true;error=null;});
     try{
-      await api.offer(widget.bookingId,(euros*100).round());
+      final result=await api.offer(widget.bookingId,(euros*100).round());
+      if(!mounted)return;
+      final bestOthersMinor=result['currentBestOtherOfferMinor'];
+      if(bestOthersMinor!=null){
+        final diffMinor=result['differenceFromBestMinor'] as int?;
+        final bestEuros=(bestOthersMinor as num)/100;
+        final message=diffMinor==null?t('Aucune autre offre active pour le moment.')
+          :diffMinor>0
+            ?t('Votre offre est supérieure de')+' ${(diffMinor/100).toStringAsFixed(2)} € '+t('à la meilleure offre actuelle')+' (${bestEuros.toStringAsFixed(2)} €).'
+            :diffMinor<0
+              ?t('Vous proposez actuellement le meilleur prix')+' (${bestEuros.toStringAsFixed(2)} € '+t('pour les autres offres')+').'
+              :t('Votre offre égale la meilleure offre actuelle')+' (${bestEuros.toStringAsFixed(2)} €).';
+        await showDialog(context:context,builder:(_)=>AlertDialog(
+          title:Text(t('Offre envoyée')),
+          content:Text(message),
+          actions:[FilledButton(onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
+        ));
+      }
       if(mounted)context.go('/home');
     }on DioException catch(e){
       final code=(e.response?.data is Map)?(e.response?.data as Map)['code']?.toString():null;
@@ -501,10 +518,30 @@ class _RequestScreenState extends State<RequestScreen>{
           ]);
         },
       ),
-      Card(child:ListTile(
-        leading:Icon(Icons.visibility_off_outlined),title:Text(t('Offre privée')),
-        subtitle:Text(t('Les offres des autres chauffeurs et le meilleur prix ne sont jamais affichés.')),
-      )),
+      FutureBuilder<Map<String,dynamic>>(
+        future:detail,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
+          if(s.hasError)return const SizedBox.shrink();
+          final x=s.data??{};
+          final mode=(x['offer_visibility_mode']??'PRIVATE').toString();
+          if(mode=='BEST_VISIBLE'){
+            final bestMinor=x['currentBestOtherOfferMinor'];
+            final subtitle=bestMinor==null
+              ?t('Aucune autre offre active pour le moment. Vous serez informé si la vôtre est battue.')
+              :t('Meilleure offre actuelle des autres chauffeurs')+' : ${((bestMinor as num)/100).toStringAsFixed(2)} €';
+            return Card(child:ListTile(
+              leading:const Icon(Icons.visibility_outlined),
+              title:Text(t('Meilleure offre visible')),
+              subtitle:Text(subtitle),
+            ));
+          }
+          return Card(child:ListTile(
+            leading:const Icon(Icons.visibility_off_outlined),title:Text(t('Offre privée')),
+            subtitle:Text(t('Les offres des autres chauffeurs et le meilleur prix ne sont jamais affichés.')),
+          ));
+        },
+      ),
       TextField(
         controller:amount,
         keyboardType:const TextInputType.numberWithOptions(decimal:true),
