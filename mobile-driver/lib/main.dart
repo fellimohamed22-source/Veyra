@@ -455,8 +455,17 @@ class _RequestScreenState extends State<RequestScreen>{
     try{
       await api.offer(widget.bookingId,(euros*100).round());
       if(mounted)context.go('/home');
+    }on DioException catch(e){
+      final code=(e.response?.data is Map)?(e.response?.data as Map)['code']?.toString():null;
+      final message=switch(code){
+        'BOOKING_OFFERS_CLOSED'=>t('Cette demande est déjà fermée ou a expiré.'),
+        'DRIVER_NOT_ELIGIBLE'=>t('Votre compte n’est pas encore éligible pour soumettre des offres (dossier KYC non validé).'),
+        'DRIVER_PROFILE_REQUIRED'=>t('Complétez votre dossier chauffeur avant de soumettre une offre.'),
+        _=>t('L’offre n’a pas pu être envoyée ou la demande est déjà fermée.')+(code==null?'':' ($code)'),
+      };
+      if(mounted)setState(()=>error=message);
     }catch(_){
-      if(mounted)setState(()=>error='L’offre n’a pas pu être envoyée ou la demande est déjà fermée.');
+      if(mounted)setState(()=>error=t('L’offre n’a pas pu être envoyée ou la demande est déjà fermée.'));
     }finally{
       if(mounted)setState(()=>sending=false);
     }
