@@ -122,6 +122,46 @@ final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/notifications',builder:(c,s)=>const NotificationsScreen()),
 ]);
 
+/// Consistent, mockup-matching field styling (filled white, rounded,
+/// optional leading icon) -- reused across every form in the app rather
+/// than repeating the same InputDecoration verbosely at each call site.
+InputDecoration appFieldDecoration(String label,{IconData? icon,String? helperText}){
+  return InputDecoration(
+    labelText:label,
+    helperText:helperText,
+    prefixIcon:icon==null?null:Icon(icon),
+    filled:true,
+    fillColor:Colors.white,
+    border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none),
+  );
+}
+
+/// Colored status badge matching the mockup's chip treatment (green for
+/// confirmed/completed states, blue for in-progress, amber for pending,
+/// red for cancelled) -- replaces plain status text with something that
+/// reads at a glance.
+Widget statusBadge(String status){
+  final Map<String,Color> colors={
+    'OPEN_FOR_OFFERS':const Color(0xFFF59E0B),
+    'OFFERS_RECEIVED':const Color(0xFFF59E0B),
+    'CONFIRMED':const Color(0xFF2563EB),
+    'DRIVER_EN_ROUTE':const Color(0xFF2563EB),
+    'DRIVER_ARRIVED':const Color(0xFF2563EB),
+    'IN_PROGRESS':const Color(0xFF2563EB),
+    'COMPLETED':const Color(0xFF16A34A),
+    'CLOSED':const Color(0xFF16A34A),
+    'CANCELLED':const Color(0xFFDC2626),
+    'DRIVER_CANCELLED':const Color(0xFFDC2626),
+    'CUSTOMER_NO_SHOW':const Color(0xFFDC2626),
+  };
+  final color=colors[status]??const Color(0xFF6B7280);
+  return Container(
+    padding:const EdgeInsets.symmetric(horizontal:10,vertical:4),
+    decoration:BoxDecoration(color:color.withValues(alpha:0.12),borderRadius:BorderRadius.circular(20)),
+    child:Text(status.replaceAll('_',' '),style:TextStyle(color:color,fontSize:12,fontWeight:FontWeight.w600)),
+  );
+}
+
 class LoginScreen extends StatefulWidget{
   const LoginScreen({super.key});
   @override State<LoginScreen> createState()=>_LoginScreenState();
@@ -168,9 +208,9 @@ class _LoginScreenState extends State<LoginScreen>{
       Expanded(child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
         Text(t('Bienvenue'),style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold)),
         const SizedBox(height:20),
-        TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+        TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
         const SizedBox(height:12),
-        TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),prefixIcon:const Icon(Icons.lock_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+        TextField(controller:password,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline)),
         if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
         const SizedBox(height:20),
         FilledButton(
@@ -194,7 +234,11 @@ class _HomeScreenState extends State<HomeScreen>{
   void retry()=>setState(()=>future=api.bookings());
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Veyra'),actions:[
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(
+      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
+      title:Row(mainAxisSize:MainAxisSize.min,children:const [Icon(Icons.location_on,color:Color(0xFF1565C0)),SizedBox(width:6),Text('Veyra',style:TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold))]),
+      actions:[
       const LanguageSwitch(),
       IconButton(onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_outlined)),
       IconButton(onPressed:()async{await api.logout();if(context.mounted)context.go('/login');},icon:const Icon(Icons.logout))
@@ -202,11 +246,27 @@ class _HomeScreenState extends State<HomeScreen>{
     body:RefreshIndicator(
       onRefresh:()async{retry();await future;},
       child:ListView(padding:const EdgeInsets.all(20),children:[
-        const Text('Planifiez votre trajet',style:TextStyle(fontSize:28,fontWeight:FontWeight.bold)),
+        Text(t('Planifiez votre trajet'),style:const TextStyle(fontSize:26,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
         const SizedBox(height:16),
-        FilledButton.icon(onPressed:()=>context.push('/addresses'),icon:const Icon(Icons.calendar_month),label:Text(t('Nouvelle réservation'))),
+        Container(
+          decoration:BoxDecoration(
+            gradient:const LinearGradient(colors:[Color(0xFF123A66),Color(0xFF1565C0)]),
+            borderRadius:BorderRadius.circular(16),
+          ),
+          child:Material(color:Colors.transparent,child:InkWell(
+            borderRadius:BorderRadius.circular(16),
+            onTap:()=>context.push('/addresses'),
+            child:Padding(padding:const EdgeInsets.all(20),child:Row(children:[
+              const Icon(Icons.add_circle,color:Colors.white,size:32),
+              const SizedBox(width:16),
+              Expanded(child:Text(t('Nouvelle réservation'),style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w600))),
+              const Icon(Icons.arrow_forward_ios,color:Colors.white70,size:16),
+            ])),
+          )),
+        ),
         const SizedBox(height:28),
-        const Text('Mes réservations',style:TextStyle(fontSize:20,fontWeight:FontWeight.w600)),
+        Text(t('Mes réservations'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
+        const SizedBox(height:8),
         FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
@@ -214,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen>{
               return const Padding(padding:EdgeInsets.all(24),child:Center(child:CircularProgressIndicator()));
             }
             if(s.hasError){
-              return Card(child:ListTile(
+              return Card(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ListTile(
                 leading:const Icon(Icons.cloud_off),
                 title:Text(t('Impossible de charger vos réservations')),
                 subtitle:Text(t('Vérifiez votre connexion puis réessayez.')),
@@ -223,8 +283,8 @@ class _HomeScreenState extends State<HomeScreen>{
             }
             final items=s.data??[];
             if(items.isEmpty){
-              return Card(child:ListTile(
-                leading:Icon(Icons.event_available),
+              return Card(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ListTile(
+                leading:const Icon(Icons.event_available,color:Color(0xFF1565C0)),
                 title:Text(t('Aucune réservation')),
                 subtitle:Text(t('Votre prochain trajet apparaîtra ici.')),
               ));
@@ -232,20 +292,31 @@ class _HomeScreenState extends State<HomeScreen>{
             return Column(children:items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-              final subtitle=(x['scheduled_at']??'').toString()+'\n'+(x['status']??'').toString();
-              return Card(child:ListTile(
-                title:Text(title),subtitle:Text(subtitle),isThreeLine:true,
-                trailing:const Icon(Icons.chevron_right),
-                onTap:(){
-                  final id=x['id']?.toString();
-                  if(id==null)return;
-                  if(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'){
-                    context.push('/offers/'+id);
-                  }else{
-                    context.push('/booking/'+id);
-                  }
-                },
-              ));
+              final scheduled=(x['scheduled_at']??'').toString();
+              final status=(x['status']??'').toString();
+              return Card(
+                margin:const EdgeInsets.only(bottom:10),
+                shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),
+                child:ListTile(
+                  contentPadding:const EdgeInsets.all(14),
+                  title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
+                  subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Row(children:[
+                    Expanded(child:Text(scheduled,style:const TextStyle(color:Colors.black54,fontSize:13))),
+                    statusBadge(status),
+                  ])),
+                  isThreeLine:false,
+                  trailing:const Icon(Icons.chevron_right),
+                  onTap:(){
+                    final id=x['id']?.toString();
+                    if(id==null)return;
+                    if(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'){
+                      context.push('/offers/'+id);
+                    }else{
+                      context.push('/booking/'+id);
+                    }
+                  },
+                ),
+              );
             }).toList());
           },
         ),
@@ -949,20 +1020,25 @@ class _RegisterScreenState extends State<RegisterScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Créer un compte'))),
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(title:Text(t('Créer un compte')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
-      TextField(controller:firstName,decoration:InputDecoration(labelText:t('Prénom'))),
+      TextField(controller:firstName,decoration:appFieldDecoration(t('Prénom'),icon:Icons.person_outline)),
       const SizedBox(height:12),
-      TextField(controller:lastName,decoration:InputDecoration(labelText:t('Nom'))),
+      TextField(controller:lastName,decoration:appFieldDecoration(t('Nom'),icon:Icons.person_outline)),
       const SizedBox(height:12),
-      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
+      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:appFieldDecoration(t('Téléphone'),icon:Icons.phone_outlined)),
       const SizedBox(height:12),
-      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
       const SizedBox(height:12),
-      TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),helperText:'10 caractères minimum')),
+      TextField(controller:password,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline,helperText:t('10 caractères minimum'))),
       if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:16),
-      FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Créer mon compte'))),
+      FilledButton(
+        style:FilledButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:16),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
+        onPressed:loading?null:submit,
+        child:loading?Text(t('Création…')):Text(t('Créer mon compte')),
+      ),
     ])),
   );
 }
@@ -989,13 +1065,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Mot de passe oublié'))),
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(title:Text(t('Mot de passe oublié')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
       Text(t('Saisissez votre e-mail. Le message ne révèle pas si un compte existe.')),
       const SizedBox(height:16),
-      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
       const SizedBox(height:16),
-      FilledButton(onPressed:loading?null:submit,child:Text(t('Envoyer les instructions'))),
+      FilledButton(
+        style:FilledButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:16),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
+        onPressed:loading?null:submit,
+        child:Text(t('Envoyer les instructions')),
+      ),
       if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(message!)),
     ])),
   );
