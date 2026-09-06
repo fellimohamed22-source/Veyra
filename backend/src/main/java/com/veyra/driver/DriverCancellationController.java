@@ -2,6 +2,7 @@ package com.veyra.driver;
 
 import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
+import com.veyra.shared.DbTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +48,7 @@ public class DriverCancellationController {
       throw new ApiException(HttpStatus.CONFLICT,"DRIVER_CANNOT_CANCEL_NOW");
     }
 
-    OffsetDateTime scheduledAt=(OffsetDateTime)booking.get("scheduled_at");
+    OffsetDateTime scheduledAt=DbTime.toOffsetDateTime(booking.get("scheduled_at"));
     long minutes=Duration.between(OffsetDateTime.now(),scheduledAt).toMinutes();
     String reason=request==null||request.reasonCode()==null||request.reasonCode().isBlank()
         ?"DRIVER_CANCELLED"

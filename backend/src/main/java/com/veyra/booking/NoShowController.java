@@ -3,6 +3,7 @@ package com.veyra.booking;
 import com.veyra.finance.CancellationFinanceService;
 import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
+import com.veyra.shared.DbTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +42,7 @@ public class NoShowController {
     }
 
     if(OffsetDateTime.now().isBefore(
-        ((OffsetDateTime)booking.get("scheduled_at")).plusMinutes(15))){
+        DbTime.toOffsetDateTime(booking.get("scheduled_at")).plusMinutes(15))){
       throw new ApiException(HttpStatus.TOO_EARLY,"WAIT_PERIOD_NOT_FINISHED");
     }
 

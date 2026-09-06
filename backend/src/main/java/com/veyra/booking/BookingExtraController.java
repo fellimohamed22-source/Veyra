@@ -3,6 +3,7 @@ package com.veyra.booking;
 import com.veyra.finance.CancellationFinanceService;
 import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
+import com.veyra.shared.DbTime;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.*;
@@ -33,7 +34,7 @@ public class BookingExtraController {
         id);
     owner(booking);
     boolean visible=OffsetDateTime.now()
-        .isAfter(((OffsetDateTime)booking.get("scheduled_at")).minusHours(1));
+        .isAfter(DbTime.toOffsetDateTime(booking.get("scheduled_at")).minusHours(1));
     return Map.of(
         "available",visible,
         "note",visible
@@ -58,7 +59,7 @@ public class BookingExtraController {
 
     long minutes=Duration.between(
         OffsetDateTime.now(),
-        (OffsetDateTime)booking.get("scheduled_at")).toMinutes();
+        DbTime.toOffsetDateTime(booking.get("scheduled_at"))).toMinutes();
 
     CancellationFinanceService.ChargeResult charge=
         cancellationFinance.cancellation(id,minutes);

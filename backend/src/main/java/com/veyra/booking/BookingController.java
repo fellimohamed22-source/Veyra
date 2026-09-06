@@ -3,6 +3,7 @@ import com.veyra.booking.BookingDtos.*;
 import com.veyra.security.CurrentUser;
 import jakarta.validation.constraints.Pattern;
 import com.veyra.shared.ApiException;
+import com.veyra.shared.DbTime;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
@@ -108,10 +109,10 @@ import java.util.*;
         eligible(d);
         Map<String,Object>b=one("select status,offer_window_ends_at,scheduled_at from scheduled_bookings where id=? for update",bookingId);
             if(!Set.of("OPEN_FOR_OFFERS",
-        "OFFERS_RECEIVED").contains(b.get("status"))||((OffsetDateTime)b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
+        "OFFERS_RECEIVED").contains(b.get("status"))||DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         Integer exists=db.queryForObject("select count(*) from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",Integer.class,bookingId,d);
         if(exists>0)throw new ApiException(HttpStatus.CONFLICT,"ACTIVE_OFFER_EXISTS");
-        conflict(d,(OffsetDateTime)b.get("scheduled_at"));
+        conflict(d,DbTime.toOffsetDateTime(b.get("scheduled_at")));
         String method=db.queryForObject("select payment_method from scheduled_bookings where id=?",String.class,bookingId);
         if("CASH".equals(method)){
             Long debt=db.queryForObject("select coalesce(sum(amount_minor-paid_amount_minor),0) from driver_platform_debts where driver_id=? and status in ('DUE','PARTIALLY_PAID','OVERDUE')",Long.class,d);
@@ -179,7 +180,7 @@ import java.util.*;
         Map<String,Object>o=one("select driver_id,proposed_amount_minor,currency,status from driver_offers where id=? and booking_id=? for update",offerId,bookingId);
         if(!"ACTIVE".equals(o.get("status")))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         UUID d=(UUID)o.get("driver_id");
-        conflict(d,(OffsetDateTime)b.get("scheduled_at"));
+        conflict(d,DbTime.toOffsetDateTime(b.get("scheduled_at")));
         int rate=rate((UUID)b.get("partner_id"));
         long p=((Number)o.get("proposed_amount_minor")).longValue(),c=commission(p,rate),total=p+c;
         if("PARTNER_INVOICE".equals(b.get("payment_method"))){
@@ -243,7 +244,7 @@ import java.util.*;
         if(!d.equals(b.get("selected_driver_id")))throw new ApiException(HttpStatus.FORBIDDEN,"NOT_SELECTED_DRIVER");
         if(!from.equals(b.get("status")))throw new ApiException(HttpStatus.CONFLICT,"INVALID_BOOKING_TRANSITION");
         if("IN_PROGRESS".equals(to)){
-            OffsetDateTime locked=(OffsetDateTime)b.get("pin_locked_until");
+            OffsetDateTime locked=DbTime.toOffsetDateTime(b.get("pin_locked_until"));
             if(locked!=null&&locked.isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"PIN_TEMPORARILY_LOCKED");
             boolean valid=pin!=null&&enc.matches(pin,(String)b.get("pin_hash"));
             if(!valid){

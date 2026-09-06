@@ -2,6 +2,7 @@ package com.veyra.booking;
 
 import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
+import com.veyra.shared.DbTime;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -77,7 +78,7 @@ public class BookingModificationController {
 
     OffsetDateTime targetScheduled=request.scheduledAt()!=null
         ?request.scheduledAt()
-        :(OffsetDateTime)booking.get("scheduled_at");
+        :DbTime.toOffsetDateTime(booking.get("scheduled_at"));
 
     if(structural){
       long minutes=Duration.between(OffsetDateTime.now(),targetScheduled).toMinutes();
