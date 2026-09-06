@@ -1,10 +1,15 @@
 package com.veyra.provider;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import java.util.*;
 
-@Component
+// @Component removed deliberately: replaced by LocationIqGeocodingProvider.
+// Nominatim's own official usage policy explicitly forbids autocomplete
+// use (operations.osmfoundation.org/policies/nominatim/) -- kept this
+// class in the codebase for reference/history rather than deleting it
+// outright, but it must never be registered as a Spring bean alongside
+// the replacement, which would create an ambiguous GeocodingProvider
+// injection for AddressController.
 public class NominatimGeocodingProvider implements GeocodingProvider {
   private final RestClient http=RestClient.builder()
     .baseUrl("https://nominatim.openstreetmap.org")

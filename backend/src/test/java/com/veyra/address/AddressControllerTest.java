@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * NominatimGeocodingProvider itself makes real HTTP calls (RestClient
+ * LocationIqGeocodingProvider itself makes real HTTP calls (RestClient
  * built inline, not injected) and isn't unit-testable without hitting
  * real Nominatim -- same real constraint already accepted for
  * StripePaymentService. What's actually testable and worth testing here
