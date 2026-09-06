@@ -22,6 +22,33 @@ public class ConfigController {
 
   public record Commission(int bps){}
 
+  public record OfferVisibility(String mode){}
+
+  @GetMapping("/offer-visibility")
+  public Map<String,Object> currentOfferVisibility(){
+    List<Map<String,Object>> rows=db.queryForList(
+        "select mode,version_no from offer_visibility_policy_versions where status='ACTIVE' order by version_no desc limit 1");
+    if(rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"OFFER_VISIBILITY_POLICY_MISSING");
+    return rows.getFirst();
+  }
+
+  @PostMapping("/offer-visibility")
+  @Transactional
+  public void updateOfferVisibility(@RequestBody OfferVisibility body){
+    if(!"PRIVATE".equals(body.mode())&&!"BEST_VISIBLE".equals(body.mode())){
+      throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_OFFER_VISIBILITY_MODE");
+    }
+    Integer version=db.queryForObject(
+        "select coalesce(max(version_no),0)+1 from offer_visibility_policy_versions",
+        Integer.class);
+    db.update(
+        "update offer_visibility_policy_versions set status='INACTIVE',effective_to=now() where status='ACTIVE'");
+    db.update(
+        "insert into offer_visibility_policy_versions(id,mode,version_no,status,effective_from) values (gen_random_uuid(),?,?,'ACTIVE',now())",
+        body.mode(),version);
+    audit("OFFER_VISIBILITY_MODE_UPDATED",null);
+  }
+
   public record CancellationPolicy(
       int freeUntilMinutes,
       int midWindowFromMinutes,

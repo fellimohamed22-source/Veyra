@@ -48,7 +48,8 @@ import java.util.*;
         UUID id=UUID.randomUUID();
         int passengerCount=r.passengerCount()==null?1:r.passengerCount();
         int baggageCount=r.baggageCount()==null?0:r.baggageCount();
-        db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,partner_id,beneficiary_name_snapshot,beneficiary_phone_snapshot,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,passenger_count,baggage_count,customer_notes,status,offer_window_ends_at) values (?,?,?,?,?,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,?,?,?,?,?,?,?,'OPEN_FOR_OFFERS',?)",id,r.partnerId()==null?"CLIENT":"PARTNER",u,r.partnerId(),r.beneficiaryName(),r.beneficiaryPhone(),r.pickup().lng(),r.pickup().lat(),r.pickup().address(),r.dropoff().lng(),r.dropoff().lat(),r.dropoff().address(),r.scheduledAt(),r.categoryId(),r.paymentMethod(),r.payerType(),passengerCount,baggageCount,r.customerNotes(),close);
+        String offerVisibilityMode=db.queryForObject("select mode from offer_visibility_policy_versions where status='ACTIVE' order by version_no desc limit 1",String.class);
+        db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,partner_id,beneficiary_name_snapshot,beneficiary_phone_snapshot,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,passenger_count,baggage_count,customer_notes,status,offer_window_ends_at,offer_visibility_mode) values (?,?,?,?,?,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,?,?,?,?,?,?,?,'OPEN_FOR_OFFERS',?,?)",id,r.partnerId()==null?"CLIENT":"PARTNER",u,r.partnerId(),r.beneficiaryName(),r.beneficiaryPhone(),r.pickup().lng(),r.pickup().lat(),r.pickup().address(),r.dropoff().lng(),r.dropoff().lat(),r.dropoff().address(),r.scheduledAt(),r.categoryId(),r.paymentMethod(),r.payerType(),passengerCount,baggageCount,r.customerNotes(),close,offerVisibilityMode);
         event(id,"booking.published");
             return ResponseEntity.status(201).body(Map.of("id",
             id,
@@ -126,8 +127,17 @@ import java.util.*;
         db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,?,?,'ACTIVE',?)",id,bookingId,d,r.amountMinor(),r.currency(),b.get("offer_window_ends_at"));
         db.update("update scheduled_bookings set status='OFFERS_RECEIVED',updated_at=now() where id=? and status='OPEN_FOR_OFFERS'",bookingId);
         event(bookingId,"offer.created");
-            return ResponseEntity.status(201).body(Map.of("offerId",
-        id));
+        Map<String,Object>response=new HashMap<>(Map.of("offerId",id));
+        String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
+        if("BEST_VISIBLE".equals(visibilityMode)){
+            // Business rule: the driver may only see the current lowest
+            // price among the OTHER drivers' active offers -- never their
+            // identity, and this must never block submission, only inform.
+            Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",Long.class,bookingId,d);
+            response.put("currentBestOtherOfferMinor",bestOthers);
+            if(bestOthers!=null)response.put("differenceFromBestMinor",r.amountMinor()-bestOthers);
+        }
+        return ResponseEntity.status(201).body(response);
     }
     @GetMapping("/scheduled-bookings/{bookingId}/offers") List<Map<String,Object>> ownerOffers(@PathVariable UUID bookingId){
         Map<String,Object>b=one("select creator_user_id,partner_id from scheduled_bookings where id=?",bookingId);

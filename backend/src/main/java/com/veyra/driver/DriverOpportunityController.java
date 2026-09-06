@@ -24,7 +24,7 @@ public class DriverOpportunityController {
 
     List<Map<String,Object>> rows=db.queryForList(
         "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.offer_window_ends_at," +
-        "sb.category_id,vc.display_name as category_name,sb.passenger_count,sb.baggage_count,sb.customer_notes " +
+        "sb.category_id,vc.display_name as category_name,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.offer_visibility_mode " +
         "from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id " +
         "where sb.id=? and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and sb.offer_window_ends_at>now()",
         bookingId);
@@ -37,6 +37,14 @@ public class DriverOpportunityController {
         "select count(*) from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",
         Integer.class,bookingId,driverId);
     result.put("hasActiveOffer",ownOffer!=null&&ownOffer>0);
+    if("BEST_VISIBLE".equals(result.get("offer_visibility_mode"))){
+      // Same rule as at submission time: lowest price among the OTHER
+      // drivers' active offers only, never an identity, never blocking.
+      Long bestOthers=db.queryForObject(
+          "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",
+          Long.class,bookingId,driverId);
+      result.put("currentBestOtherOfferMinor",bestOthers);
+    }
     return result;
   }
 
