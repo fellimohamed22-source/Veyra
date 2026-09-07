@@ -78,6 +78,18 @@ class VeyraStatusLabels {
     'WITHDRAWN': 'Withdrawn',
   };
 
+  static const Map<String, String> _paymentMethodFr = {
+    'CASH': 'Espèces',
+    'ONLINE': 'Paiement en ligne',
+    'PARTNER_INVOICE': 'Facturation partenaire',
+  };
+
+  static const Map<String, String> _paymentMethodEn = {
+    'CASH': 'Cash',
+    'ONLINE': 'Online payment',
+    'PARTNER_INVOICE': 'Partner invoicing',
+  };
+
   static bool get _isEnglish => AppLocale.code.value == 'en';
 
   static String bookingStatus(String? code) {
@@ -96,5 +108,11 @@ class VeyraStatusLabels {
     if (code == null) return '—';
     final map = _isEnglish ? _offerStatusEn : _offerStatusFr;
     return map[code] ?? (_isEnglish ? 'Update' : 'Mise à jour');
+  }
+
+  static String paymentMethod(String? code) {
+    if (code == null) return '—';
+    final map = _isEnglish ? _paymentMethodEn : _paymentMethodFr;
+    return map[code] ?? code;
   }
 }

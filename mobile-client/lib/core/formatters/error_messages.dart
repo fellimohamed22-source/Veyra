@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../app_locale.dart';
 
 /// Mapping backend -> message utilisateur, conforme à
@@ -11,6 +12,11 @@ import '../../app_locale.dart';
 /// affiché brut — à enrichir au fil des lots suivants au fur et à mesure
 /// que chaque écran rencontre un nouveau code, plutôt que d'inventer
 /// maintenant un wording non validé pour des cas non encore travaillés.
+///
+/// LOT 3 (authentification) a ajouté les 3 entrées ci-dessous
+/// (INVALID_CREDENTIALS, ACCOUNT_LOCKED, ACCOUNT_NOT_ACTIVE) : vérifiées
+/// dans AuthController.login() comme étant les codes réellement levés,
+/// absents des 19 officiels du kit.
 class VeyraErrorMessages {
   VeyraErrorMessages._();
 
@@ -34,6 +40,11 @@ class VeyraErrorMessages {
     'DRIVER_NOT_ELIGIBLE': "Votre compte chauffeur n'est pas encore éligible.",
     'PARTNER_SCOPE_FORBIDDEN': "Vous n'avez pas accès à ce compte partenaire.",
     'PARTNER_INVOICE_NOT_ELIGIBLE': "La facturation partenaire n'est pas disponible pour ce compte.",
+    // LOT 3 additions -- vérifiés dans AuthController.login().
+    'INVALID_CREDENTIALS': "Email ou mot de passe incorrect.",
+    'ACCOUNT_LOCKED': "Compte temporairement verrouillé suite à plusieurs échecs. Réessayez plus tard.",
+    'ACCOUNT_NOT_ACTIVE': "Ce compte n'est pas actif. Contactez le support.",
+    'EMAIL_ALREADY_USED': "Un compte existe déjà avec cet email.",
   };
 
   static const Map<String, String> _en = {
@@ -56,6 +67,11 @@ class VeyraErrorMessages {
     'DRIVER_NOT_ELIGIBLE': "Your driver account isn't eligible yet.",
     'PARTNER_SCOPE_FORBIDDEN': "You don't have access to this partner account.",
     'PARTNER_INVOICE_NOT_ELIGIBLE': 'Partner invoicing is not available for this account.',
+    // LOT 3 additions.
+    'INVALID_CREDENTIALS': 'Incorrect email or password.',
+    'ACCOUNT_LOCKED': 'Account temporarily locked after several failed attempts. Try again later.',
+    'ACCOUNT_NOT_ACTIVE': 'This account is not active. Contact support.',
+    'EMAIL_ALREADY_USED': 'An account already exists with this email.',
   };
 
   static bool get _isEnglish => AppLocale.code.value == 'en';
@@ -76,4 +92,35 @@ class VeyraErrorMessages {
   static String get offline => _isEnglish
       ? 'No internet connection. Check your network and try again.'
       : 'Pas de connexion internet. Vérifiez votre réseau et réessayez.';
+
+  /// Distingue OFFLINE (pas de réponse serveur du tout) de ERROR (le
+  /// serveur a répondu avec un code métier) -- les deux sont des états
+  /// UX distincts et obligatoires selon chaque fiche écran du kit,
+  /// jamais fondus en un seul message générique.
+  ///
+  /// Centralise un pattern auparavant dupliqué manuellement dans
+  /// plusieurs écrans (ex: `(e.response?.data is Map) ? ... : null`).
+  static String forException(Object error) {
+    if (error is DioException) {
+      final isConnectivityIssue = error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout;
+      if (isConnectivityIssue) return offline;
+      final data = error.response?.data;
+      final code = (data is Map) ? data['code']?.toString() : null;
+      return forCode(code);
+    }
+    return _generic;
+  }
+
+  /// Extrait uniquement le code (utile quand l'appelant a besoin du code
+  /// brut, ex: pour une logique de branchement, en plus du message).
+  static String? codeFromException(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      return (data is Map) ? data['code']?.toString() : null;
+    }
+    return null;
+  }
 }

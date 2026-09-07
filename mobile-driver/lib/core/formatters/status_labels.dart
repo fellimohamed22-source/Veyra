@@ -78,6 +78,20 @@ class VeyraStatusLabels {
     'WITHDRAWN': 'Withdrawn',
   };
 
+  static const Map<String, String> _kycStatusFr = {
+    'DRAFT': 'Dossier à compléter',
+    'SUBMITTED': 'Vérification en cours',
+    'APPROVED': 'Dossier approuvé',
+    'REJECTED': 'Dossier refusé',
+  };
+
+  static const Map<String, String> _kycStatusEn = {
+    'DRAFT': 'Application to complete',
+    'SUBMITTED': 'Under review',
+    'APPROVED': 'Application approved',
+    'REJECTED': 'Application rejected',
+  };
+
   static bool get _isEnglish => AppLocale.code.value == 'en';
 
   static String bookingStatus(String? code) {
@@ -96,5 +110,11 @@ class VeyraStatusLabels {
     if (code == null) return '—';
     final map = _isEnglish ? _offerStatusEn : _offerStatusFr;
     return map[code] ?? (_isEnglish ? 'Update' : 'Mise à jour');
+  }
+
+  static String kycStatus(String? code) {
+    if (code == null) return '—';
+    final map = _isEnglish ? _kycStatusEn : _kycStatusFr;
+    return map[code] ?? map['DRAFT']!;
   }
 }

@@ -14,6 +14,10 @@ import 'api.dart';
 import 'app_locale.dart';
 import 'chat_socket.dart';
 import 'app/theme.dart';
+import 'core/formatters/error_messages.dart';
+import 'core/formatters/status_labels.dart';
+import 'core/widgets/veyra_button.dart';
+import 'core/widgets/state_views.dart';
 
 /// Short alias used throughout this file.
 String t(String french) => AppLocale.t(french);
@@ -119,6 +123,7 @@ class _LoginScreenState extends State<LoginScreen>{
   final password=TextEditingController();
   bool loading=false;
   String? error;
+  bool offline=false;
 
   @override void initState(){
     super.initState();
@@ -146,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen>{
   }
 
   Future<void> submit()async{
-    setState((){loading=true;error=null;});
+    setState((){loading=true;error=null;offline=false;});
     try{
       await api.login(email.text,password.text);
       await configureDriverPush();
@@ -159,8 +164,17 @@ class _LoginScreenState extends State<LoginScreen>{
       }catch(_){
         context.go('/kyc');
       }
-    }catch(_){
-      if(mounted)setState(()=>error='Connexion impossible.');
+    }catch(e){
+      if(!mounted)return;
+      final isOffline=e is DioException&&(
+        e.type==DioExceptionType.connectionError||
+        e.type==DioExceptionType.connectionTimeout||
+        e.type==DioExceptionType.receiveTimeout||
+        e.type==DioExceptionType.sendTimeout);
+      setState((){
+        offline=isOffline;
+        error=isOffline?null:VeyraErrorMessages.forException(e);
+      });
     }finally{
       if(mounted)setState(()=>loading=false);
     }
@@ -193,13 +207,10 @@ class _LoginScreenState extends State<LoginScreen>{
         TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
         const SizedBox(height:12),
         TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),prefixIcon:const Icon(Icons.lock_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+        if(offline)Padding(padding:const EdgeInsets.only(top:12),child:VeyraOfflineBanner(onRetry:submit)),
         if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
         const SizedBox(height:20),
-        FilledButton(
-          style:FilledButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:16),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-          onPressed:loading?null:submit,
-          child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)):Text(t('Se connecter')),
-        ),
+        VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
         TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte Chauffeur'))),
       ]))),
     ])));
@@ -307,7 +318,7 @@ class _KycScreenState extends State<KycScreen>{
           Card(child:ListTile(
             leading:Icon(approved?Icons.verified:Icons.pending_actions),
             title:Text(approved?t('Dossier approuvé'):t('Vérification en cours')),
-            subtitle:Text('Statut KYC : '+(status['kyc_status']??'DRAFT').toString()),
+            subtitle:Text(t('Statut du dossier')+' : '+VeyraStatusLabels.kycStatus(status['kyc_status']?.toString())),
           )),
           const SizedBox(height:16),
           const Text('Informations professionnelles',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
@@ -824,7 +835,7 @@ class _RideScreenState extends State<RideScreen>{
           const SizedBox(height:16),
           Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
             style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-          Text('Statut : '+status),
+          Text(t('Statut')+' : '+VeyraStatusLabels.bookingStatus(status)),
           if(etaInfo!=null)Card(child:ListTile(
             leading:const Icon(Icons.schedule),
             title:Text('ETA : '+(((etaInfo!['durationSeconds']??0) as num).toDouble()/60).ceil().toString()+' min'),

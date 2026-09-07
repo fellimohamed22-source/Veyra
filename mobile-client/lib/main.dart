@@ -14,6 +14,13 @@ import 'api.dart';
 import 'app_locale.dart';
 import 'chat_socket.dart';
 import 'app/theme.dart';
+import 'core/formatters/error_messages.dart';
+import 'core/formatters/date_formatter.dart';
+import 'core/formatters/money_formatter.dart';
+import 'core/formatters/status_labels.dart';
+import 'core/widgets/veyra_button.dart';
+import 'core/widgets/state_views.dart';
+import 'core/widgets/status_badge.dart';
 
 /// Short alias used throughout this file -- AppLocale.t() everywhere
 /// would be far noisier across ~100 call sites.
@@ -147,31 +154,12 @@ InputDecoration appFieldDecoration(String label,{IconData? icon,String? helperTe
   );
 }
 
-/// Colored status badge matching the mockup's chip treatment (green for
-/// confirmed/completed states, blue for in-progress, amber for pending,
-/// red for cancelled) -- replaces plain status text with something that
-/// reads at a glance.
-Widget statusBadge(String status){
-  final Map<String,Color> colors={
-    'OPEN_FOR_OFFERS':const Color(0xFFF59E0B),
-    'OFFERS_RECEIVED':const Color(0xFFF59E0B),
-    'CONFIRMED':const Color(0xFF2563EB),
-    'DRIVER_EN_ROUTE':const Color(0xFF2563EB),
-    'DRIVER_ARRIVED':const Color(0xFF2563EB),
-    'IN_PROGRESS':const Color(0xFF2563EB),
-    'COMPLETED':const Color(0xFF16A34A),
-    'CLOSED':const Color(0xFF16A34A),
-    'CANCELLED':const Color(0xFFDC2626),
-    'DRIVER_CANCELLED':const Color(0xFFDC2626),
-    'CUSTOMER_NO_SHOW':const Color(0xFFDC2626),
-  };
-  final color=colors[status]??const Color(0xFF6B7280);
-  return Container(
-    padding:const EdgeInsets.symmetric(horizontal:10,vertical:4),
-    decoration:BoxDecoration(color:color.withValues(alpha:0.12),borderRadius:BorderRadius.circular(20)),
-    child:Text(status.replaceAll('_',' '),style:TextStyle(color:color,fontSize:12,fontWeight:FontWeight.w600)),
-  );
-}
+// statusBadge(String) a été retiré ici : il affichait le code backend
+// brut avec les underscores remplacés par des espaces (ex: "DRIVER EN
+// ROUTE"), pas une vraie traduction humanisée -- une violation directe
+// de "ces codes ne sont jamais rendus tels quels dans l'interface".
+// Remplacé par VeyraStatusBadge (core/widgets/status_badge.dart), qui
+// utilise le vrai mapping BACKEND_ENUM_UI_MAPPING.md.
 
 class LoginScreen extends StatefulWidget{
   const LoginScreen({super.key});
@@ -180,7 +168,7 @@ class LoginScreen extends StatefulWidget{
 class _LoginScreenState extends State<LoginScreen>{
   final email=TextEditingController();
   final password=TextEditingController();
-  bool loading=false; String? error;
+  bool loading=false; String? error; bool offline=false;
 
   @override void initState(){
     super.initState();
@@ -206,13 +194,27 @@ class _LoginScreenState extends State<LoginScreen>{
   }
 
   Future<void> submit()async{
-    setState((){loading=true;error=null;});
+    setState((){loading=true;error=null;offline=false;});
     try{
       await api.login(email.text,password.text);
       await configurePush();
       if(mounted)context.go('/home');
-    }catch(_){
-      if(mounted)setState(()=>error='Identifiants invalides ou service indisponible.');
+    }catch(e){
+      if(!mounted)return;
+      // Distingue OFFLINE (pas de réponse serveur) de ERROR (le serveur
+      // a répondu avec un code métier réel, ex: INVALID_CREDENTIALS,
+      // ACCOUNT_LOCKED, ACCOUNT_NOT_ACTIVE) -- deux états UX obligatoires
+      // distincts selon la fiche C01, auparavant fondus dans un seul
+      // texte générique quelle que soit la cause réelle.
+      final isOffline=e is DioException&&(
+        e.type==DioExceptionType.connectionError||
+        e.type==DioExceptionType.connectionTimeout||
+        e.type==DioExceptionType.receiveTimeout||
+        e.type==DioExceptionType.sendTimeout);
+      setState((){
+        offline=isOffline;
+        error=isOffline?null:VeyraErrorMessages.forException(e);
+      });
     }finally{
       if(mounted)setState(()=>loading=false);
     }
@@ -245,13 +247,10 @@ class _LoginScreenState extends State<LoginScreen>{
         TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
         const SizedBox(height:12),
         TextField(controller:password,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline)),
+        if(offline)Padding(padding:const EdgeInsets.only(top:12),child:VeyraOfflineBanner(onRetry:submit)),
         if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
         const SizedBox(height:20),
-        FilledButton(
-          style:FilledButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:16),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-          onPressed:loading?null:submit,
-          child:loading?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)):Text(t('Se connecter')),
-        ),
+        VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
       TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
       TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte'))),
       ]))),
@@ -338,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
             return Column(children:items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-              final scheduled=(x['scheduled_at']??'').toString();
+              final scheduled=VeyraDateFormatter.relativeDay(x['scheduled_at']);
               final status=(x['status']??'').toString();
               return Card(
                 margin:const EdgeInsets.only(bottom:10),
@@ -348,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
                   title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
                   subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Row(children:[
                     Expanded(child:Text(scheduled,style:const TextStyle(color:Colors.black54,fontSize:13))),
-                    statusBadge(status),
+                    VeyraStatusBadge(status:status),
                   ])),
                   isThreeLine:false,
                   trailing:const Icon(Icons.chevron_right),
@@ -891,13 +890,13 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
         final status=(x['status']??'').toString();
         final driverName=((x['driver_first_name']??'') as Object).toString()+' '+((x['driver_last_name']??'') as Object).toString();
         final driverPhone=x['driver_phone']?.toString();
-        final total=((x['customer_total_amount_minor']??0) as num).toDouble()/100;
+        final total=(x['customer_total_amount_minor'] as num?)?.toInt();
         return ListView(padding:const EdgeInsets.all(20),children:[
           Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
           const SizedBox(height:8),
-          Text((x['scheduled_at']??'').toString()),
+          Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
           const SizedBox(height:12),
-          Card(child:ListTile(title:Text(t('Statut')),trailing:Text(status))),
+          Card(child:ListTile(title:Text(t('Statut')),trailing:VeyraStatusBadge(status:status))),
           if(x['selected_driver_id']!=null)Card(child:ListTile(
             leading:const CircleAvatar(child:Icon(Icons.person)),
             title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
@@ -905,8 +904,8 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           )),
           if(x['customer_total_amount_minor']!=null)Card(child:ListTile(
             title:Text(t('Total client')),
-            subtitle:Text((x['payment_method']??'').toString()),
-            trailing:Text(total.toStringAsFixed(2)+' €'),
+            subtitle:Text(VeyraStatusLabels.paymentMethod(x['payment_method']?.toString())),
+            trailing:Text(VeyraMoneyFormatter.fromMinor(total)),
           )),
           if(x['payment_method']=='ONLINE'&&{'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status))
             FilledButton.icon(onPressed:()=>context.push('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:Text(t('Payer en ligne'))),
@@ -1257,13 +1256,14 @@ class _RegisterScreenState extends State<RegisterScreen>{
   final password=TextEditingController();
   bool loading=false;
   String? error;
+  bool offline=false;
 
   Future<void> submit()async{
     if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
-      setState(()=>error='Prénom, e-mail et mot de passe de 10 caractères minimum requis.');
+      setState((){error='Prénom, e-mail et mot de passe de 10 caractères minimum requis.';offline=false;});
       return;
     }
-    setState((){loading=true;error=null;});
+    setState((){loading=true;error=null;offline=false;});
     try{
       await api.register(
         email:email.text,
@@ -1274,8 +1274,17 @@ class _RegisterScreenState extends State<RegisterScreen>{
       );
       await configurePush();
       if(mounted)context.go('/home');
-    }catch(_){
-      if(mounted)setState(()=>error='Création du compte impossible. Vérifiez les informations ou utilisez un autre e-mail.');
+    }catch(e){
+      if(!mounted)return;
+      final isOffline=e is DioException&&(
+        e.type==DioExceptionType.connectionError||
+        e.type==DioExceptionType.connectionTimeout||
+        e.type==DioExceptionType.receiveTimeout||
+        e.type==DioExceptionType.sendTimeout);
+      setState((){
+        offline=isOffline;
+        error=isOffline?null:VeyraErrorMessages.forException(e);
+      });
     }finally{
       if(mounted)setState(()=>loading=false);
     }
@@ -1294,13 +1303,10 @@ class _RegisterScreenState extends State<RegisterScreen>{
       TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
       const SizedBox(height:12),
       TextField(controller:password,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline,helperText:t('10 caractères minimum'))),
+      if(offline)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:VeyraOfflineBanner(onRetry:submit)),
       if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:16),
-      FilledButton(
-        style:FilledButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:16),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-        onPressed:loading?null:submit,
-        child:loading?Text(t('Création…')):Text(t('Créer mon compte')),
-      ),
+      VeyraPrimaryButton(label:t('Créer mon compte'),loading:loading,onPressed:submit),
     ])),
   );
 }
