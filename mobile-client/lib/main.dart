@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
 import 'app_locale.dart';
 import 'chat_socket.dart';
+import 'app/theme.dart';
 
 /// Short alias used throughout this file -- AppLocale.t() everywhere
 /// would be far noisier across ~100 call sites.
@@ -96,7 +97,7 @@ class App extends StatelessWidget{
     valueListenable:AppLocale.code,
     builder:(context,localeCode,_)=>MaterialApp.router(
       title:'Veyra',
-      theme:ThemeData(useMaterial3:true,colorSchemeSeed:const Color(0xFF1565C0)),
+      theme:veyraTheme(),
       locale:Locale(localeCode),
       supportedLocales:const [Locale('fr'),Locale('en')],
       localizationsDelegates:const [

@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'api.dart';
 import 'app_locale.dart';
 import 'chat_socket.dart';
+import 'app/theme.dart';
 
 /// Short alias used throughout this file.
 String t(String french) => AppLocale.t(french);
@@ -76,7 +77,7 @@ class DriverApp extends StatelessWidget{
     valueListenable:AppLocale.code,
     builder:(context,localeCode,_)=>MaterialApp.router(
       title:'Veyra Chauffeur',
-      theme:ThemeData(useMaterial3:true,colorSchemeSeed:const Color(0xFF1565C0)),
+      theme:veyraTheme(),
       locale:Locale(localeCode),
       supportedLocales:const [Locale('fr'),Locale('en')],
       localizationsDelegates:const [
