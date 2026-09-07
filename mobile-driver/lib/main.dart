@@ -94,33 +94,6 @@ final routeObserver=RouteObserver<PageRoute>();
 
 final router=GoRouter(
   initialLocation:'/login',
-  // Real gap fixed here: tokens were already correctly persisted, but
-  // nothing checked for one at startup, so a valid session was
-  // discarded every time the app was closed and reopened. Mirrors the
-  // exact same approved/kyc decision LoginScreen already makes right
-  // after a fresh login, rather than a simpler-but-wrong plain
-  // redirect to /home regardless of KYC status.
-  redirect:(context,state)async{
-    if(state.matchedLocation=='/login'){
-      String? token;
-      try{
-        token=await api.storage.read(key:'accessToken');
-      }catch(_){
-        // Same reasoning as the client app: no real secure-storage
-        // backend under `flutter test`, treated as no token found.
-        return null;
-      }
-      if(token==null)return null;
-      try{
-        final status=await api.onboardingStatus();
-        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
-        return approved?'/home':'/kyc';
-      }catch(_){
-        return '/kyc';
-      }
-    }
-    return null;
-  },
   routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterDriverScreen()),
@@ -145,6 +118,31 @@ class _LoginScreenState extends State<LoginScreen>{
   final password=TextEditingController();
   bool loading=false;
   String? error;
+
+  @override void initState(){
+    super.initState();
+    // Same reasoning as the client app: checked after the first frame
+    // rather than via an async GoRouter redirect, which proved
+    // genuinely unreliable to settle correctly in widget tests. Mirrors
+    // the exact same approved/kyc decision submit() below already makes
+    // right after a fresh login.
+    WidgetsBinding.instance.addPostFrameCallback((_)async{
+      String? token;
+      try{
+        token=await api.storage.read(key:'accessToken');
+      }catch(_){
+        return;
+      }
+      if(token==null||!mounted)return;
+      try{
+        final status=await api.onboardingStatus();
+        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+        if(mounted)context.go(approved?'/home':'/kyc');
+      }catch(_){
+        if(mounted)context.go('/kyc');
+      }
+    });
+  }
 
   Future<void> submit()async{
     setState((){loading=true;error=null;});

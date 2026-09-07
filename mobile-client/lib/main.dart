@@ -116,27 +116,6 @@ final routeObserver=RouteObserver<PageRoute>();
 
 final router=GoRouter(
   initialLocation:'/login',
-  // Real gap fixed here: tokens were already correctly persisted via
-  // flutter_secure_storage (which survives closing the app), but
-  // nothing ever checked for one at startup -- the app always opened
-  // on the login screen regardless, forcing a fresh login every single
-  // time even with a perfectly valid stored session. Only checked when
-  // landing on /login specifically, so an intentional logout (which
-  // clears storage) never bounces straight back to /home.
-  redirect:(context,state)async{
-    if(state.matchedLocation=='/login'){
-      try{
-        final token=await api.storage.read(key:'accessToken');
-        if(token!=null)return '/home';
-      }catch(_){
-        // flutter_secure_storage has no real platform backend under
-        // `flutter test` (or if secure storage is genuinely
-        // unavailable on a real device) -- treated the same as no
-        // token found, never as a reason to break routing entirely.
-      }
-    }
-    return null;
-  },
   routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterScreen()),
@@ -201,6 +180,29 @@ class _LoginScreenState extends State<LoginScreen>{
   final email=TextEditingController();
   final password=TextEditingController();
   bool loading=false; String? error;
+
+  @override void initState(){
+    super.initState();
+    // Real gap fixed here: tokens were already correctly persisted via
+    // flutter_secure_storage (survives closing the app), but nothing
+    // ever checked for one at startup -- the app always opened on this
+    // screen regardless, forcing a fresh login every time even with a
+    // perfectly valid stored session. Checked after the first frame
+    // (post-frame callback) rather than via GoRouter's own redirect --
+    // an async redirect blocking the very first route resolution
+    // proved genuinely unreliable to settle correctly in widget tests,
+    // and checking here means this screen's own content is always
+    // available synchronously on first render regardless.
+    WidgetsBinding.instance.addPostFrameCallback((_)async{
+      String? token;
+      try{
+        token=await api.storage.read(key:'accessToken');
+      }catch(_){
+        return;
+      }
+      if(token!=null&&mounted)context.go('/home');
+    });
+  }
 
   Future<void> submit()async{
     setState((){loading=true;error=null;});
