@@ -398,7 +398,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
     destinationQuery:destinationFilter.text,
     minPassengers:minPassengers,
   );
-  void reload()=>setState(()=>future=load());
+  void reload()=>setState((){future=load();});
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Demandes disponibles')),actions:[
@@ -541,7 +541,7 @@ class _RequestScreenState extends State<RequestScreen>{
             leading:const Icon(Icons.error_outline),
             title:Text(t('Demande indisponible')),
             subtitle:Text(t('Elle a peut-être déjà été fermée.')),
-            trailing:TextButton(onPressed:()=>setState(()=>detail=api.opportunityDetail(widget.bookingId)),child:Text(t('Réessayer'))),
+            trailing:TextButton(onPressed:()=>setState((){detail=api.opportunityDetail(widget.bookingId);}),child:Text(t('Réessayer'))),
           ));
           final x=s.data??{};
           return Column(children:[
@@ -612,7 +612,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.bookings()),child:Text(t('Réessayer'))));
+        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState((){future=api.bookings();}),child:Text(t('Réessayer'))));
         final items=s.data??[];
         if(items.isEmpty)return Center(child:Text(t('Aucune course confirmée.')));
         return ListView(padding:const EdgeInsets.all(16),children:items.map((raw){
@@ -658,7 +658,7 @@ class _RideScreenState extends State<RideScreen>{
     super.dispose();
   }
 
-  void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
+  void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
 
   Future<void> submitRating()async{
     if(ratingScore<1)return;
@@ -934,7 +934,7 @@ class _WalletScreenState extends State<WalletScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.wallet()),child:Text(t('Réessayer'))));
+        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState((){future=api.wallet();}),child:Text(t('Réessayer'))));
         final x=s.data??{};
         double money(dynamic v)=>((v??0) as num).toDouble()/100;
         return ListView(padding:const EdgeInsets.all(20),children:[
@@ -1023,9 +1023,25 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
   bool sending=false;
   ChatSocket? socket;
 
+  Timer? fallbackPoller;
+
   @override void initState(){
     super.initState();
     _load();
+    fallbackPoller=Timer.periodic(const Duration(seconds:5),(_)=>_pollForNewMessages());
+  }
+
+  Future<void> _pollForNewMessages()async{
+    if(!mounted)return;
+    try{
+      final history=await api.chatMessages(widget.bookingId);
+      if(!mounted)return;
+      final fresh=history.map((e)=>Map<String,dynamic>.from(e as Map))
+        .where((m)=>!_isDuplicate(m['id'])).toList();
+      if(fresh.isEmpty)return;
+      setState(()=>messages.addAll(fresh));
+      _scrollToBottom();
+    }catch(_){}
   }
 
   Future<void> _load() async {
@@ -1091,6 +1107,7 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
   }
 
   @override void dispose(){
+    fallbackPoller?.cancel();
     socket?.dispose();
     scrollController.dispose();
     input.dispose();
@@ -1191,7 +1208,7 @@ class DriverNotificationsScreen extends StatefulWidget{
 class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
   late Future<List<dynamic>> future;
   @override void initState(){super.initState();future=api.notifications();}
-  void reload()=>setState(()=>future=api.notifications());
+  void reload()=>setState((){future=api.notifications();});
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),

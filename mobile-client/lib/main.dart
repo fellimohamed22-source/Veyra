@@ -264,7 +264,7 @@ class HomeScreen extends StatefulWidget{
 class _HomeScreenState extends State<HomeScreen> with RouteAware{
   late Future<List<dynamic>> future;
   @override void initState(){super.initState();future=api.bookings();}
-  void retry()=>setState(()=>future=api.bookings());
+  void retry()=>setState((){future=api.bookings();});
 
   @override void didChangeDependencies(){
     super.didChangeDependencies();
@@ -387,6 +387,7 @@ class _AddressScreenState extends State<AddressScreen>{
   int baggageCount=0;
   String? categoryId;
   late Future<List<dynamic>> categories;
+  String? visibilityMode;
   bool loadingPickup=false;
   bool loadingDropoff=false;
   bool locating=false;
@@ -396,6 +397,12 @@ class _AddressScreenState extends State<AddressScreen>{
   @override void initState(){
     super.initState();
     categories=api.vehicleCategories();
+    // Real gap fixed here: the client had no way to know whether their
+    // booking would show competing prices to drivers or not -- this is
+    // a platform-wide policy set by an admin (not a per-booking choice),
+    // but there was previously no way for anyone but an admin to even
+    // see which mode is currently active.
+    api.offerVisibilityMode().then((mode){if(mounted)setState(()=>visibilityMode=mode);}).catchError((_){});
   }
 
   Future<void> search(bool isPickup,String q)async{
@@ -625,6 +632,19 @@ class _AddressScreenState extends State<AddressScreen>{
         ],
         onChanged:(v){if(v!=null)setState(()=>paymentMethod=v);},
       ),
+      if(visibilityMode!=null)Padding(
+        padding:const EdgeInsets.only(top:10),
+        child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Icon(visibilityMode=='BEST_VISIBLE'?Icons.visibility_outlined:Icons.visibility_off_outlined,size:18,color:Colors.black54),
+          const SizedBox(width:8),
+          Expanded(child:Text(
+            visibilityMode=='BEST_VISIBLE'
+              ?t('Les chauffeurs verront le meilleur prix proposé par un autre chauffeur.')
+              :t('Offre privée : les chauffeurs ne voient jamais les prix proposés par les autres.'),
+            style:const TextStyle(fontSize:12,color:Colors.black54),
+          )),
+        ]),
+      ),
       if(error!=null)Padding(
         padding:const EdgeInsets.symmetric(vertical:12),
         child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
@@ -688,7 +708,7 @@ class _OffersScreenState extends State<OffersScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState(()=>future=api.offers(widget.bookingId)),child:Text(t('Réessayer'))));
+        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState((){future=api.offers(widget.bookingId);}),child:Text(t('Réessayer'))));
         final items=s.data??[];
         if(items.isEmpty)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.'))));
         return ListView(padding:const EdgeInsets.all(16),children:[
@@ -822,7 +842,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     future=api.bookingDetail(widget.bookingId);
   }
 
-  void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
+  void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
 
   Future<void> loadPin()async{
     try{
@@ -933,9 +953,25 @@ class _ChatScreenState extends State<ChatScreen>{
   bool sending=false;
   ChatSocket? socket;
 
+  Timer? fallbackPoller;
+
   @override void initState(){
     super.initState();
     _load();
+    fallbackPoller=Timer.periodic(const Duration(seconds:5),(_)=>_pollForNewMessages());
+  }
+
+  Future<void> _pollForNewMessages()async{
+    if(!mounted)return;
+    try{
+      final history=await api.chatMessages(widget.bookingId);
+      if(!mounted)return;
+      final fresh=history.map((e)=>Map<String,dynamic>.from(e as Map))
+        .where((m)=>!_isDuplicate(m['id'])).toList();
+      if(fresh.isEmpty)return;
+      setState(()=>messages.addAll(fresh));
+      _scrollToBottom();
+    }catch(_){}
   }
 
   Future<void> _load() async {
@@ -1001,6 +1037,7 @@ class _ChatScreenState extends State<ChatScreen>{
   }
 
   @override void dispose(){
+    fallbackPoller?.cancel();
     socket?.dispose();
     scrollController.dispose();
     input.dispose();
@@ -1315,7 +1352,7 @@ class NotificationsScreen extends StatefulWidget{
 class _NotificationsScreenState extends State<NotificationsScreen>{
   late Future<List<dynamic>> future;
   @override void initState(){super.initState();future=api.notifications();}
-  void reload()=>setState(()=>future=api.notifications());
+  void reload()=>setState((){future=api.notifications();});
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),

@@ -17,6 +17,20 @@ import java.security.SecureRandom;
 import java.time.*;
 import java.util.*;
 @RestController @RequestMapping("/api/v1") public class BookingController{
+    // Real gap fixed here: the only existing endpoint for reading the
+    // current offer-visibility policy (admin/ConfigController) requires
+    // ROLE_ADMIN -- a client creating a booking, or a driver browsing
+    // opportunities, had no way to even see which mode is currently
+    // active, only admins could. This is read-only, non-sensitive
+    // platform configuration (not a per-booking choice -- the mode is
+    // set platform-wide by an admin, not chosen by whoever creates a
+    // booking), so any authenticated user can read it.
+    @GetMapping("/offer-visibility-mode")
+    public Map<String,Object> offerVisibilityMode(){
+        List<Map<String,Object>> rows=db.queryForList(
+            "select mode from offer_visibility_policy_versions where status='ACTIVE' order by version_no desc limit 1");
+        return Map.of("mode",rows.isEmpty()?"PRIVATE":rows.getFirst().get("mode"));
+    }
     private final JdbcTemplate db;
     private final PasswordEncoder enc;
     private final com.veyra.security.PinCrypto pinCrypto;

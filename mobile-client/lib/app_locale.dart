@@ -114,6 +114,8 @@ class AppLocale {
     'Merci pour votre avis !': 'Thanks for your feedback!',
     'Envoyer la note': 'Send rating',
     'Impossible d’envoyer la note pour le moment.': 'Could not send the rating right now.',
+    'Les chauffeurs verront le meilleur prix proposé par un autre chauffeur.': 'Drivers will see the best price offered by another driver.',
+    'Offre privée : les chauffeurs ne voient jamais les prix proposés par les autres.': 'Private offer: drivers never see prices proposed by others.',
     'Cette réservation n’est plus ouverte aux offres.': 'This booking is no longer open for offers.',
     'Cette offre n’est plus disponible.': 'This offer is no longer available.',
     'Limite de crédit partenaire dépassée pour cette réservation.': 'Partner credit limit exceeded for this booking.',

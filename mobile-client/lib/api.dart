@@ -129,6 +129,11 @@ class Api {
   Future<String> pin(String bookingId) async =>
       (await dio.get('/api/v1/bookings/$bookingId/pin')).data['pin'] as String;
 
+  Future<String> offerVisibilityMode() async {
+    final r=await dio.get('/api/v1/offer-visibility-mode');
+    return (r.data as Map)['mode']?.toString()??'PRIVATE';
+  }
+
   Future<List<dynamic>> autocomplete(String query) async {
     if(query.trim().length<3)return const [];
     return List<dynamic>.from((await dio.get('/api/v1/addresses/autocomplete',queryParameters:{'q':query.trim()})).data);
