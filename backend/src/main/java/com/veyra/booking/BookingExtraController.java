@@ -4,8 +4,6 @@ import com.veyra.finance.CancellationFinanceService;
 import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
 import com.veyra.shared.DbTime;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,30 +78,6 @@ public class BookingExtraController {
     result.put("currency",charge.currency());
     result.put("refundQueued",charge.refundQueued());
     return result;
-  }
-
-  public record Rating(
-      @Min(1) @Max(5) int score,
-      String comment,
-      UUID ratedUserId){}
-
-  @PostMapping("/{id}/rating")
-  public ResponseEntity<Void> rate(
-      @PathVariable UUID id,
-      @RequestBody Rating rating){
-    Map<String,Object> booking=one(
-        "select creator_user_id,status from scheduled_bookings where id=?",
-        id);
-    if(!CurrentUser.id().equals(booking.get("creator_user_id")) ||
-        !Set.of("COMPLETED","CLOSED").contains(booking.get("status"))){
-      throw new ApiException(HttpStatus.FORBIDDEN,"RATING_NOT_ALLOWED");
-    }
-
-    db.update(
-        "insert into ride_ratings(booking_id,rater_id,rated_user_id,score,comment) " +
-        "values (?,?,?,?,?)",
-        id,CurrentUser.id(),rating.ratedUserId(),rating.score(),rating.comment());
-    return ResponseEntity.status(HttpStatus.CREATED).build();
   }
 
   private void owner(Map<String,Object> booking){

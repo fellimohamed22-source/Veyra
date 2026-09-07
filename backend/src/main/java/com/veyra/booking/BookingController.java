@@ -63,6 +63,15 @@ import java.util.*;
         int passengerCount=r.passengerCount()==null?1:r.passengerCount();
         int baggageCount=r.baggageCount()==null?0:r.baggageCount();
         String offerVisibilityMode=db.queryForObject("select mode from offer_visibility_policy_versions where status='ACTIVE' order by version_no desc limit 1",String.class);
+        if(r.partnerId()!=null&&r.offerVisibilityMode()!=null){
+            // Membership on r.partnerId() already validated above by
+            // member(r.partnerId(),u) -- only PARTNER-created bookings may
+            // override the platform-wide default, matching P29's business
+            // rule ("le partenaire doit pouvoir activer/désactiver
+            // l'affichage de la meilleure offre"). A CLIENT booking always
+            // gets the platform default, no override possible.
+            offerVisibilityMode=r.offerVisibilityMode();
+        }
         db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,partner_id,beneficiary_name_snapshot,beneficiary_phone_snapshot,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,passenger_count,baggage_count,customer_notes,status,offer_window_ends_at,offer_visibility_mode) values (?,?,?,?,?,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,?,?,?,?,?,?,?,'OPEN_FOR_OFFERS',?,?)",id,r.partnerId()==null?"CLIENT":"PARTNER",u,r.partnerId(),r.beneficiaryName(),r.beneficiaryPhone(),r.pickup().lng(),r.pickup().lat(),r.pickup().address(),r.dropoff().lng(),r.dropoff().lat(),r.dropoff().address(),r.scheduledAt(),r.categoryId(),r.paymentMethod(),r.payerType(),passengerCount,baggageCount,r.customerNotes(),close,offerVisibilityMode);
         event(id,"booking.published");
             return ResponseEntity.status(201).body(Map.of("id",

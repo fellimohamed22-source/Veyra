@@ -65,6 +65,36 @@ public class PartnerController {
     return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("beneficiaryId",id));
   }
 
+  // Gap P0 #3 (GAPS_REQUIRED_CHANGES.md / screen P33): only the write
+  // side existed. A partner member had no way to actually list the
+  // beneficiaries they'd already created.
+  @GetMapping("/{partnerId}/beneficiaries")
+  public List<Map<String,Object>> beneficiaries(@PathVariable UUID partnerId){
+    member(partnerId);
+    return db.queryForList(
+      "select id,full_name,phone,email,external_reference,created_at " +
+      "from partner_beneficiaries where partner_id=? order by created_at desc",
+      partnerId);
+  }
+
+  // Gap P0 #4 (GAPS_REQUIRED_CHANGES.md / screen P34): the only existing
+  // invoice-listing endpoint (PartnerInvoiceController) is
+  // @PreAuthorize("hasAnyRole('FINANCE','ADMIN')") -- correct for staff
+  // pulling any partner's invoices, but that means a partner's own member
+  // had no read access to their own invoices at all. Deliberately a
+  // SEPARATE endpoint under /partner/ (not widening Finance's role
+  // requirement) scoped by the same member() check as every other partner
+  // endpoint here.
+  @GetMapping("/{partnerId}/invoices")
+  public List<Map<String,Object>> invoices(@PathVariable UUID partnerId){
+    member(partnerId);
+    return db.queryForList(
+      "select pi.id,pi.period_start,pi.period_end,pi.total_minor,pi.currency,pi.status,pi.due_at,pi.created_at," +
+      "(select count(*) from partner_invoice_items pii where pii.invoice_id=pi.id) as items_count " +
+      "from partner_invoices pi where pi.partner_id=? order by pi.created_at desc",
+      partnerId);
+  }
+
   @GetMapping("/{partnerId}/finance")
   public Map<String,Object> finance(@PathVariable UUID partnerId){
     member(partnerId);

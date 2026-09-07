@@ -38,12 +38,26 @@ public class FinanceController {
     long cashDebt = debt == null ? 0 : debt;
     long onlinePayable = payable == null ? 0 : payable;
 
-    return Map.of(
-        "cashDebtMinor", cashDebt,
-        "onlinePayableMinor", onlinePayable,
-        "currency", "EUR",
-        "cashWarning", cashDebt >= 5000,
-        "cashRestricted", cashDebt >= 10000,
-        "cashBookingsBlocked", cashDebt >= 15000);
+    // Gap P1 (GAPS_REQUIRED_CHANGES.md): booleans alone (cashWarning /
+    // cashRestricted / cashBookingsBlocked) tell the UI which state
+    // applies, but not the actual threshold values -- forcing the mobile
+    // app to hardcode 50/100/150€ itself to show e.g. "80€ / 100€ before
+    // restriction", which is exactly the kind of financial-rule
+    // duplication the guardrails forbid. Exposing the same three
+    // constants used to compute the booleans below so the UI never has
+    // to guess or hardcode them.
+    long warningThreshold=5000,restrictedThreshold=10000,blockedThreshold=15000;
+
+    Map<String,Object> result=new LinkedHashMap<>();
+    result.put("cashDebtMinor", cashDebt);
+    result.put("onlinePayableMinor", onlinePayable);
+    result.put("currency", "EUR");
+    result.put("cashWarning", cashDebt >= warningThreshold);
+    result.put("cashRestricted", cashDebt >= restrictedThreshold);
+    result.put("cashBookingsBlocked", cashDebt >= blockedThreshold);
+    result.put("cashWarningThresholdMinor", warningThreshold);
+    result.put("cashRestrictedThresholdMinor", restrictedThreshold);
+    result.put("cashBlockedThresholdMinor", blockedThreshold);
+    return result;
   }
 }
