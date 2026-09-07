@@ -128,16 +128,44 @@ final router=GoRouter(
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterScreen()),
   GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
-  GoRoute(path:'/home',builder:(c,s)=>const HomeScreen()),
+  // Coquille de navigation persistante (bottom nav), conforme aux
+  // maquettes C02+ ("BottomNavigation" listé comme composant UI dans
+  // chaque fiche écran principale). Les écrans de flux (adresses,
+  // offres, détail réservation, chat, tracking) restent des routes
+  // racine ci-dessous, poussées PAR-DESSUS la coquille entière -- la
+  // bottom nav disparaît naturellement pendant ces parcours, comme
+  // attendu.
+  StatefulShellRoute.indexedStack(
+    builder:(c,s,navigationShell)=>AppShell(navigationShell:navigationShell),
+    branches:[
+      StatefulShellBranch(routes:[GoRoute(path:'/home',builder:(c,s)=>const AccueilScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/bookings',builder:(c,s)=>const HomeScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/notifications',builder:(c,s)=>const NotificationsScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
+    ],
+  ),
   GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/booking/:id',builder:(c,s)=>BookingDetailScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/chat/:id',builder:(c,s)=>ChatScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/live/:id',builder:(c,s)=>LiveLocationScreen(bookingId:s.pathParameters['id']!)),
-  GoRoute(path:'/notifications',builder:(c,s)=>const NotificationsScreen()),
 ],
   observers:[routeObserver],
+  // Section 64/protocole anti-erreurs : "éviter les écrans morts".
+  // Sans errorBuilder, une route inconnue (lien profond mal formé,
+  // typo) affichait l'écran d'erreur générique GoRouter, hors charte
+  // Veyra. Bouton "Retour à l'accueil" plutôt qu'un cul-de-sac.
+  errorBuilder:(c,s)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+      const Icon(Icons.error_outline,size:48,color:Color(0xFFDC2626)),
+      const SizedBox(height:16),
+      Text(t('Page introuvable'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
+      const SizedBox(height:16),
+      FilledButton(onPressed:()=>c.go('/home'),child:Text(t("Retour à l'accueil"))),
+    ])),
+  ),
 );
 
 /// Consistent, mockup-matching field styling (filled white, rounded,
@@ -276,42 +304,24 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
   // list -- the same stale Future stayed in place until the whole app
   // was closed and reopened. didPopNext fires precisely when a screen
   // pushed on top of this one is popped back to it.
+  //
+  // ATTENTION -- même réserve que AccueilScreen depuis l'introduction du
+  // shell de navigation (LOT 4) : cet écran vit désormais dans le
+  // Navigator imbriqué de sa branche, potentiellement différent du
+  // Navigator racine où /addresses, /offers/:id etc. sont réellement
+  // poussés/dépilés. Non vérifié sur appareil réel. RefreshIndicator
+  // reste le filet de sécurité manuel.
   @override void didPopNext(){retry();}
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
     appBar:AppBar(
       backgroundColor:const Color(0xFFF2F6FB),elevation:0,
-      title:Row(mainAxisSize:MainAxisSize.min,children:const [Icon(Icons.location_on,color:Color(0xFF1565C0)),SizedBox(width:6),Text('Veyra',style:TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold))]),
-      actions:[
-      const LanguageSwitch(),
-      IconButton(onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_outlined)),
-      IconButton(onPressed:()async{await api.logout();if(context.mounted)context.go('/login');},icon:const Icon(Icons.logout))
-    ]),
+      title:Text(t('Mes réservations'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
+    ),
     body:RefreshIndicator(
       onRefresh:()async{retry();await future;},
       child:ListView(padding:const EdgeInsets.all(20),children:[
-        Text(t('Planifiez votre trajet'),style:const TextStyle(fontSize:26,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
-        const SizedBox(height:16),
-        Container(
-          decoration:BoxDecoration(
-            gradient:const LinearGradient(colors:[Color(0xFF123A66),Color(0xFF1565C0)]),
-            borderRadius:BorderRadius.circular(16),
-          ),
-          child:Material(color:Colors.transparent,child:InkWell(
-            borderRadius:BorderRadius.circular(16),
-            onTap:()=>context.push('/addresses'),
-            child:Padding(padding:const EdgeInsets.all(20),child:Row(children:[
-              const Icon(Icons.add_circle,color:Colors.white,size:32),
-              const SizedBox(width:16),
-              Expanded(child:Text(t('Nouvelle réservation'),style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w600))),
-              const Icon(Icons.arrow_forward_ios,color:Colors.white70,size:16),
-            ])),
-          )),
-        ),
-        const SizedBox(height:28),
-        Text(t('Mes réservations'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
-        const SizedBox(height:8),
         FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
@@ -366,6 +376,230 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
           },
         ),
       ]),
+    ),
+  );
+}
+
+/// C02 -- écran d'accueil léger : salutation, raccourci de création de
+/// réservation, et aperçu de la SEULE prochaine réservation (la liste
+/// complète vit dans l'onglet Réservations/HomeScreen). Conforme à la
+/// fiche C02 : "Route entry card" + "Next booking card" (singulier),
+/// la liste complète étant une transition séparée ("Réservations →
+/// liste historique").
+class AccueilScreen extends StatefulWidget{
+  const AccueilScreen({super.key});
+  @override State<AccueilScreen> createState()=>_AccueilScreenState();
+}
+class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
+  late Future<Map<String,dynamic>> me;
+  late Future<List<dynamic>> bookings;
+
+  @override void initState(){
+    super.initState();
+    _load();
+  }
+
+  void _load(){
+    me=api.me();
+    bookings=api.bookings();
+  }
+
+  // ATTENTION -- non vérifié sur appareil réel (pas de SDK Flutter dans
+  // cet environnement) : ce mécanisme didPopNext/RouteObserver
+  // fonctionnait correctement avant l'introduction du shell de
+  // navigation (StatefulShellRoute), quand cet écran vivait directement
+  // sur le Navigator racine. Depuis ce lot, cet écran vit dans le
+  // Navigator imbriqué propre à sa branche du shell -- le
+  // ModalRoute.of(context) résolu ici pourrait donc être celui de la
+  // branche, pas celui du Navigator racine sur lequel /addresses,
+  // /booking/:id etc. sont réellement poussés/dépilés, ce qui
+  // empêcherait ce callback de se déclencher au retour de ces écrans.
+  // Le RefreshIndicator (pull-to-refresh) ci-dessous reste disponible en
+  // filet de sécurité manuel dans tous les cas. À vérifier/durcir sur un
+  // vrai appareil avant mise en production.
+  @override void didChangeDependencies(){
+    super.didChangeDependencies();
+    routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
+  }
+  @override void dispose(){routeObserver.unsubscribe(this);super.dispose();}
+  @override void didPopNext(){setState(_load);}
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(
+      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
+      title:Row(mainAxisSize:MainAxisSize.min,children:const [Icon(Icons.location_on,color:Color(0xFF1565C0)),SizedBox(width:6),Text('Veyra',style:TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold))]),
+      actions:const [LanguageSwitch()],
+    ),
+    body:RefreshIndicator(
+      onRefresh:()async{setState(_load);await Future.wait([me,bookings]);},
+      child:ListView(padding:const EdgeInsets.all(20),children:[
+        FutureBuilder<Map<String,dynamic>>(
+          future:me,
+          builder:(context,s){
+            final firstName=(s.data?['first_name']??'').toString();
+            return Text(
+              firstName.isEmpty?t('Bonjour !'):t('Bonjour')+' '+firstName+' !',
+              style:const TextStyle(fontSize:26,fontWeight:FontWeight.bold,color:Color(0xFF123A66)),
+            );
+          },
+        ),
+        const SizedBox(height:4),
+        Text(t('Où souhaitez-vous aller ?'),style:const TextStyle(color:Color(0xFF6B7280))),
+        const SizedBox(height:16),
+        Container(
+          decoration:BoxDecoration(
+            gradient:const LinearGradient(colors:[Color(0xFF123A66),Color(0xFF1565C0)]),
+            borderRadius:BorderRadius.circular(16),
+          ),
+          child:Material(color:Colors.transparent,child:InkWell(
+            borderRadius:BorderRadius.circular(16),
+            onTap:()=>context.push('/addresses'),
+            child:Padding(padding:const EdgeInsets.all(20),child:Row(children:[
+              const Icon(Icons.add_circle,color:Colors.white,size:32),
+              const SizedBox(width:16),
+              Expanded(child:Text(t('Planifier un trajet'),style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w600))),
+              const Icon(Icons.arrow_forward_ios,color:Colors.white70,size:16),
+            ])),
+          )),
+        ),
+        const SizedBox(height:28),
+        Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+          Text(t('Prochaine réservation'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
+          TextButton(
+            onPressed:()=>context.go('/bookings'),
+            child:Text(t('Voir tout')),
+          ),
+        ]),
+        const SizedBox(height:8),
+        FutureBuilder<List<dynamic>>(
+          future:bookings,
+          builder:(context,s){
+            if(s.connectionState!=ConnectionState.done){
+              return const VeyraLoadingView();
+            }
+            if(s.hasError){
+              return VeyraErrorView(onRetry:()=>setState(_load));
+            }
+            final items=s.data??[];
+            if(items.isEmpty){
+              return VeyraEmptyView(
+                icon:Icons.event_available,
+                message:t('Aucune réservation à venir. Votre prochain trajet apparaîtra ici.'),
+              );
+            }
+            final x=Map<String,dynamic>.from(items.first as Map);
+            final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
+            final status=(x['status']??'').toString();
+            return Card(
+              shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),
+              child:ListTile(
+                contentPadding:const EdgeInsets.all(14),
+                title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
+                subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Row(children:[
+                  Expanded(child:Text(VeyraDateFormatter.relativeDay(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13))),
+                  VeyraStatusBadge(status:status),
+                ])),
+                trailing:const Icon(Icons.chevron_right),
+                onTap:(){
+                  final id=x['id']?.toString();
+                  if(id==null)return;
+                  if(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'){
+                    context.push('/offers/'+id);
+                  }else{
+                    context.push('/booking/'+id);
+                  }
+                },
+              ),
+            );
+          },
+        ),
+      ]),
+    ),
+  );
+}
+
+/// Écran Compte minimal : identité, langue, déconnexion. Aucune fiche du
+/// kit ne le détaille finement (composant implicite de navigation dans
+/// les maquettes C02/etc via la bottom nav), volontairement sobre.
+class AccountScreen extends StatefulWidget{
+  const AccountScreen({super.key});
+  @override State<AccountScreen> createState()=>_AccountScreenState();
+}
+class _AccountScreenState extends State<AccountScreen>{
+  late Future<Map<String,dynamic>> future;
+  bool loggingOut=false;
+
+  @override void initState(){super.initState();future=api.me();}
+
+  Future<void> logout()async{
+    setState(()=>loggingOut=true);
+    try{
+      await api.logout();
+    }finally{
+      if(mounted)context.go('/login');
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(
+      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
+      title:Text(t('Mon compte'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
+    ),
+    body:FutureBuilder<Map<String,dynamic>>(
+      future:future,
+      builder:(context,s){
+        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
+        if(s.hasError)return VeyraErrorView(onRetry:()=>setState(()=>future=api.me()));
+        final me=s.data??{};
+        final firstName=(me['first_name']??'').toString();
+        final lastName=(me['last_name']??'').toString();
+        final email=(me['email']??'').toString();
+        return ListView(padding:const EdgeInsets.all(20),children:[
+          Card(child:ListTile(
+            leading:const CircleAvatar(child:Icon(Icons.person)),
+            title:Text('$firstName $lastName'.trim().isEmpty?t('Client Veyra'):'$firstName $lastName'.trim()),
+            subtitle:Text(email),
+          )),
+          const SizedBox(height:16),
+          const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
+          const SizedBox(height:24),
+          VeyraSecondaryButton(
+            label:t('Se déconnecter'),
+            icon:Icons.logout,
+            onPressed:loggingOut?null:logout,
+          ),
+        ]);
+      },
+    ),
+  );
+}
+
+/// Coquille de navigation persistante (bottom nav 4 onglets), conforme
+/// aux maquettes C02 et suivantes ("BottomNavigation" listé comme
+/// composant UI). Utilise StatefulShellRoute.indexedStack : chaque
+/// onglet garde sa propre pile de navigation indépendante (évite les
+/// "routes orphelines"/"double page après push" mentionnés dans le
+/// protocole anti-erreurs), et les écrans de flux (adresses, offres,
+/// détail réservation, chat, tracking) restent des routes de niveau
+/// racine poussées PAR-DESSUS la coquille entière, masquant
+/// naturellement la bottom nav pendant ces parcours.
+class AppShell extends StatelessWidget{
+  final StatefulNavigationShell navigationShell;
+  const AppShell({required this.navigationShell,super.key});
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    body:navigationShell,
+    bottomNavigationBar:NavigationBar(
+      selectedIndex:navigationShell.currentIndex,
+      onDestinationSelected:(i)=>navigationShell.goBranch(i,initialLocation:i==navigationShell.currentIndex),
+      destinations:[
+        NavigationDestination(icon:const Icon(Icons.home_outlined),selectedIcon:const Icon(Icons.home),label:t('Accueil')),
+        NavigationDestination(icon:const Icon(Icons.event_note_outlined),selectedIcon:const Icon(Icons.event_note),label:t('Réservations')),
+        NavigationDestination(icon:const Icon(Icons.notifications_outlined),selectedIcon:const Icon(Icons.notifications),label:t('Notifications')),
+        NavigationDestination(icon:const Icon(Icons.person_outline),selectedIcon:const Icon(Icons.person),label:t('Compte')),
+      ],
     ),
   );
 }

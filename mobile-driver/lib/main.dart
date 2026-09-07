@@ -16,8 +16,11 @@ import 'chat_socket.dart';
 import 'app/theme.dart';
 import 'core/formatters/error_messages.dart';
 import 'core/formatters/status_labels.dart';
+import 'core/formatters/date_formatter.dart';
+import 'core/formatters/money_formatter.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/state_views.dart';
+import 'core/widgets/status_badge.dart';
 
 /// Short alias used throughout this file.
 String t(String french) => AppLocale.t(french);
@@ -103,15 +106,35 @@ final router=GoRouter(
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterDriverScreen()),
   GoRoute(path:'/kyc',builder:(c,s)=>const KycScreen()),
-  GoRoute(path:'/home',builder:(c,s)=>const OpportunitiesScreen()),
+  // Coquille de navigation persistante (bottom nav), conforme à D14 :
+  // Demandes/Planning/Revenus/Compte. Notifications et les écrans de
+  // flux (détail demande, course) restent des routes racine poussées
+  // par-dessus la coquille entière.
+  StatefulShellRoute.indexedStack(
+    builder:(c,s,navigationShell)=>AppShell(navigationShell:navigationShell),
+    branches:[
+      StatefulShellBranch(routes:[GoRoute(path:'/home',builder:(c,s)=>const OpportunitiesScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/agenda',builder:(c,s)=>const AgendaScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/wallet',builder:(c,s)=>const WalletScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
+    ],
+  ),
   GoRoute(path:'/request/:id',builder:(c,s)=>RequestScreen(bookingId:s.pathParameters['id']!)),
-  GoRoute(path:'/agenda',builder:(c,s)=>const AgendaScreen()),
   GoRoute(path:'/ride/:id',builder:(c,s)=>RideScreen(bookingId:s.pathParameters['id']!)),
-  GoRoute(path:'/wallet',builder:(c,s)=>const WalletScreen()),
   GoRoute(path:'/chat/:id',builder:(c,s)=>DriverChatScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/notifications',builder:(c,s)=>const DriverNotificationsScreen()),
 ],
   observers:[routeObserver],
+  errorBuilder:(c,s)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+      const Icon(Icons.error_outline,size:48,color:Color(0xFFDC2626)),
+      const SizedBox(height:16),
+      Text(t('Page introuvable'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
+      const SizedBox(height:16),
+      FilledButton(onPressed:()=>c.go('/home'),child:Text(t("Retour à l'accueil"))),
+    ])),
+  ),
 );
 
 class LoginScreen extends StatefulWidget{
@@ -403,6 +426,12 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   // Real gap fixed here: returning from submitting an offer, or from
   // anywhere else, never refreshed the request list -- same stale
   // Future stayed in place until the app was fully closed and reopened.
+  // ATTENTION -- non vérifié sur appareil réel depuis l'introduction du
+  // shell de navigation (LOT 4) : cet écran vit désormais dans le
+  // Navigator imbriqué de sa branche, potentiellement différent du
+  // Navigator racine où /request/:id est réellement poussé/dépilé.
+  // Pull-to-refresh (RefreshIndicator ailleurs) et reload() manuel
+  // restent le filet de sécurité si ce callback ne se déclenche plus.
   @override void didPopNext(){setState((){future=load();});}
   Future<List<dynamic>> load()=>api.opportunities(
     sort:sort,
@@ -415,8 +444,6 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Demandes disponibles')),actions:[
       IconButton(onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_outlined)),
-      IconButton(onPressed:()=>context.push('/agenda'),icon:const Icon(Icons.calendar_month)),
-      IconButton(onPressed:()=>context.push('/wallet'),icon:const Icon(Icons.account_balance_wallet)),
     ]),
     body:RefreshIndicator(
       onRefresh:()async{reload();await future;},
@@ -631,8 +658,12 @@ class _AgendaScreenState extends State<AgendaScreen>{
           final x=Map<String,dynamic>.from(raw as Map);
           return Card(child:ListTile(
             title:Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString()),
-            subtitle:Text((x['scheduled_at']??'').toString()+' • '+(x['status']??'').toString()),
-            trailing:const Icon(Icons.chevron_right),
+            subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+            trailing:Row(mainAxisSize:MainAxisSize.min,children:[
+              VeyraStatusBadge(status:(x['status']??'').toString()),
+              const SizedBox(width:4),
+              const Icon(Icons.chevron_right),
+            ]),
             onTap:()=>context.push('/ride/'+x['id'].toString()),
           ));
         }).toList());
@@ -948,13 +979,16 @@ class _WalletScreenState extends State<WalletScreen>{
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
         if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState((){future=api.wallet();}),child:Text(t('Réessayer'))));
         final x=s.data??{};
-        double money(dynamic v)=>((v??0) as num).toDouble()/100;
         return ListView(padding:const EdgeInsets.all(20),children:[
-          Card(child:ListTile(title:Text(t('À recevoir (ONLINE)')),trailing:Text(money(x['onlinePayableMinor']).toStringAsFixed(2)+' €'))),
-          Card(child:ListTile(title:Text(t('Dette commission CASH')),trailing:Text(money(x['cashDebtMinor']).toStringAsFixed(2)+' €'))),
+          Card(child:ListTile(title:Text(t('À recevoir (ONLINE)')),trailing:Text(VeyraMoneyFormatter.fromMinor(x['onlinePayableMinor'])))),
+          Card(child:ListTile(title:Text(t('Dette commission CASH')),trailing:Text(VeyraMoneyFormatter.fromMinor(x['cashDebtMinor'])))),
           if(x['cashWarning']==true)Card(child:ListTile(
-            leading:Icon(Icons.warning_amber),title:Text(t('Seuil de dette atteint')),
-            subtitle:Text(t('Alerte 50 € • restriction CASH 100 € • blocage CASH 150 €')),
+            leading:const Icon(Icons.warning_amber),title:Text(t('Seuil de dette atteint')),
+            subtitle:Text(
+              t('Alerte')+' ${VeyraMoneyFormatter.fromMinor(x['cashWarningThresholdMinor'])}'
+              ' • '+t('restriction CASH')+' ${VeyraMoneyFormatter.fromMinor(x['cashRestrictedThresholdMinor'])}'
+              ' • '+t('blocage CASH')+' ${VeyraMoneyFormatter.fromMinor(x['cashBlockedThresholdMinor'])}',
+            ),
           )),
         ]);
       },
@@ -962,6 +996,85 @@ class _WalletScreenState extends State<WalletScreen>{
   );
 }
 
+
+/// Écran Compte minimal côté chauffeur : identité, statut KYC, langue,
+/// déconnexion. Miroir de AccountScreen côté client.
+class AccountScreen extends StatefulWidget{
+  const AccountScreen({super.key});
+  @override State<AccountScreen> createState()=>_AccountScreenState();
+}
+class _AccountScreenState extends State<AccountScreen>{
+  late Future<Map<String,dynamic>> future;
+  bool loggingOut=false;
+
+  @override void initState(){super.initState();future=api.me();}
+
+  Future<void> logout()async{
+    setState(()=>loggingOut=true);
+    try{
+      await api.logout();
+    }finally{
+      if(mounted)context.go('/login');
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(
+      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
+      title:Text(t('Mon compte'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
+    ),
+    body:FutureBuilder<Map<String,dynamic>>(
+      future:future,
+      builder:(context,s){
+        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
+        if(s.hasError)return VeyraErrorView(onRetry:()=>setState(()=>future=api.me()));
+        final me=s.data??{};
+        final firstName=(me['first_name']??'').toString();
+        final lastName=(me['last_name']??'').toString();
+        final email=(me['email']??'').toString();
+        return ListView(padding:const EdgeInsets.all(20),children:[
+          Card(child:ListTile(
+            leading:const CircleAvatar(child:Icon(Icons.person)),
+            title:Text('$firstName $lastName'.trim().isEmpty?t('Chauffeur Veyra'):'$firstName $lastName'.trim()),
+            subtitle:Text(email),
+          )),
+          const SizedBox(height:16),
+          const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
+          const SizedBox(height:24),
+          VeyraSecondaryButton(
+            label:t('Se déconnecter'),
+            icon:Icons.logout,
+            onPressed:loggingOut?null:logout,
+          ),
+        ]);
+      },
+    ),
+  );
+}
+
+/// Coquille de navigation persistante chauffeur (bottom nav 4 onglets),
+/// conforme à la maquette D14 : Demandes / Planning / Revenus / Compte.
+/// Notifications reste une route poussée (pas un onglet) -- absent de
+/// la bottom nav sur cette maquette, contrairement à l'app Client.
+class AppShell extends StatelessWidget{
+  final StatefulNavigationShell navigationShell;
+  const AppShell({required this.navigationShell,super.key});
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    body:navigationShell,
+    bottomNavigationBar:NavigationBar(
+      selectedIndex:navigationShell.currentIndex,
+      onDestinationSelected:(i)=>navigationShell.goBranch(i,initialLocation:i==navigationShell.currentIndex),
+      destinations:[
+        NavigationDestination(icon:const Icon(Icons.list_alt_outlined),selectedIcon:const Icon(Icons.list_alt),label:t('Demandes')),
+        NavigationDestination(icon:const Icon(Icons.calendar_month_outlined),selectedIcon:const Icon(Icons.calendar_month),label:t('Planning')),
+        NavigationDestination(icon:const Icon(Icons.account_balance_wallet_outlined),selectedIcon:const Icon(Icons.account_balance_wallet),label:t('Revenus')),
+        NavigationDestination(icon:const Icon(Icons.person_outline),selectedIcon:const Icon(Icons.person),label:t('Compte')),
+      ],
+    ),
+  );
+}
 
 class RegisterDriverScreen extends StatefulWidget{
   const RegisterDriverScreen({super.key});

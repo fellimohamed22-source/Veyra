@@ -90,6 +90,20 @@ class Api {
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);
   }
 
+  // Gap identifié pendant l'audit LOT 4 : contrairement à l'app client,
+  // aucune méthode logout() n'existait côté driver -- il n'y avait donc
+  // aucun moyen propre de se déconnecter (invalidation de la session
+  // serveur + purge du stockage sécurisé local). Miroir exact de
+  // l'implémentation client.
+  Future<void> logout() async {
+    final refresh=await storage.read(key:'refreshToken');
+    if(refresh!=null){
+      try{await dio.post('/api/v1/auth/logout',data:{'refreshToken':refresh,'deviceName':'driver-mobile'});}catch(_){}
+    }
+    _me=null;
+    await storage.deleteAll();
+  }
+
   Future<List<dynamic>> opportunities({
     String sort='date',
     String? categoryId,
