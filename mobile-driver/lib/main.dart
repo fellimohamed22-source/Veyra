@@ -89,7 +89,32 @@ class DriverApp extends StatelessWidget{
   );
 }
 
-final router=GoRouter(initialLocation:'/login',routes:[
+/// Same refresh-on-return pattern as the client app's routeObserver.
+final routeObserver=RouteObserver<PageRoute>();
+
+final router=GoRouter(
+  initialLocation:'/login',
+  // Real gap fixed here: tokens were already correctly persisted, but
+  // nothing checked for one at startup, so a valid session was
+  // discarded every time the app was closed and reopened. Mirrors the
+  // exact same approved/kyc decision LoginScreen already makes right
+  // after a fresh login, rather than a simpler-but-wrong plain
+  // redirect to /home regardless of KYC status.
+  redirect:(context,state)async{
+    if(state.matchedLocation=='/login'){
+      final token=await api.storage.read(key:'accessToken');
+      if(token==null)return null;
+      try{
+        final status=await api.onboardingStatus();
+        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+        return approved?'/home':'/kyc';
+      }catch(_){
+        return '/kyc';
+      }
+    }
+    return null;
+  },
+  routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterDriverScreen()),
   GoRoute(path:'/kyc',builder:(c,s)=>const KycScreen()),
@@ -100,7 +125,9 @@ final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/wallet',builder:(c,s)=>const WalletScreen()),
   GoRoute(path:'/chat/:id',builder:(c,s)=>DriverChatScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/notifications',builder:(c,s)=>const DriverNotificationsScreen()),
-]);
+],
+  observers:[routeObserver],
+);
 
 class LoginScreen extends StatefulWidget{
   const LoginScreen({super.key});
@@ -343,7 +370,7 @@ class OpportunitiesScreen extends StatefulWidget{
   const OpportunitiesScreen({super.key});
   @override State<OpportunitiesScreen> createState()=>_OpportunitiesScreenState();
 }
-class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
+class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAware{
   String sort='date';
   final pickupFilter=TextEditingController();
   final destinationFilter=TextEditingController();
@@ -351,6 +378,15 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen>{
   late Future<List<dynamic>> future;
 
   @override void initState(){super.initState();future=load();}
+  @override void didChangeDependencies(){
+    super.didChangeDependencies();
+    routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
+  }
+  @override void dispose(){routeObserver.unsubscribe(this);super.dispose();}
+  // Real gap fixed here: returning from submitting an offer, or from
+  // anywhere else, never refreshed the request list -- same stale
+  // Future stayed in place until the app was fully closed and reopened.
+  @override void didPopNext(){setState((){future=load();});}
   Future<List<dynamic>> load()=>api.opportunities(
     sort:sort,
     pickupQuery:pickupFilter.text,

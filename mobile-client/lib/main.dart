@@ -109,7 +109,28 @@ class App extends StatelessWidget{
   );
 }
 
-final router=GoRouter(initialLocation:'/login',routes:[
+/// Lets a screen refresh itself when the user navigates back to it from
+/// a pushed screen -- fixes pages not refreshing when returning to them
+/// without leaving and reopening the whole app.
+final routeObserver=RouteObserver<PageRoute>();
+
+final router=GoRouter(
+  initialLocation:'/login',
+  // Real gap fixed here: tokens were already correctly persisted via
+  // flutter_secure_storage (which survives closing the app), but
+  // nothing ever checked for one at startup -- the app always opened
+  // on the login screen regardless, forcing a fresh login every single
+  // time even with a perfectly valid stored session. Only checked when
+  // landing on /login specifically, so an intentional logout (which
+  // clears storage) never bounces straight back to /home.
+  redirect:(context,state)async{
+    if(state.matchedLocation=='/login'){
+      final token=await api.storage.read(key:'accessToken');
+      if(token!=null)return '/home';
+    }
+    return null;
+  },
+  routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterScreen()),
   GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
@@ -121,7 +142,9 @@ final router=GoRouter(initialLocation:'/login',routes:[
   GoRoute(path:'/chat/:id',builder:(c,s)=>ChatScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/live/:id',builder:(c,s)=>LiveLocationScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/notifications',builder:(c,s)=>const NotificationsScreen()),
-]);
+],
+  observers:[routeObserver],
+);
 
 /// Consistent, mockup-matching field styling (filled white, rounded,
 /// optional leading icon) -- reused across every form in the app rather
@@ -229,10 +252,22 @@ class HomeScreen extends StatefulWidget{
   const HomeScreen({super.key});
   @override State<HomeScreen> createState()=>_HomeScreenState();
 }
-class _HomeScreenState extends State<HomeScreen>{
+class _HomeScreenState extends State<HomeScreen> with RouteAware{
   late Future<List<dynamic>> future;
   @override void initState(){super.initState();future=api.bookings();}
   void retry()=>setState(()=>future=api.bookings());
+
+  @override void didChangeDependencies(){
+    super.didChangeDependencies();
+    routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
+  }
+  @override void dispose(){routeObserver.unsubscribe(this);super.dispose();}
+  // Real gap fixed here: returning to Home after creating a booking,
+  // accepting an offer, or completing a payment never refreshed the
+  // list -- the same stale Future stayed in place until the whole app
+  // was closed and reopened. didPopNext fires precisely when a screen
+  // pushed on top of this one is popped back to it.
+  @override void didPopNext(){retry();}
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
