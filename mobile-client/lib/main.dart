@@ -125,8 +125,15 @@ final router=GoRouter(
   // clears storage) never bounces straight back to /home.
   redirect:(context,state)async{
     if(state.matchedLocation=='/login'){
-      final token=await api.storage.read(key:'accessToken');
-      if(token!=null)return '/home';
+      try{
+        final token=await api.storage.read(key:'accessToken');
+        if(token!=null)return '/home';
+      }catch(_){
+        // flutter_secure_storage has no real platform backend under
+        // `flutter test` (or if secure storage is genuinely
+        // unavailable on a real device) -- treated the same as no
+        // token found, never as a reason to break routing entirely.
+      }
     }
     return null;
   },

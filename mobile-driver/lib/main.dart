@@ -102,7 +102,14 @@ final router=GoRouter(
   // redirect to /home regardless of KYC status.
   redirect:(context,state)async{
     if(state.matchedLocation=='/login'){
-      final token=await api.storage.read(key:'accessToken');
+      String? token;
+      try{
+        token=await api.storage.read(key:'accessToken');
+      }catch(_){
+        // Same reasoning as the client app: no real secure-storage
+        // backend under `flutter test`, treated as no token found.
+        return null;
+      }
       if(token==null)return null;
       try{
         final status=await api.onboardingStatus();
