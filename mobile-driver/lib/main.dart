@@ -273,12 +273,12 @@ class _KycScreenState extends State<KycScreen>{
     if(legalName.text.trim().isEmpty||registrationNumber.text.trim().isEmpty||
        cardNumber.text.trim().isEmpty||brand.text.trim().isEmpty||
        model.text.trim().isEmpty||plate.text.trim().isEmpty||categoryId==null){
-      setState(()=>message='Complétez les informations professionnelles et le véhicule.');
+      setState(()=>message=t('Complétez les informations professionnelles et le véhicule.'));
       return;
     }
     final parsedYear=int.tryParse(year.text);
     if(parsedYear==null){
-      setState(()=>message='Année du véhicule invalide.');
+      setState(()=>message=t('Année du véhicule invalide.'));
       return;
     }
     setState((){saving=true;message=null;});
@@ -300,7 +300,7 @@ class _KycScreenState extends State<KycScreen>{
         plateNumber:plate.text.trim(),
         color:color.text.trim(),
       );
-      if(mounted)setState(()=>message='Informations professionnelles enregistrées.');
+      if(mounted)setState(()=>message=t('Informations professionnelles enregistrées.'));
     }catch(e){
       if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
     }finally{
@@ -531,7 +531,7 @@ class _RequestScreenState extends State<RequestScreen>{
 
   Future<void> submit()async{
     final euros=double.tryParse(amount.text.replaceAll(',','.'));
-    if(euros==null||euros<=0){setState(()=>error='Saisissez un prix valide.');return;}
+    if(euros==null||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
     setState((){sending=true;error=null;});
     try{
       final result=await api.offer(widget.bookingId,(euros*100).round());
@@ -713,7 +713,7 @@ class _RideScreenState extends State<RideScreen>{
 
   Future<bool> ensureLocationPermission()async{
     if(!await Geolocator.isLocationServiceEnabled()){
-      if(mounted)setState(()=>error='Activez la localisation du téléphone.');
+      if(mounted)setState(()=>error=t('Activez la localisation du téléphone.'));
       return false;
     }
     var permission=await Geolocator.checkPermission();
@@ -721,7 +721,7 @@ class _RideScreenState extends State<RideScreen>{
       permission=await Geolocator.requestPermission();
     }
     if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
-      if(mounted)setState(()=>error='La localisation est obligatoire pendant la prise en charge et la course.');
+      if(mounted)setState(()=>error=t('La localisation est obligatoire pendant la prise en charge et la course.'));
       return false;
     }
     return true;
@@ -750,7 +750,7 @@ class _RideScreenState extends State<RideScreen>{
         await refreshEta(p);
       }
     }catch(_){
-      if(mounted)setState(()=>error='Position GPS momentanément indisponible.');
+      if(mounted)setState(()=>error=t('Position GPS momentanément indisponible.'));
     }
   }
 
@@ -1079,7 +1079,7 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
 
   Future<void> submit()async{
     if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
-      setState(()=>error='Prénom, e-mail et mot de passe de 10 caractères minimum requis.');
+      setState(()=>error=t('Prénom, e-mail et mot de passe de 10 caractères minimum requis.'));
       return;
     }
     setState((){loading=true;error=null;});
@@ -1095,7 +1095,7 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
       await configureDriverPush();
       if(mounted)context.go('/kyc');
     }catch(_){
-      if(mounted)setState(()=>error='Création du compte impossible.');
+      if(mounted)setState(()=>error=t('Création du compte impossible.'));
     }finally{
       if(mounted)setState(()=>loading=false);
     }

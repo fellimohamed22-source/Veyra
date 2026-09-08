@@ -649,7 +649,7 @@ class _AddressScreenState extends State<AddressScreen>{
       final r=await api.autocomplete(q);
       if(mounted)setState((){if(isPickup)pickupResults=r;else dropoffResults=r;});
     }catch(_){
-      if(mounted)setState(()=>error='Recherche d’adresse indisponible.');
+      if(mounted)setState(()=>error=t('Recherche d’adresse indisponible.'));
     }finally{
       if(mounted)setState((){if(isPickup)loadingPickup=false;else loadingDropoff=false;});
     }
@@ -657,7 +657,7 @@ class _AddressScreenState extends State<AddressScreen>{
 
   Future<void> useMyLocation()async{
     if(!await Geolocator.isLocationServiceEnabled()){
-      if(mounted)setState(()=>error='Activez la localisation du téléphone.');
+      if(mounted)setState(()=>error=t('Activez la localisation du téléphone.'));
       return;
     }
     var permission=await Geolocator.checkPermission();
@@ -665,7 +665,7 @@ class _AddressScreenState extends State<AddressScreen>{
       permission=await Geolocator.requestPermission();
     }
     if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
-      if(mounted)setState(()=>error='La localisation est nécessaire pour utiliser votre position actuelle.');
+      if(mounted)setState(()=>error=t('La localisation est nécessaire pour utiliser votre position actuelle.'));
       return;
     }
     setState(()=>locating=true);
@@ -675,7 +675,7 @@ class _AddressScreenState extends State<AddressScreen>{
       );
       final place=await api.reverseGeocode(p.latitude,p.longitude);
       if(place==null){
-        if(mounted)setState(()=>error='Aucune adresse trouvée pour votre position actuelle.');
+        if(mounted)setState(()=>error=t('Aucune adresse trouvée pour votre position actuelle.'));
         return;
       }
       if(mounted)setState((){
@@ -684,7 +684,7 @@ class _AddressScreenState extends State<AddressScreen>{
         pickupResults=[];
       });
     }catch(_){
-      if(mounted)setState(()=>error='Impossible d’obtenir votre position actuelle.');
+      if(mounted)setState(()=>error=t('Impossible d’obtenir votre position actuelle.'));
     }finally{
       if(mounted)setState(()=>locating=false);
     }
@@ -764,11 +764,11 @@ class _AddressScreenState extends State<AddressScreen>{
 
   Future<void> publish()async{
     if(pickupPlace==null||dropoffPlace==null||scheduledAt==null||categoryId==null){
-      setState(()=>error='Complétez le trajet, la date et la catégorie.');
+      setState(()=>error=t('Complétez le trajet, la date et la catégorie.'));
       return;
     }
     if(scheduledAt!.difference(DateTime.now())<const Duration(hours:2)){
-      setState(()=>error='Le départ doit être planifié au moins 2 heures à l’avance.');
+      setState(()=>error=t('Le départ doit être planifié au moins 2 heures à l’avance.'));
       return;
     }
     setState((){submitting=true;error=null;});
@@ -995,13 +995,13 @@ class _PaymentScreenState extends State<PaymentScreen>{
 
   @override void initState(){
     super.initState();
-    api.bookingDetail(widget.bookingId).then((v){if(mounted)setState(()=>booking=v);}).catchError((_){if(mounted)setState(()=>error='Impossible de charger le paiement.');});
+    api.bookingDetail(widget.bookingId).then((v){if(mounted)setState(()=>booking=v);}).catchError((_){if(mounted)setState(()=>error=t('Impossible de charger le paiement.'));});
   }
 
   Future<void> pay()async{
     const publishableKey=String.fromEnvironment('STRIPE_PUBLISHABLE_KEY',defaultValue:'');
     if(publishableKey.isEmpty){
-      setState(()=>error='Paiement en ligne non configuré sur cette version.');
+      setState(()=>error=t('Paiement en ligne non configuré sur cette version.'));
       return;
     }
     setState((){loading=true;error=null;});
@@ -1017,7 +1017,7 @@ class _PaymentScreenState extends State<PaymentScreen>{
       await Stripe.instance.presentPaymentSheet();
       if(mounted)context.go('/home');
     }catch(_){
-      if(mounted)setState(()=>error='Le paiement n’a pas été finalisé.');
+      if(mounted)setState(()=>error=t('Le paiement n’a pas été finalisé.'));
     }finally{
       if(mounted)setState(()=>loading=false);
     }
@@ -1070,7 +1070,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
       final value=await api.pin(widget.bookingId);
       if(mounted)setState(()=>pin=value);
     }catch(_){
-      if(mounted)setState(()=>message='Le PIN sera disponible à H-1.');
+      if(mounted)setState(()=>message=t('Le PIN sera disponible à H-1.'));
     }
   }
 
@@ -1385,7 +1385,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       if(mounted)setState((){location=value;error=null;});
       await refreshEta();
     }catch(_){
-      if(mounted)setState(()=>error='Position en cours de mise à jour.');
+      if(mounted)setState(()=>error=t('Position en cours de mise à jour.'));
     }
   }
 
@@ -1481,7 +1481,7 @@ class _RegisterScreenState extends State<RegisterScreen>{
 
   Future<void> submit()async{
     if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
-      setState((){error='Prénom, e-mail et mot de passe de 10 caractères minimum requis.';offline=false;});
+      setState((){error=t('Prénom, e-mail et mot de passe de 10 caractères minimum requis.');offline=false;});
       return;
     }
     setState((){loading=true;error=null;offline=false;});
@@ -1545,9 +1545,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
     setState((){loading=true;message=null;});
     try{
       await api.forgotPassword(email.text);
-      if(mounted)setState(()=>message='Si cet e-mail existe, les instructions de réinitialisation ont été envoyées.');
+      if(mounted)setState(()=>message=t('Si cet e-mail existe, les instructions de réinitialisation ont été envoyées.'));
     }catch(_){
-      if(mounted)setState(()=>message='Impossible d’envoyer la demande pour le moment.');
+      if(mounted)setState(()=>message=t('Impossible d’envoyer la demande pour le moment.'));
     }finally{
       if(mounted)setState(()=>loading=false);
     }
