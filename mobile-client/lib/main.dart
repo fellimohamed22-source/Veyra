@@ -1056,6 +1056,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   String? message;
   int ratingScore=0;
   bool ratingSubmitting=false;
+  bool cancelling=false;
   bool ratingSubmitted=false;
 
   @override void initState(){
@@ -1091,12 +1092,16 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   }
 
   Future<void> cancel()async{
+    if(cancelling)return;
+    setState(()=>cancelling=true);
     try{
       final result=await api.cancel(widget.bookingId);
       if(mounted)setState(()=>message=t('Réservation annulée. Frais éventuels : ')+VeyraMoneyFormatter.fromMinor(result['cancellationFeeMinor']));
       reload();
     }catch(e){
       if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
+    }finally{
+      if(mounted)setState(()=>cancelling=false);
     }
   }
 
@@ -1140,7 +1145,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             FilledButton.icon(onPressed:()=>context.push('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:Text(t('Suivre la course'))),
           if(status=='CONFIRMED'||status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED')...[
             OutlinedButton(onPressed:loadPin,child:Text(pin==null?t('Afficher le PIN'):t('PIN : ')+pin!)),
-            TextButton(onPressed:cancel,child:Text(t('Annuler la réservation'))),
+            TextButton(onPressed:cancelling?null:cancel,child:Text(cancelling?t('Annulation…'):t('Annuler la réservation'))),
           ],
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[

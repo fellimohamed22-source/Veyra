@@ -123,6 +123,7 @@ class AppLocale {
     'PIN : ': 'PIN: ',
     'Le PIN sera disponible à H-1.': 'The PIN will be available 1 hour before pickup.',
     'Annuler la réservation': 'Cancel the booking',
+    'Annulation…': 'Cancelling…',
     'Réservation annulée. Frais éventuels : ': 'Booking cancelled. Any fee: ',
     'Annulation impossible dans l’état actuel.': 'Cancellation isn\'t possible in the current state.',
     'Noter le chauffeur': 'Rate the driver',
