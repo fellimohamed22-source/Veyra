@@ -37,7 +37,7 @@ public class FinanceOpsController {
     if(amountMinor<=0) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_SETTLEMENT_AMOUNT");
 
     Map<String,Object> debt=db.queryForMap(
-        "select booking_id,amount_minor,paid_amount_minor,currency from driver_platform_debts where id=? for update",
+        "select amount_minor,paid_amount_minor,currency from driver_platform_debts where id=? for update",
         id);
     long total=((Number)debt.get("amount_minor")).longValue();
     long paid=((Number)debt.get("paid_amount_minor")).longValue();
@@ -51,7 +51,7 @@ public class FinanceOpsController {
     audit("DRIVER_CASH_DEBT_SETTLED","DRIVER_PLATFORM_DEBT",id);
 
     if(actuallyApplied>0){
-      ledger.post("DRIVER_CASH_DEBT_SETTLED",(UUID)debt.get("booking_id"),"Driver remitted cash commission owed",(String)debt.get("currency"),List.of(
+      ledger.post("DRIVER_CASH_DEBT_SETTLED",null,"Driver remitted cash commission owed",(String)debt.get("currency"),List.of(
           LedgerService.Entry.debit("CASH_ON_HAND",actuallyApplied),
           LedgerService.Entry.credit("DRIVER_PLATFORM_DEBT",actuallyApplied)));
     }
@@ -128,7 +128,7 @@ public class FinanceOpsController {
   @Transactional
   public void markPayablePaid(@PathVariable UUID id){
     List<Map<String,Object>> rows=db.queryForList(
-        "select booking_id,amount_minor,currency from driver_payables where id=? and status='PAYABLE' for update",
+        "select amount_minor,currency from driver_payables where id=? and status='PAYABLE' for update",
         id);
     if(rows.isEmpty()) throw new ApiException(HttpStatus.CONFLICT,"PAYABLE_NOT_AVAILABLE");
     Map<String,Object> payable=rows.getFirst();
@@ -136,7 +136,7 @@ public class FinanceOpsController {
     db.update("update driver_payables set status='PAID' where id=?",id);
     audit("DRIVER_PAYABLE_PAID","DRIVER_PAYABLE",id);
 
-    ledger.post("DRIVER_PAYABLE_PAID",(UUID)payable.get("booking_id"),"Driver payable paid out",(String)payable.get("currency"),List.of(
+    ledger.post("DRIVER_PAYABLE_PAID",null,"Driver payable paid out",(String)payable.get("currency"),List.of(
         LedgerService.Entry.debit("DRIVER_PAYABLE",((Number)payable.get("amount_minor")).longValue()),
         LedgerService.Entry.credit("CASH_ON_HAND",((Number)payable.get("amount_minor")).longValue())));
   }
