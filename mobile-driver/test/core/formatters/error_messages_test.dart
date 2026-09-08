@@ -8,7 +8,7 @@ void main() {
   // synchronisé plutôt que de laisser dériver silencieusement.
   const officialFrenchMapping = {
     'LEAD_TIME_TOO_SHORT': "Choisissez un départ au moins 2 heures à l'avance.",
-    'PICKUP_OUTSIDE_SERVICE_ZONE': "Cette adresse de départ n'est pas encore desservie par Veyra.",
+    'PICKUP_OUTSIDE_SERVICE_ZONE': "Cette adresse de départ est hors de la zone pilote actuelle (Sud de la France, Marseille - Menton).",
     'OFFERS_CLOSED': "Cette demande n'accepte plus de nouvelles offres.",
     'BOOKING_OFFERS_CLOSED': "Cette demande n'accepte plus de nouvelles offres.",
     'ACTIVE_OFFER_EXISTS': "Vous avez déjà une offre active pour cette demande.",
