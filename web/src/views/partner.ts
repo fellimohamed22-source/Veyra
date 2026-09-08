@@ -2,6 +2,7 @@ import {CommonModule} from '@angular/common';
 import {Component,OnInit} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {Api} from '../api';
+import {statusLabel,paymentMethodLabel,partnerOrgStatusLabel,money,dateTime,errorMessage} from '../formatters';
 
 @Component({
   standalone:true,
@@ -19,7 +20,7 @@ import {Api} from '../api';
             <select [(ngModel)]="selectedOrganizationId">
               <option value="">Choisir une organisation</option>
               <option *ngFor="let organization of organizations" [value]="organization.id">
-                {{organization.name}} • {{organization.status}}
+                {{organization.name}} • {{partnerOrgStatusLabel(organization.status)}}
               </option>
             </select>
             <button (click)="useOrganization()" [disabled]="!selectedOrganizationId">Ouvrir</button>
@@ -93,7 +94,7 @@ import {Api} from '../api';
         <p *ngIf="bookings.length===0">Aucune réservation.</p>
         <div *ngFor="let b of bookings" style="border-top:1px solid #e5e7eb;padding:12px 0">
           <strong>{{b.pickup_address}} → {{b.dropoff_address}}</strong>
-          <div>{{b.scheduled_at}} • {{b.status}} • {{b.payment_method}}</div>
+          <div>{{dateTime(b.scheduled_at)}} • {{statusLabel(b.status)}} • {{paymentMethodLabel(b.payment_method)}}</div>
           <button *ngIf="b.status==='OPEN_FOR_OFFERS'||b.status==='OFFERS_RECEIVED'" (click)="loadOffers(b.id)">Voir les offres</button>
         </div>
       </div>
@@ -103,15 +104,16 @@ import {Api} from '../api';
         <p>Le partenaire voit toutes les offres ; les chauffeurs ne voient jamais les offres concurrentes.</p>
         <p *ngIf="offers.length===0">Aucune offre active.</p>
         <div *ngFor="let o of offers" style="border-top:1px solid #e5e7eb;padding:12px 0">
-          <strong>{{o.totalMinor/100}} € total</strong>
+          <strong>{{money(o.totalMinor)}} total</strong>
           <div>{{o.driverFirstName||'Chauffeur'}} • {{o.vehicleCategory||'VTC'}} • {{o.vehicleBrand||''}} {{o.vehicleModel||''}}</div>
-          <div>Prix chauffeur {{o.driverPriceMinor/100}} € • note {{o.rating}}</div>
-          <button (click)="accept(o.offerId)">Choisir ce chauffeur</button>
+          <div>Prix chauffeur {{money(o.driverPriceMinor)}} • note {{o.rating}}</div>
+          <button (click)="accept(o.offerId)" [disabled]="accepting">{{accepting?'Sélection…':'Choisir ce chauffeur'}}</button>
+          <p *ngIf="acceptError" style="color:#dc2626">{{acceptError}}</p>
         </div>
       </div>
 
       <div class="card" *ngIf="partnerId">
-        <h3>PARTNER_INVOICE</h3>
+        <h3>Facturation partenaire</h3>
         <p>Activé uniquement après validation Veyra et attribution d’un plafond de crédit.</p>
         <button (click)="loadFinance()">Voir l'encours</button>
         <pre *ngIf="finance">{{finance | json}}</pre>
@@ -120,6 +122,15 @@ import {Api} from '../api';
   `
 })
 export class Partner implements OnInit{
+  // Angular templates ne voient que les membres de l'instance -- on
+  // expose donc les fonctions importées telles quelles plutôt que
+  // d'écrire des wrappers redondants.
+  statusLabel=statusLabel;
+  paymentMethodLabel=paymentMethodLabel;
+  partnerOrgStatusLabel=partnerOrgStatusLabel;
+  money=money;
+  dateTime=dateTime;
+
   name='';type='HOTEL';billingEmail='';
   partnerId=localStorage.getItem('partnerId')||'';
   organizations:any[]=[];
@@ -133,6 +144,7 @@ export class Partner implements OnInit{
   scheduledAt='';categoryId='';paymentMethod='CASH';passengerCount=1;baggageCount=0;
   categories:any[]=[];bookings:any[]=[];offers:any[]=[];
   selectedBookingId='';
+  accepting=false;acceptError='';
   finance:any=null;
   publishing=false;publishMessage='';
 
@@ -230,7 +242,7 @@ export class Partner implements OnInit{
       this.publishMessage='Demande publiée. Les chauffeurs éligibles vont être notifiés.';
       await this.loadBookings();
     }catch(e:any){
-      this.publishMessage='Publication impossible : '+(e?.code||'erreur');
+      this.publishMessage=errorMessage(e?.code);
     }finally{this.publishing=false;}
   }
 
@@ -244,10 +256,17 @@ export class Partner implements OnInit{
   }
 
   async accept(offerId:string){
-    if(!this.selectedBookingId)return;
-    await this.api.acceptOffer(this.selectedBookingId,offerId);
-    this.offers=[];
-    await this.loadBookings();
+    if(!this.selectedBookingId||this.accepting)return;
+    this.accepting=true;this.acceptError='';
+    try{
+      await this.api.acceptOffer(this.selectedBookingId,offerId);
+      this.offers=[];
+      await this.loadBookings();
+    }catch(e:any){
+      this.acceptError=errorMessage(e?.code);
+    }finally{
+      this.accepting=false;
+    }
   }
 
   async loadFinance(){

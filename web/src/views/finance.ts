@@ -2,6 +2,7 @@ import {CommonModule} from '@angular/common';
 import {Component,OnInit} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {Api} from '../api';
+import {money} from '../formatters';
 
 @Component({
   standalone:true,
@@ -15,7 +16,7 @@ import {Api} from '../api';
         <h3>Dettes CASH</h3>
         <p *ngIf="!debts.length">Aucune dette.</p>
         <div *ngFor="let d of debts" style="margin-bottom:14px">
-          <div>Chauffeur {{d.driver_id}} — {{d.amount_minor/100}} € — {{d.status}}</div>
+          <div>Chauffeur {{d.driver_id}} — {{money(d.amount_minor)}} — {{d.status}}</div>
           <button (click)="settle(d)">Marquer réglée</button>
         </div>
       </div>
@@ -23,7 +24,7 @@ import {Api} from '../api';
         <h3>Créances Client / annulation CASH</h3>
         <p *ngIf="!customerDebts.length">Aucune créance.</p>
         <div *ngFor="let d of customerDebts" style="margin-bottom:14px">
-          <div>{{d.email}} — {{(d.amount_minor-d.paid_amount_minor)/100}} € restant — {{d.status}}</div>
+          <div>{{d.email}} — {{money(d.amount_minor-d.paid_amount_minor)}} restant — {{d.status}}</div>
           <button *ngIf="d.status!=='PAID'" (click)="settleCustomer(d)">Marquer réglée</button>
         </div>
       </div>
@@ -31,7 +32,7 @@ import {Api} from '../api';
         <h3>Payables Chauffeurs</h3>
         <p *ngIf="!payables.length">Aucun payable.</p>
         <div *ngFor="let p of payables" style="margin-bottom:14px">
-          <span>{{p.driver_id}} — {{p.amount_minor/100}} € — {{p.status}}</span>
+          <span>{{p.driver_id}} — {{money(p.amount_minor)}} — {{p.status}}</span>
           <button *ngIf="p.status==='PAYABLE'" (click)="markPaid(p)">Marquer payé</button>
         </div>
       </div>
@@ -52,6 +53,7 @@ import {Api} from '../api';
     </div>`
 })
 export class Finance implements OnInit{
+  money=money;
   debts:any[]=[];customerDebts:any[]=[];payables:any[]=[];loading=false;error='';
   invoicePartnerId='';invoiceFrom='';invoiceTo='';invoiceLoading=false;invoiceResult:any=null;
   constructor(private api:Api){}

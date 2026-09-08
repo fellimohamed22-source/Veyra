@@ -2,6 +2,7 @@ import {CommonModule} from '@angular/common';
 import {Component,OnInit} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {Api} from '../api';
+import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel} from '../formatters';
 
 @Component({
   standalone:true,
@@ -23,7 +24,7 @@ import {Api} from '../api';
       <p *ngIf="drivers.length===0">Aucun chauffeur.</p>
       <div *ngFor="let d of drivers" style="border-top:1px solid #e5e7eb;padding:12px 0">
         <strong>{{d.first_name}} {{d.last_name}}</strong>
-        <div>{{d.email}} • {{d.phone||'sans téléphone'}} • {{d.kyc_status}}</div>
+        <div>{{d.email}} • {{d.phone||'sans téléphone'}} • {{kycStatusLabel(d.kyc_status)}}</div>
         <button *ngIf="d.kyc_status!=='APPROVED'" (click)="approveDriver(d.id)">Approuver</button>
         <button *ngIf="d.kyc_status!=='APPROVED'" (click)="rejectDriver(d.id)">Rejeter</button>
       </div>
@@ -119,9 +120,9 @@ import {Api} from '../api';
         <tbody>
           <tr *ngFor="let b of bookings">
             <td>{{b.pickup_address}} → {{b.dropoff_address}}</td>
-            <td>{{b.scheduled_at}}</td>
-            <td>{{b.status}}</td>
-            <td>{{b.payment_method}}</td>
+            <td>{{dateTime(b.scheduled_at)}}</td>
+            <td>{{statusLabel(b.status)}}</td>
+            <td>{{paymentMethodLabel(b.payment_method)}}</td>
           </tr>
         </tbody>
       </table>
@@ -129,6 +130,11 @@ import {Api} from '../api';
   `
 })
 export class Admin implements OnInit{
+  statusLabel=statusLabel;
+  paymentMethodLabel=paymentMethodLabel;
+  dateTime=dateTime;
+  kycStatusLabel=kycStatusLabel;
+
   dashboard:any=null;
   bookings:any[]=[];
   drivers:any[]=[];
