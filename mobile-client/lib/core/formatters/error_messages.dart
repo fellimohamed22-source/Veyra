@@ -22,7 +22,7 @@ class VeyraErrorMessages {
 
   static const Map<String, String> _fr = {
     'LEAD_TIME_TOO_SHORT': "Choisissez un départ au moins 2 heures à l'avance.",
-    'PICKUP_OUTSIDE_SERVICE_ZONE': "Cette adresse de départ n'est pas encore desservie par Veyra.",
+    'PICKUP_OUTSIDE_SERVICE_ZONE': "Cette adresse de départ est hors de la zone pilote actuelle (Sud de la France, Marseille - Menton).",
     'OFFERS_CLOSED': "Cette demande n'accepte plus de nouvelles offres.",
     'BOOKING_OFFERS_CLOSED': "Cette demande n'accepte plus de nouvelles offres.",
     'ACTIVE_OFFER_EXISTS': "Vous avez déjà une offre active pour cette demande.",
@@ -52,7 +52,7 @@ class VeyraErrorMessages {
 
   static const Map<String, String> _en = {
     'LEAD_TIME_TOO_SHORT': 'Choose a pickup time at least 2 hours from now.',
-    'PICKUP_OUTSIDE_SERVICE_ZONE': "This pickup address isn't covered by Veyra yet.",
+    'PICKUP_OUTSIDE_SERVICE_ZONE': "This pickup address is outside the current pilot zone (South of France, Marseille-Menton).",
     'OFFERS_CLOSED': 'This request no longer accepts new offers.',
     'BOOKING_OFFERS_CLOSED': 'This request no longer accepts new offers.',
     'ACTIVE_OFFER_EXISTS': 'You already have an active offer on this request.',

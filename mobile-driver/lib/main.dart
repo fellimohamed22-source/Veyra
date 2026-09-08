@@ -301,8 +301,8 @@ class _KycScreenState extends State<KycScreen>{
         color:color.text.trim(),
       );
       if(mounted)setState(()=>message='Informations professionnelles enregistrées.');
-    }catch(_){
-      if(mounted)setState(()=>message='Impossible d’enregistrer les informations professionnelles.');
+    }catch(e){
+      if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
     }finally{
       if(mounted)setState(()=>saving=false);
     }
@@ -321,8 +321,8 @@ class _KycScreenState extends State<KycScreen>{
         message=t('Document envoyé. Il sera vérifié par Veyra.');
         future=api.onboardingStatus();
       });
-    }catch(_){
-      if(mounted)setState(()=>message='Échec de l’envoi du document.');
+    }catch(e){
+      if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
     }finally{
       if(mounted)setState(()=>uploadingType=null);
     }

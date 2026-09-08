@@ -46,6 +46,7 @@ const KYC_STATUS_FR: Record<string,string> = {
 // plus les codes réels rencontrés en pratique et vérifiés dans le backend.
 const ERROR_MESSAGES_FR: Record<string,string> = {
   LEAD_TIME_TOO_SHORT: "Choisissez un départ au moins 2 heures à l'avance.",
+  PICKUP_OUTSIDE_SERVICE_ZONE: "Cette adresse de départ est hors de la zone pilote actuelle (Sud de la France, Marseille - Menton).",
   PICKUP_OUTSIDE_SERVICE_ZONE: "Cette adresse de départ n'est pas encore desservie par Veyra.",
   OFFERS_CLOSED: "Cette demande n'accepte plus de nouvelles offres.",
   BOOKING_OFFERS_CLOSED: "Cette demande n'accepte plus de nouvelles offres.",

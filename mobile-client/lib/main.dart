@@ -793,10 +793,7 @@ class _AddressScreenState extends State<AddressScreen>{
       });
       if(mounted)context.go('/home');
     }on DioException catch(e){
-      final code=(e.response?.data is Map)?(e.response?.data as Map)['code']?.toString():null;
-      if(mounted)setState(()=>error=code=='PICKUP_OUTSIDE_SERVICE_ZONE'
-        ?t('Cette adresse de départ est hors de la zone de service actuelle (Marseille → Menton).')
-        :t('La réservation n’a pas pu être publiée. Vérifiez les informations puis réessayez.')+(code==null?'':' ($code)'));
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }catch(_){
       if(mounted)setState(()=>error=t('La réservation n’a pas pu être publiée. Vérifiez les informations puis réessayez.'));
     }finally{
