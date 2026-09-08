@@ -1346,7 +1346,7 @@ class _ChatScreenState extends State<ChatScreen>{
             const SizedBox(width:8),
             CircleAvatar(radius:22,backgroundColor:scheme.primary,child:sending
               ?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
-              :IconButton(onPressed:send,icon:const Icon(Icons.send,color:Colors.white,size:20)),
+              :IconButton(onPressed:send,tooltip:t('Envoyer'),icon:const Icon(Icons.send,color:Colors.white,size:20)),
             ),
           ]),
         )),

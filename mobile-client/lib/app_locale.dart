@@ -68,6 +68,7 @@ class AppLocale {
     'Planifiez votre trajet': 'Plan your trip',
     'Nouvelle réservation': 'New booking',
     'Mes réservations': 'My bookings',
+    'Envoyer': 'Send',
     'Bonjour !': 'Hello!',
     'Bonjour': 'Hello',
     'Où souhaitez-vous aller ?': 'Where would you like to go?',

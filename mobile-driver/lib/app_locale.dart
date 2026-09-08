@@ -81,6 +81,8 @@ class AppLocale {
     'Statut': 'Status',
     'Accéder aux demandes': 'Access requests',
     'Demandes disponibles': 'Available requests',
+    'Téléverser': 'Upload',
+    'Envoyer': 'Send',
     'Mes offres': 'My offers',
     'Aucune offre dans cette catégorie.': 'No offers in this category.',
     'En attente': 'Pending',

@@ -393,7 +393,7 @@ class _KycScreenState extends State<KycScreen>{
               subtitle:Text(t('PDF, JPG ou PNG — 10 Mo max')),
               trailing:uploadingType==item.$1
                 ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2))
-                :IconButton(onPressed:()=>upload(item.$1),icon:const Icon(Icons.upload_file)),
+                :IconButton(onPressed:()=>upload(item.$1),tooltip:t('Téléverser'),icon:const Icon(Icons.upload_file)),
             )),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
           if(approved)FilledButton(onPressed:()=>context.go('/home'),child:Text(t('Accéder aux demandes'))),
@@ -445,7 +445,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Demandes disponibles')),actions:[
       IconButton(onPressed:()=>context.push('/driver/offers'),icon:const Icon(Icons.local_offer_outlined),tooltip:t('Mes offres')),
-      IconButton(onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_outlined)),
+      IconButton(onPressed:()=>context.push('/notifications'),tooltip:t('Notifications'),icon:const Icon(Icons.notifications_outlined)),
     ]),
     body:RefreshIndicator(
       onRefresh:()async{reload();await future;},
@@ -1435,7 +1435,7 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
             const SizedBox(width:8),
             CircleAvatar(radius:22,backgroundColor:scheme.primary,child:sending
               ?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
-              :IconButton(onPressed:send,icon:const Icon(Icons.send,color:Colors.white,size:20)),
+              :IconButton(onPressed:send,tooltip:t('Envoyer'),icon:const Icon(Icons.send,color:Colors.white,size:20)),
             ),
           ]),
         )),
