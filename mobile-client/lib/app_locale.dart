@@ -159,6 +159,7 @@ class AppLocale {
     'En attente de la première position GPS.': 'Waiting for the first GPS position.',
     'Mise à jour automatique toutes les 10 secondes.': 'Updates automatically every 10 seconds.',
     'Dernière position : ': 'Last position: ',
+    'Position possiblement obsolète — le chauffeur n’a pas transmis de nouvelle position récemment.': "Position possibly outdated — the driver hasn't sent a new position recently.",
     'ETA destination : ': 'ETA to destination: ',
     'Appeler le chauffeur': 'Call the driver',
     'Notifications': 'Notifications',

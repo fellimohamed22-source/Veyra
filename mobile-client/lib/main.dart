@@ -1394,10 +1394,30 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     }
   }
 
+  // Fiche C09 : "Si GPS stale : afficher dernière mise à jour, ne pas
+  // inventer l'ETA." Seuil de 2 minutes = plusieurs cycles du refresh
+  // de 10s ci-dessus, largement au-delà d'une simple gigue réseau.
+  static const _staleThreshold = Duration(minutes: 2);
+
+  bool get _isStale {
+    final raw = location?['recorded_at'];
+    if (raw == null) return false;
+    final dt = DateTime.tryParse(raw.toString());
+    if (dt == null) return false;
+    return DateTime.now().toUtc().difference(dt.toUtc()) > _staleThreshold;
+  }
+
   Future<void> refreshEta()async{
     final live=location;
     final booking=bookingMap;
     if(live?['available']!=true||booking==null)return;
+    if(_isStale){
+      // Une position obsolète ne doit jamais servir de base à un ETA
+      // recalculé -- on efface plutôt un ETA précédent qui deviendrait
+      // trompeur.
+      if(mounted&&etaInfo!=null)setState(()=>etaInfo=null);
+      return;
+    }
     final toLat=(booking['dropoff_lat'] as num?)?.toDouble();
     final toLng=(booking['dropoff_lng'] as num?)?.toDouble();
     if(toLat==null||toLng==null)return;
@@ -1460,7 +1480,17 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
                 ' • '+VeyraMoneyFormatter.distance(etaInfo!['distanceMeters']),
                 style:const TextStyle(fontWeight:FontWeight.w600),
               ),
-              if(available&&location!['recorded_at']!=null)Text('Dernière position : '+location!['recorded_at'].toString()),
+              if(available&&location!['recorded_at']!=null)Text(
+                t('Dernière position : ')+VeyraDateFormatter.dateTime(location!['recorded_at']),
+                style:TextStyle(color:_isStale?const Color(0xFFDC2626):null),
+              ),
+              if(available&&_isStale)Padding(
+                padding:const EdgeInsets.only(top:4),
+                child:Text(
+                  t('Position possiblement obsolète — le chauffeur n’a pas transmis de nouvelle position récemment.'),
+                  style:const TextStyle(color:Color(0xFFDC2626),fontSize:12),
+                ),
+              ),
             ]),
           )),
         ),
