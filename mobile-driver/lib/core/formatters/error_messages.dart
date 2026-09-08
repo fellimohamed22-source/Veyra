@@ -38,6 +38,7 @@ class VeyraErrorMessages {
     'INVALID_BOOKING_TRANSITION': "Cette action n'est plus disponible dans l'état actuel.",
     'NOT_SELECTED_DRIVER': "Cette réservation n'est pas attribuée à votre compte.",
     'DRIVER_NOT_ELIGIBLE': "Votre compte chauffeur n'est pas encore éligible.",
+    'DRIVER_PROFILE_REQUIRED': "Complétez votre dossier chauffeur avant de continuer.",
     'PARTNER_SCOPE_FORBIDDEN': "Vous n'avez pas accès à ce compte partenaire.",
     'PARTNER_INVOICE_NOT_ELIGIBLE': "La facturation partenaire n'est pas disponible pour ce compte.",
     // LOT 3 additions -- vérifiés dans AuthController.login().
@@ -65,6 +66,7 @@ class VeyraErrorMessages {
     'INVALID_BOOKING_TRANSITION': 'This action is no longer available in the current state.',
     'NOT_SELECTED_DRIVER': "This booking isn't assigned to your account.",
     'DRIVER_NOT_ELIGIBLE': "Your driver account isn't eligible yet.",
+    'DRIVER_PROFILE_REQUIRED': 'Complete your driver profile before continuing.',
     'PARTNER_SCOPE_FORBIDDEN': "You don't have access to this partner account.",
     'PARTNER_INVOICE_NOT_ELIGIBLE': 'Partner invoicing is not available for this account.',
     // LOT 3 additions.

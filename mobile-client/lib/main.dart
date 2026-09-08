@@ -815,7 +815,7 @@ class _AddressScreenState extends State<AddressScreen>{
         contentPadding:EdgeInsets.zero,
         leading:const Icon(Icons.event),
         title:Text(t('Date et heure de départ')),
-        subtitle:Text(scheduledAt==null?t('Minimum 2 h à l’avance'):scheduledAt.toString()),
+        subtitle:Text(scheduledAt==null?t('Minimum 2 h à l’avance'):VeyraDateFormatter.dateTime(scheduledAt!.toIso8601String())),
         trailing:OutlinedButton(onPressed:chooseDateTime,child:Text(t('Choisir'))),
       ),
       const SizedBox(height:12),
@@ -920,14 +920,7 @@ class _OffersScreenState extends State<OffersScreen>{
         context.go('/home');
       }
     }on DioException catch(e){
-      final code=(e.response?.data is Map)?(e.response?.data as Map)['code']?.toString():null;
-      final message=switch(code){
-        'BOOKING_CLOSED'=>t('Cette réservation n’est plus ouverte aux offres.'),
-        'OFFER_CLOSED'=>t('Cette offre n’est plus disponible.'),
-        'PARTNER_CREDIT_LIMIT_EXCEEDED'=>t('Limite de crédit partenaire dépassée pour cette réservation.'),
-        _=>t('Impossible de choisir cette offre pour le moment.')+(code==null?'':' ($code)'),
-      };
-      if(mounted)setState(()=>error=message);
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }catch(_){
       if(mounted)setState(()=>error=t('Impossible de choisir cette offre pour le moment.'));
     }finally{
@@ -951,8 +944,6 @@ class _OffersScreenState extends State<OffersScreen>{
           const SizedBox(height:14),
           for(final raw in items)Builder(builder:(context){
             final x=Map<String,dynamic>.from(raw as Map);
-            final total=((x['totalMinor']??0) as num).toDouble()/100;
-            final driver=((x['driverPriceMinor']??0) as num).toDouble()/100;
             final driverName=(x['driverFirstName']??'Chauffeur').toString();
             final vehicle=[(x['vehicleBrand']??'').toString(),(x['vehicleModel']??'').toString()].where((v)=>v.isNotEmpty).join(' ');
             final rating=(x['rating']??'-').toString();
@@ -973,10 +964,10 @@ class _OffersScreenState extends State<OffersScreen>{
                       Expanded(child:Text('${x['vehicleCategory']??'VTC'} • $vehicle',style:const TextStyle(color:Colors.black54,fontSize:12),overflow:TextOverflow.ellipsis)),
                     ]),
                   ])),
-                  Text('${total.toStringAsFixed(0)} €',style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
+                  Text(VeyraMoneyFormatter.fromMinor(x['totalMinor']),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
                 ]),
                 const SizedBox(height:4),
-                Text(t('Prix chauffeur: ')+driver.toStringAsFixed(2)+' €',style:const TextStyle(fontSize:12,color:Colors.black45)),
+                Text(t('Prix chauffeur: ')+VeyraMoneyFormatter.fromMinor(x['driverPriceMinor']),style:const TextStyle(fontSize:12,color:Colors.black45)),
                 const SizedBox(height:12),
                 SizedBox(width:double.infinity,child:FilledButton(
                   style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
@@ -1036,13 +1027,12 @@ class _PaymentScreenState extends State<PaymentScreen>{
   }
 
   @override Widget build(BuildContext context){
-    final total=((booking?['customer_total_amount_minor']??0) as num).toDouble()/100;
     return Scaffold(
       appBar:AppBar(title:Text(t('Paiement sécurisé'))),
       body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
         const Icon(Icons.lock_outline,size:56),
         const SizedBox(height:16),
-        Text('Total à payer : '+total.toStringAsFixed(2)+' €',style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold),textAlign:TextAlign.center),
+        Text(t('Total à payer : ')+VeyraMoneyFormatter.fromMinor(booking?['customer_total_amount_minor']),style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold),textAlign:TextAlign.center),
         const SizedBox(height:12),
         const Text('Ce total inclut le prix proposé par le chauffeur et la commission Veyra.',textAlign:TextAlign.center),
         if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error),textAlign:TextAlign.center)),
@@ -1106,7 +1096,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   Future<void> cancel()async{
     try{
       final result=await api.cancel(widget.bookingId);
-      if(mounted)setState(()=>message=t('Réservation annulée. Frais éventuels : ')+(((result['cancellationFeeMinor']??0) as num).toDouble()/100).toStringAsFixed(2)+' €');
+      if(mounted)setState(()=>message=t('Réservation annulée. Frais éventuels : ')+VeyraMoneyFormatter.fromMinor(result['cancellationFeeMinor']));
       reload();
     }catch(_){
       if(mounted)setState(()=>message='Annulation impossible dans l’état actuel.');
@@ -1464,8 +1454,8 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
               Text(available?t('Position actuelle du chauffeur'):t('Position indisponible'),style:const TextStyle(fontWeight:FontWeight.bold)),
               Text(error??(available?t('Mise à jour automatique toutes les 10 secondes.'):t('En attente de la première position GPS.'))),
               if(etaInfo!=null)Text(
-                t('ETA destination : ')+(((etaInfo!['durationSeconds']??0) as num).toDouble()/60).ceil().toString()+
-                ' min • '+(((etaInfo!['distanceMeters']??0) as num).toDouble()/1000).toStringAsFixed(1)+' km',
+                t('ETA destination : ')+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])+
+                ' • '+VeyraMoneyFormatter.distance(etaInfo!['distanceMeters']),
                 style:const TextStyle(fontWeight:FontWeight.w600),
               ),
               if(available&&location!['recorded_at']!=null)Text('Dernière position : '+location!['recorded_at'].toString()),

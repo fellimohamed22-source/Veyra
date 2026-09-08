@@ -502,7 +502,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               final id=x['id'].toString();
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               return Card(child:ListTile(
-                title:Text(title),subtitle:Text((x['scheduled_at']??'').toString()),
+                title:Text(title),subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
                 trailing:const Icon(Icons.chevron_right),onTap:()=>context.push('/request/'+id),
               ));
             }).toList());
@@ -539,13 +539,12 @@ class _RequestScreenState extends State<RequestScreen>{
       final bestOthersMinor=result['currentBestOtherOfferMinor'];
       if(bestOthersMinor!=null){
         final diffMinor=result['differenceFromBestMinor'] as int?;
-        final bestEuros=(bestOthersMinor as num)/100;
         final message=diffMinor==null?t('Aucune autre offre active pour le moment.')
           :diffMinor>0
-            ?t('Votre offre est supérieure de')+' ${(diffMinor/100).toStringAsFixed(2)} € '+t('à la meilleure offre actuelle')+' (${bestEuros.toStringAsFixed(2)} €).'
+            ?t('Votre offre est supérieure de')+' ${VeyraMoneyFormatter.fromMinor(diffMinor.abs())} '+t('à la meilleure offre actuelle')+' (${VeyraMoneyFormatter.fromMinor(bestOthersMinor)}).'
             :diffMinor<0
-              ?t('Vous proposez actuellement le meilleur prix')+' (${bestEuros.toStringAsFixed(2)} € '+t('pour les autres offres')+').'
-              :t('Votre offre égale la meilleure offre actuelle')+' (${bestEuros.toStringAsFixed(2)} €).';
+              ?t('Vous proposez actuellement le meilleur prix')+' (${VeyraMoneyFormatter.fromMinor(bestOthersMinor)} '+t('pour les autres offres')+').'
+              :t('Votre offre égale la meilleure offre actuelle')+' (${VeyraMoneyFormatter.fromMinor(bestOthersMinor)}).';
         await showDialog(context:context,builder:(_)=>AlertDialog(
           title:Text(t('Offre envoyée')),
           content:Text(message),
@@ -554,14 +553,7 @@ class _RequestScreenState extends State<RequestScreen>{
       }
       if(mounted)context.go('/home');
     }on DioException catch(e){
-      final code=(e.response?.data is Map)?(e.response?.data as Map)['code']?.toString():null;
-      final message=switch(code){
-        'BOOKING_OFFERS_CLOSED'=>t('Cette demande est déjà fermée ou a expiré.'),
-        'DRIVER_NOT_ELIGIBLE'=>t('Votre compte n’est pas encore éligible pour soumettre des offres (dossier KYC non validé).'),
-        'DRIVER_PROFILE_REQUIRED'=>t('Complétez votre dossier chauffeur avant de soumettre une offre.'),
-        _=>t('L’offre n’a pas pu être envoyée ou la demande est déjà fermée.')+(code==null?'':' ($code)'),
-      };
-      if(mounted)setState(()=>error=message);
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }catch(_){
       if(mounted)setState(()=>error=t('L’offre n’a pas pu être envoyée ou la demande est déjà fermée.'));
     }finally{
@@ -587,7 +579,7 @@ class _RequestScreenState extends State<RequestScreen>{
             Card(child:ListTile(
               leading:const Icon(Icons.route),
               title:Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString()),
-              subtitle:Text((x['scheduled_at']??'').toString()+'\n'+(x['category_name']??'').toString()),
+              subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])+'\n'+(x['category_name']??'').toString()),
               isThreeLine:true,
             )),
             Card(child:ListTile(
@@ -609,7 +601,7 @@ class _RequestScreenState extends State<RequestScreen>{
             final bestMinor=x['currentBestOtherOfferMinor'];
             final subtitle=bestMinor==null
               ?t('Aucune autre offre active pour le moment. Vous serez informé si la vôtre est battue.')
-              :t('Meilleure offre actuelle des autres chauffeurs')+' : ${((bestMinor as num)/100).toStringAsFixed(2)} €';
+              :t('Meilleure offre actuelle des autres chauffeurs')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor);
             return Card(child:ListTile(
               leading:const Icon(Icons.visibility_outlined),
               title:Text(t('Meilleure offre visible')),
@@ -818,10 +810,6 @@ class _RideScreenState extends State<RideScreen>{
         final status=(x['status']??'').toString();
         final phone=x['customer_phone']?.toString();
         final paymentMethod=(x['payment_method']??'').toString();
-        double money(dynamic value)=>((value??0) as num).toDouble()/100;
-        final driverNet=money(x['driver_net_amount_minor']);
-        final commission=money(x['platform_commission_amount_minor']);
-        final customerTotal=money(x['customer_total_amount_minor']);
         final pickupLat=(x['pickup_lat'] as num?)?.toDouble();
         final pickupLng=(x['pickup_lng'] as num?)?.toDouble();
         final dropoffLat=(x['dropoff_lat'] as num?)?.toDouble();
@@ -869,23 +857,23 @@ class _RideScreenState extends State<RideScreen>{
           Text(t('Statut')+' : '+VeyraStatusLabels.bookingStatus(status)),
           if(etaInfo!=null)Card(child:ListTile(
             leading:const Icon(Icons.schedule),
-            title:Text('ETA : '+(((etaInfo!['durationSeconds']??0) as num).toDouble()/60).ceil().toString()+' min'),
-            subtitle:Text((((etaInfo!['distanceMeters']??0) as num).toDouble()/1000).toStringAsFixed(1)+' km restant(s)'),
+            title:Text(t('ETA : ')+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])),
+            subtitle:Text(VeyraMoneyFormatter.distance(etaInfo!['distanceMeters'])+' '+t('restant(s)')),
           )),
-          if(x['customer_name']!=null)Text('Client : '+x['customer_name'].toString()),
+          if(x['customer_name']!=null)Text(t('Client : ')+x['customer_name'].toString()),
           if(paymentMethod=='CASH')Card(child:ListTile(
             leading:const Icon(Icons.payments_outlined),
-            title:Text('Montant à encaisser au client : '+customerTotal.toStringAsFixed(2)+' €'),
-            subtitle:Text('Votre montant net : '+driverNet.toStringAsFixed(2)+' € • Commission Veyra : '+commission.toStringAsFixed(2)+' € (dette CASH après la course)'),
+            title:Text(t('Montant à encaisser au client : ')+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
+            subtitle:Text(t('Votre montant net : ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])+' • '+t('Commission Veyra : ')+VeyraMoneyFormatter.fromMinor(x['platform_commission_amount_minor'])+' '+t('(dette CASH après la course)')),
           )),
           if(paymentMethod=='ONLINE')Card(child:ListTile(
             leading:const Icon(Icons.credit_card),
-            title:Text('Paiement en ligne • Net chauffeur '+driverNet.toStringAsFixed(2)+' €'),
+            title:Text(t('Paiement en ligne • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
             subtitle:Text(t('Le paiement doit être capturé avant le démarrage de la course.')),
           )),
           if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
             leading:const Icon(Icons.receipt_long),
-            title:Text('Facturation partenaire • Net chauffeur '+driverNet.toStringAsFixed(2)+' €'),
+            title:Text(t('Facturation partenaire • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
             subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
           )),
           if(error!=null)Padding(
