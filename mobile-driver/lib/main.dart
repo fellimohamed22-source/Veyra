@@ -120,6 +120,7 @@ final router=GoRouter(
     ],
   ),
   GoRoute(path:'/request/:id',builder:(c,s)=>RequestScreen(bookingId:s.pathParameters['id']!)),
+  GoRoute(path:'/driver/offers',builder:(c,s)=>const MesOffresScreen()),
   GoRoute(path:'/ride/:id',builder:(c,s)=>RideScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/chat/:id',builder:(c,s)=>DriverChatScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/notifications',builder:(c,s)=>const DriverNotificationsScreen()),
@@ -443,6 +444,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Demandes disponibles')),actions:[
+      IconButton(onPressed:()=>context.push('/driver/offers'),icon:const Icon(Icons.local_offer_outlined),tooltip:t('Mes offres')),
       IconButton(onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_outlined)),
     ]),
     body:RefreshIndicator(
@@ -510,6 +512,113 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
         ),
       ]),
     ),
+  );
+}
+
+/// D18 -- "Mes offres" : 3 onglets En attente/Retenues/Closes, consomme
+/// GET /api/v1/driver/offers?scope=... (déjà créé et testé en tout début
+/// de session -- l'endpoint existait, mais aucun écran ne l'appelait,
+/// c'est ce gap précis que cet écran comble).
+class MesOffresScreen extends StatefulWidget{
+  const MesOffresScreen({super.key});
+  @override State<MesOffresScreen> createState()=>_MesOffresScreenState();
+}
+class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProviderStateMixin{
+  late TabController tabController;
+  late Future<List<dynamic>> active;
+  late Future<List<dynamic>> won;
+  late Future<List<dynamic>> closed;
+
+  @override void initState(){
+    super.initState();
+    tabController=TabController(length:3,vsync:this);
+    _load();
+  }
+
+  void _load(){
+    active=api.driverOffers(scope:'active');
+    won=api.driverOffers(scope:'won');
+    closed=api.driverOffers(scope:'closed');
+  }
+
+  @override void dispose(){
+    tabController.dispose();
+    super.dispose();
+  }
+
+  Widget _list(Future<List<dynamic>> future,{required bool isWon}){
+    return RefreshIndicator(
+      onRefresh:()async{setState(_load);await future;},
+      child:FutureBuilder<List<dynamic>>(
+        future:future,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done){
+            return const VeyraLoadingView();
+          }
+          if(s.hasError){
+            return VeyraErrorView(onRetry:()=>setState(_load));
+          }
+          final items=s.data??[];
+          if(items.isEmpty){
+            return VeyraEmptyView(
+              icon:Icons.local_offer_outlined,
+              message:t('Aucune offre dans cette catégorie.'),
+            );
+          }
+          return ListView.builder(
+            padding:const EdgeInsets.all(16),
+            itemCount:items.length,
+            itemBuilder:(context,i){
+              final x=Map<String,dynamic>.from(items[i] as Map);
+              final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
+              final bookingId=x['booking_id']?.toString();
+              return Card(
+                margin:const EdgeInsets.only(bottom:10),
+                child:ListTile(
+                  contentPadding:const EdgeInsets.all(14),
+                  title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
+                  subtitle:Padding(
+                    padding:const EdgeInsets.only(top:6),
+                    child:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                  ),
+                  trailing:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.end,children:[
+                    Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
+                    const SizedBox(height:4),
+                    Text(VeyraStatusLabels.offerStatus(x['status']?.toString()),style:const TextStyle(fontSize:12,color:Colors.black54)),
+                  ]),
+                  onTap:bookingId==null?null:(){
+                    // Fiche D18 : "Offre gagnante -> D19" (réservation
+                    // attribuée), "Demande encore ouverte -> D15" (détail
+                    // demande, où l'offre déjà soumise est visible).
+                    if(isWon){
+                      context.push('/ride/'+bookingId);
+                    }else{
+                      context.push('/request/'+bookingId);
+                    }
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(
+      title:Text(t('Mes offres')),
+      bottom:TabBar(controller:tabController,tabs:[
+        Tab(text:t('En attente')),
+        Tab(text:t('Retenues')),
+        Tab(text:t('Closes')),
+      ]),
+    ),
+    body:TabBarView(controller:tabController,children:[
+      _list(active,isWon:false),
+      _list(won,isWon:true),
+      _list(closed,isWon:false),
+    ]),
   );
 }
 
@@ -614,17 +723,40 @@ class _RequestScreenState extends State<RequestScreen>{
           ));
         },
       ),
-      TextField(
-        controller:amount,
-        keyboardType:const TextInputType.numberWithOptions(decimal:true),
-        decoration:InputDecoration(
-          labelText:t('Votre prix net (€)'),
-          helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
-        ),
+      FutureBuilder<Map<String,dynamic>>(
+        future:detail,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
+          if(s.hasError)return const SizedBox.shrink();
+          final x=s.data??{};
+          // Gap réel trouvé : hasActiveOffer existait déjà côté backend
+          // (DriverOpportunityController) mais n'était lu nulle part côté
+          // Flutter -- un chauffeur ayant déjà soumis une offre retombait
+          // sur ce même formulaire vide, pouvait retaper un prix et
+          // recevait alors ACTIVE_OFFER_EXISTS sans comprendre pourquoi.
+          if(x['hasActiveOffer']==true){
+            return Card(child:ListTile(
+              leading:const Icon(Icons.check_circle_outline,color:Color(0xFF16A34A)),
+              title:Text(t('Vous avez déjà une offre active pour cette demande.')),
+              subtitle:Text(t('Retrouvez-la dans Mes offres.')),
+              trailing:TextButton(onPressed:()=>context.push('/driver/offers'),child:Text(t('Voir'))),
+            ));
+          }
+          return Column(children:[
+            TextField(
+              controller:amount,
+              keyboardType:const TextInputType.numberWithOptions(decimal:true),
+              decoration:InputDecoration(
+                labelText:t('Votre prix net (€)'),
+                helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
+              ),
+            ),
+            if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+            const SizedBox(height:20),
+            FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Envoyer mon offre'))),
+          ]);
+        },
       ),
-      if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-      const SizedBox(height:20),
-      FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Envoyer mon offre'))),
     ]),
   );
 }

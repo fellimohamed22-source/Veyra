@@ -126,6 +126,9 @@ class Api {
   Future<Map<String,dynamic>> opportunityDetail(String bookingId) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/opportunities/$bookingId')).data);
 
+  Future<List<dynamic>> driverOffers({String scope='active'}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/driver/offers',queryParameters:{'scope':scope})).data);
+
   Future<Map<String,dynamic>> offer(String bookingId,int amountMinor) async {
     final r=await dio.post('/api/v1/driver/opportunities/$bookingId/offers',
       data:{'amountMinor':amountMinor,'currency':'EUR'});
