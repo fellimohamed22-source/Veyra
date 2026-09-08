@@ -84,6 +84,19 @@ import {statusLabel,paymentMethodLabel,partnerOrgStatusLabel,money,dateTime,erro
           <option value="PARTNER_INVOICE">Facture partenaire</option>
         </select>
 
+        <div style="margin:12px 0">
+          <label style="display:block;margin-bottom:4px">Visibilité des offres pour les chauffeurs</label>
+          <label style="font-weight:normal">
+            <input type="radio" name="partnerOfferVisibility" value="" [(ngModel)]="offerVisibilityMode"> Réglage plateforme par défaut
+          </label><br>
+          <label style="font-weight:normal">
+            <input type="radio" name="partnerOfferVisibility" value="PRIVATE" [(ngModel)]="offerVisibilityMode"> Offre privée (aucun prix concurrent visible)
+          </label><br>
+          <label style="font-weight:normal">
+            <input type="radio" name="partnerOfferVisibility" value="BEST_VISIBLE" [(ngModel)]="offerVisibilityMode"> Meilleure offre visible (indicatif uniquement, jamais bloquant)
+          </label>
+        </div>
+
         <button (click)="publish()" [disabled]="publishing">{{publishing?'Publication…':'Publier la demande'}}</button>
         <p *ngIf="publishMessage">{{publishMessage}}</p>
       </div>
@@ -142,6 +155,7 @@ export class Partner implements OnInit{
   pickup:any=null;dropoff:any=null;
   pickupSuggestions:any[]=[];dropoffSuggestions:any[]=[];
   scheduledAt='';categoryId='';paymentMethod='CASH';passengerCount=1;baggageCount=0;
+  offerVisibilityMode='';
   categories:any[]=[];bookings:any[]=[];offers:any[]=[];
   selectedBookingId='';
   accepting=false;acceptError='';
@@ -237,7 +251,8 @@ export class Partner implements OnInit{
         beneficiaryName:this.guestName,
         beneficiaryPhone:this.guestPhone,
         passengerCount:this.passengerCount,
-        baggageCount:this.baggageCount
+        baggageCount:this.baggageCount,
+        ...(this.offerVisibilityMode?{offerVisibilityMode:this.offerVisibilityMode}:{})
       });
       this.publishMessage='Demande publiée. Les chauffeurs éligibles vont être notifiés.';
       await this.loadBookings();
