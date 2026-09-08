@@ -46,6 +46,8 @@ class VeyraErrorMessages {
     'ACCOUNT_LOCKED': "Compte temporairement verrouillé suite à plusieurs échecs. Réessayez plus tard.",
     'ACCOUNT_NOT_ACTIVE': "Ce compte n'est pas actif. Contactez le support.",
     'EMAIL_ALREADY_USED': "Un compte existe déjà avec cet email.",
+    'CANNOT_CANCEL': "Cette réservation ne peut plus être annulée dans son état actuel.",
+    'DRIVER_CANNOT_CANCEL_NOW': "Vous ne pouvez plus annuler cette course à ce stade.",
   };
 
   static const Map<String, String> _en = {
@@ -74,6 +76,8 @@ class VeyraErrorMessages {
     'ACCOUNT_LOCKED': 'Account temporarily locked after several failed attempts. Try again later.',
     'ACCOUNT_NOT_ACTIVE': 'This account is not active. Contact support.',
     'EMAIL_ALREADY_USED': 'An account already exists with this email.',
+    'CANNOT_CANCEL': 'This booking can no longer be cancelled in its current state.',
+    'DRIVER_CANNOT_CANCEL_NOW': "You can't cancel this trip at this stage anymore.",
   };
 
   static bool get _isEnglish => AppLocale.code.value == 'en';

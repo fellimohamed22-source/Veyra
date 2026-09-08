@@ -1098,8 +1098,8 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
       final result=await api.cancel(widget.bookingId);
       if(mounted)setState(()=>message=t('Réservation annulée. Frais éventuels : ')+VeyraMoneyFormatter.fromMinor(result['cancellationFeeMinor']));
       reload();
-    }catch(_){
-      if(mounted)setState(()=>message='Annulation impossible dans l’état actuel.');
+    }catch(e){
+      if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
     }
   }
 

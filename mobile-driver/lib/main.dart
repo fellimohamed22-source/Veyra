@@ -792,8 +792,8 @@ class _RideScreenState extends State<RideScreen>{
       if(startGps)startTracking();
       if(stopGps)stopTracking();
       reload();
-    }catch(_){
-      if(mounted)setState(()=>error='Action impossible dans l’état actuel.');
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }finally{
       if(mounted)setState(()=>busy=false);
     }
@@ -908,8 +908,8 @@ class _RideScreenState extends State<RideScreen>{
                     );
                     context.go('/agenda');
                   }
-                }catch(_){
-                  if(mounted)setState(()=>error='Annulation impossible dans l’état actuel.');
+                }catch(e){
+                  if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
                 }finally{
                   if(mounted)setState(()=>busy=false);
                 }
@@ -931,7 +931,7 @@ class _RideScreenState extends State<RideScreen>{
             FilledButton(onPressed:busy?null:()=>action(()=>api.complete(widget.bookingId),stopGps:true),child:Text(t('Terminer la course'))),
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              const Text('Noter le client',style:TextStyle(fontWeight:FontWeight.bold)),
+              Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
               const SizedBox(height:8),
               Row(children:[for(int i=1;i<=5;i++)IconButton(
                 icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
