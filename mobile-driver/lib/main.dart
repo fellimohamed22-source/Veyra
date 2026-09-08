@@ -1360,8 +1360,8 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
               final template=(x['template_code']??'').toString();
               return Card(child:ListTile(
                 leading:const Icon(Icons.notifications_active_outlined),
-                title:Text(template.replaceAll('_',' ')),
-                subtitle:Text((x['created_at']??'').toString()),
+                title:Text(VeyraStatusLabels.notificationTemplate(template)),
+                subtitle:Text(VeyraDateFormatter.dateTime(x['created_at'])),
                 trailing:bookingId==null?null:const Icon(Icons.chevron_right),
                 onTap:bookingId==null?null:(){
                   if(template=='NEW_BOOKING')context.push('/request/'+bookingId);

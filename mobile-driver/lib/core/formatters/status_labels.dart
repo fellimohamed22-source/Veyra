@@ -117,4 +117,24 @@ class VeyraStatusLabels {
     final map = _isEnglish ? _kycStatusEn : _kycStatusFr;
     return map[code] ?? map['DRAFT']!;
   }
+
+  static const Map<String, String> _notificationTemplateFr = {
+    'NEW_BOOKING': 'Nouvelle demande disponible',
+    'NEW_OFFER': 'Nouvelle offre reçue',
+    'OFFER_ACCEPTED': 'Votre offre a été retenue',
+    'BOOKING_STATUS': 'Mise à jour de votre réservation',
+  };
+
+  static const Map<String, String> _notificationTemplateEn = {
+    'NEW_BOOKING': 'New request available',
+    'NEW_OFFER': 'New offer received',
+    'OFFER_ACCEPTED': 'Your offer was selected',
+    'BOOKING_STATUS': 'Booking update',
+  };
+
+  static String notificationTemplate(String? code) {
+    if (code == null) return '—';
+    final map = _isEnglish ? _notificationTemplateEn : _notificationTemplateFr;
+    return map[code] ?? 'Notification';
+  }
 }
