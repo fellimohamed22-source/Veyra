@@ -1149,13 +1149,16 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           ],
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              const Text('Noter le chauffeur',style:TextStyle(fontWeight:FontWeight.bold)),
+              Text(t('Noter le chauffeur'),style:const TextStyle(fontWeight:FontWeight.bold)),
               const SizedBox(height:8),
               Row(children:[for(int i=1;i<=5;i++)IconButton(
                 icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
+                tooltip:AppLocale.code.value=='en'
+                  ?(i==1?'1 star':'$i stars')
+                  :(i==1?'1 étoile':'$i étoiles'),
                 onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
               )]),
-              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?'Envoi…':'Envoyer la note')),
+              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
             ]))),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(message!)),
         ]);

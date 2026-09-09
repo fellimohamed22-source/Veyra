@@ -130,6 +130,7 @@ class AppLocale {
     'Noter le chauffeur': 'Rate the driver',
     'Merci pour votre avis !': 'Thanks for your feedback!',
     'Envoyer la note': 'Send rating',
+    'Envoi…': 'Sending…',
     'Impossible d’envoyer la note pour le moment.': 'Could not send the rating right now.',
     'Les chauffeurs verront le meilleur prix proposé par un autre chauffeur.': 'Drivers will see the best price offered by another driver.',
     'Offre privée : les chauffeurs ne voient jamais les prix proposés par les autres.': 'Private offer: drivers never see prices proposed by others.',

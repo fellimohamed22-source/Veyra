@@ -1067,6 +1067,9 @@ class _RideScreenState extends State<RideScreen>{
               const SizedBox(height:8),
               Row(children:[for(int i=1;i<=5;i++)IconButton(
                 icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
+                tooltip:AppLocale.code.value=='en'
+                  ?(i==1?'1 star':'$i stars')
+                  :(i==1?'1 étoile':'$i étoiles'),
                 onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
               )]),
               FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
