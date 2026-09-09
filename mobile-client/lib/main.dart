@@ -552,7 +552,9 @@ class _AccountScreenState extends State<AccountScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
-        if(s.hasError)return VeyraErrorView(onRetry:()=>setState(()=>future=api.me()));
+        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+          ?VeyraOfflineBanner(onRetry:()=>setState(()=>future=api.me()))
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(()=>future=api.me()));
         final me=s.data??{};
         final firstName=(me['first_name']??'').toString();
         final lastName=(me['last_name']??'').toString();
@@ -1114,7 +1116,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:Text(t('Réessayer'))));
+        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+          ?VeyraOfflineBanner(onRetry:reload)
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
         final x=s.data??{};
         final status=(x['status']??'').toString();
         final driverName=((x['driver_first_name']??'') as Object).toString()+' '+((x['driver_last_name']??'') as Object).toString();
