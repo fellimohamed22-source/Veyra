@@ -128,6 +128,7 @@ final router=GoRouter(
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterScreen()),
   GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
+  GoRoute(path:'/reset-password',builder:(c,s)=>const ResetPasswordScreen()),
   // Coquille de navigation persistante (bottom nav), conforme aux
   // maquettes C02+ ("BottomNavigation" listé comme composant UI dans
   // chaque fiche écran principale). Les écrans de flux (adresses,
@@ -1605,6 +1606,84 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
         child:Text(t('Envoyer les instructions')),
       ),
       if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(message!)),
+      const SizedBox(height:8),
+      TextButton(
+        onPressed:()=>context.push('/reset-password'),
+        child:Text(t('J’ai déjà un code de réinitialisation')),
+      ),
+    ])),
+  );
+}
+
+/// Complète le flow "mot de passe oublié" -- le backend
+/// (PasswordController.reset) attend {token,newPassword} en clair, le
+/// jeton étant envoyé par email sous forme de texte brut à recopier
+/// (pas de deep-link). Gap réel trouvé : /api/v1/auth/reset-password
+/// existait et était fonctionnel côté backend, mais rien ne le
+/// consommait -- un utilisateur pouvait demander une réinitialisation
+/// mais jamais la terminer depuis l'app.
+class ResetPasswordScreen extends StatefulWidget{
+  const ResetPasswordScreen({super.key});
+  @override State<ResetPasswordScreen> createState()=>_ResetPasswordScreenState();
+}
+class _ResetPasswordScreenState extends State<ResetPasswordScreen>{
+  final token=TextEditingController();
+  final newPassword=TextEditingController();
+  bool loading=false;
+  bool success=false;
+  String? error;
+
+  Future<void> submit()async{
+    if(token.text.trim().isEmpty){
+      setState(()=>error=t('Saisissez le code reçu par e-mail.'));
+      return;
+    }
+    if(newPassword.text.length<10){
+      setState(()=>error=t('Le nouveau mot de passe doit contenir au moins 10 caractères.'));
+      return;
+    }
+    setState((){loading=true;error=null;});
+    try{
+      await api.resetPassword(token.text,newPassword.text);
+      if(mounted)setState(()=>success=true);
+    }on DioException catch(e){
+      // Le backend ne renvoie aucun corps JSON sur ces deux statuts
+      // (juste badRequest()/unprocessableEntity().build()) -- pas de
+      // "code" à extraire, le statut HTTP est la seule information
+      // disponible pour distinguer les deux causes.
+      final status=e.response?.statusCode;
+      if(mounted)setState(()=>error=status==422
+        ?t('Mot de passe trop faible (10 caractères minimum).')
+        :status==400
+          ?t('Code invalide ou expiré. Demandez un nouveau code.')
+          :VeyraErrorMessages.forException(e));
+    }catch(_){
+      if(mounted)setState(()=>error=t('Une erreur est survenue. Veuillez réessayer.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(title:Text(t('Réinitialiser le mot de passe')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
+    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
+      if(success)...[
+        const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
+        const SizedBox(height:16),
+        Text(t('Mot de passe mis à jour. Vous pouvez vous reconnecter.')),
+        const SizedBox(height:16),
+        FilledButton(onPressed:()=>context.go('/login'),child:Text(t('Retour à la connexion'))),
+      ]else...[
+        Text(t('Collez le code reçu par e-mail et choisissez un nouveau mot de passe.')),
+        const SizedBox(height:16),
+        TextField(controller:token,decoration:appFieldDecoration(t('Code reçu par e-mail'),icon:Icons.vpn_key_outlined)),
+        const SizedBox(height:16),
+        TextField(controller:newPassword,obscureText:true,decoration:appFieldDecoration(t('Nouveau mot de passe'),icon:Icons.lock_outline,helperText:t('10 caractères minimum'))),
+        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+        const SizedBox(height:16),
+        VeyraPrimaryButton(label:t('Réinitialiser'),loading:loading,onPressed:submit),
+      ],
     ])),
   );
 }

@@ -106,6 +106,8 @@ final router=GoRouter(
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterDriverScreen()),
   GoRoute(path:'/kyc',builder:(c,s)=>const KycScreen()),
+  GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
+  GoRoute(path:'/reset-password',builder:(c,s)=>const ResetPasswordScreen()),
   // Coquille de navigation persistante (bottom nav), conforme à D14 :
   // Demandes/Planning/Revenus/Compte. Notifications et les écrans de
   // flux (détail demande, course) restent des routes racine poussées
@@ -236,8 +238,116 @@ class _LoginScreenState extends State<LoginScreen>{
         const SizedBox(height:20),
         VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
         TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte Chauffeur'))),
+        TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
       ]))),
     ])));
+}
+
+/// Gap complet trouvé côté chauffeur : ni la demande ("mot de passe
+/// oublié") ni la complétion du flow n'existaient -- aucun lien depuis
+/// l'écran de connexion, alors que le backend (PasswordController)
+/// expose les deux endpoints et fonctionne déjà côté client depuis le
+/// début de session.
+class ForgotPasswordScreen extends StatefulWidget{
+  const ForgotPasswordScreen({super.key});
+  @override State<ForgotPasswordScreen> createState()=>_ForgotPasswordScreenState();
+}
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
+  final email=TextEditingController();
+  bool loading=false;
+  String? message;
+
+  Future<void> submit()async{
+    setState((){loading=true;message=null;});
+    try{
+      await api.forgotPassword(email.text);
+      if(mounted)setState(()=>message=t('Si cet e-mail existe, les instructions de réinitialisation ont été envoyées.'));
+    }catch(_){
+      if(mounted)setState(()=>message=t('Impossible d’envoyer la demande pour le moment.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(title:Text(t('Mot de passe oublié')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
+    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
+      Text(t('Saisissez votre e-mail. Le message ne révèle pas si un compte existe.')),
+      const SizedBox(height:16),
+      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+      const SizedBox(height:16),
+      VeyraPrimaryButton(label:t('Envoyer les instructions'),loading:loading,onPressed:submit),
+      if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(message!)),
+      const SizedBox(height:8),
+      TextButton(
+        onPressed:()=>context.push('/reset-password'),
+        child:Text(t('J’ai déjà un code de réinitialisation')),
+      ),
+    ])),
+  );
+}
+
+class ResetPasswordScreen extends StatefulWidget{
+  const ResetPasswordScreen({super.key});
+  @override State<ResetPasswordScreen> createState()=>_ResetPasswordScreenState();
+}
+class _ResetPasswordScreenState extends State<ResetPasswordScreen>{
+  final token=TextEditingController();
+  final newPassword=TextEditingController();
+  bool loading=false;
+  bool success=false;
+  String? error;
+
+  Future<void> submit()async{
+    if(token.text.trim().isEmpty){
+      setState(()=>error=t('Saisissez le code reçu par e-mail.'));
+      return;
+    }
+    if(newPassword.text.length<10){
+      setState(()=>error=t('Le nouveau mot de passe doit contenir au moins 10 caractères.'));
+      return;
+    }
+    setState((){loading=true;error=null;});
+    try{
+      await api.resetPassword(token.text,newPassword.text);
+      if(mounted)setState(()=>success=true);
+    }on DioException catch(e){
+      final status=e.response?.statusCode;
+      if(mounted)setState(()=>error=status==422
+        ?t('Mot de passe trop faible (10 caractères minimum).')
+        :status==400
+          ?t('Code invalide ou expiré. Demandez un nouveau code.')
+          :VeyraErrorMessages.forException(e));
+    }catch(_){
+      if(mounted)setState(()=>error=t('Une erreur est survenue. Veuillez réessayer.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:const Color(0xFFF2F6FB),
+    appBar:AppBar(title:Text(t('Réinitialiser le mot de passe')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
+    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
+      if(success)...[
+        const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
+        const SizedBox(height:16),
+        Text(t('Mot de passe mis à jour. Vous pouvez vous reconnecter.')),
+        const SizedBox(height:16),
+        FilledButton(onPressed:()=>context.go('/login'),child:Text(t('Retour à la connexion'))),
+      ]else...[
+        Text(t('Collez le code reçu par e-mail et choisissez un nouveau mot de passe.')),
+        const SizedBox(height:16),
+        TextField(controller:token,decoration:InputDecoration(labelText:t('Code reçu par e-mail'),prefixIcon:const Icon(Icons.vpn_key_outlined),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+        const SizedBox(height:16),
+        TextField(controller:newPassword,obscureText:true,decoration:InputDecoration(labelText:t('Nouveau mot de passe'),helperText:t('10 caractères minimum'),prefixIcon:const Icon(Icons.lock_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
+        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+        const SizedBox(height:16),
+        VeyraPrimaryButton(label:t('Réinitialiser'),loading:loading,onPressed:submit),
+      ],
+    ])),
+  );
 }
 
 class KycScreen extends StatefulWidget{

@@ -77,6 +77,10 @@ class Api {
     await dio.post('/api/v1/auth/forgot-password',data:{'email':email.trim()});
   }
 
+  Future<void> resetPassword(String token,String newPassword) async {
+    await dio.post('/api/v1/auth/reset-password',data:{'token':token.trim(),'newPassword':newPassword});
+  }
+
   Future<void> registerDevice(String token,{String platform='mobile'}) async {
     await dio.post('/api/v1/devices',data:{
       'platform':platform,

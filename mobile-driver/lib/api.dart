@@ -104,6 +104,14 @@ class Api {
     await storage.deleteAll();
   }
 
+  Future<void> forgotPassword(String email) async {
+    await dio.post('/api/v1/auth/forgot-password',data:{'email':email.trim()});
+  }
+
+  Future<void> resetPassword(String token,String newPassword) async {
+    await dio.post('/api/v1/auth/reset-password',data:{'token':token.trim(),'newPassword':newPassword});
+  }
+
   Future<List<dynamic>> opportunities({
     String sort='date',
     String? categoryId,
