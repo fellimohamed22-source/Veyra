@@ -84,7 +84,12 @@ public class SecurityConfig {
   }
 
   @Bean
-  SecurityFilterChain chain(HttpSecurity http, OncePerRequestFilter jwtFilter, CorsConfigurationSource corsConfigurationSource) throws Exception {
+  RateLimitFilter rateLimitFilter() {
+    return new RateLimitFilter();
+  }
+
+  @Bean
+  SecurityFilterChain chain(HttpSecurity http, OncePerRequestFilter jwtFilter, RateLimitFilter rateLimitFilter, CorsConfigurationSource corsConfigurationSource) throws Exception {
     return http
         .cors(cors -> cors.configurationSource(corsConfigurationSource))
         .csrf(csrf -> csrf.disable())
@@ -97,6 +102,7 @@ public class SecurityConfig {
             .permitAll()
             .anyRequest()
             .authenticated())
+        .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
         .build();
   }
