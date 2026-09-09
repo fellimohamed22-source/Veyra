@@ -106,6 +106,21 @@ class VeyraErrorMessages {
   ///
   /// Centralise un pattern auparavant dupliqué manuellement dans
   /// plusieurs écrans (ex: `(e.response?.data is Map) ? ... : null`).
+  /// Distingue OFFLINE (pas de réponse serveur du tout) de ERROR (le
+  /// serveur a répondu avec un code métier réel) -- même logique que
+  /// forException() ci-dessus, mais exposée séparément comme simple
+  /// booléen pour les écrans qui veulent piloter explicitement
+  /// VeyraOfflineBanner vs VeyraErrorView plutôt qu'un seul message texte.
+  static bool isOffline(Object error) {
+    if (error is DioException) {
+      return error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout;
+    }
+    return false;
+  }
+
   static String forException(Object error) {
     if (error is DioException) {
       final isConnectivityIssue = error.type == DioExceptionType.connectionError ||

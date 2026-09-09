@@ -330,12 +330,10 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
               return const Padding(padding:EdgeInsets.all(24),child:Center(child:CircularProgressIndicator()));
             }
             if(s.hasError){
-              return Card(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ListTile(
-                leading:const Icon(Icons.cloud_off),
-                title:Text(t('Impossible de charger vos réservations')),
-                subtitle:Text(t('Vérifiez votre connexion puis réessayez.')),
-                trailing:TextButton(onPressed:retry,child:Text(t('Réessayer'))),
-              ));
+              final offline=VeyraErrorMessages.isOffline(s.error!);
+              return offline
+                ? VeyraOfflineBanner(onRetry:retry)
+                : VeyraErrorView(errorCode:null,customMessage:VeyraErrorMessages.forException(s.error!),onRetry:retry);
             }
             final items=s.data??[];
             if(items.isEmpty){
@@ -480,7 +478,9 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
               return const VeyraLoadingView();
             }
             if(s.hasError){
-              return VeyraErrorView(onRetry:()=>setState(_load));
+              return VeyraErrorMessages.isOffline(s.error!)
+                ? VeyraOfflineBanner(onRetry:()=>setState(_load))
+                : VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(_load));
             }
             final items=s.data??[];
             if(items.isEmpty){
@@ -933,7 +933,9 @@ class _OffersScreenState extends State<OffersScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState((){future=api.offers(widget.bookingId);}),child:Text(t('Réessayer'))));
+        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId);}))
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
         final items=s.data??[];
         if(items.isEmpty)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.'))));
         return ListView(padding:const EdgeInsets.all(16),children:[

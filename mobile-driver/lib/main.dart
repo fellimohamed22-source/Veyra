@@ -600,10 +600,9 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
           future:future,
           builder:(context,s){
             if(s.connectionState!=ConnectionState.done)return const Center(child:Padding(padding:EdgeInsets.all(32),child:CircularProgressIndicator()));
-            if(s.hasError)return Card(child:ListTile(
-              leading:const Icon(Icons.error_outline),title:Text(t('Impossible de charger les demandes')),
-              trailing:TextButton(onPressed:reload,child:Text(t('Réessayer'))),
-            ));
+            if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+              ?VeyraOfflineBanner(onRetry:reload)
+              :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
             final items=s.data??[];
             if(items.isEmpty)return Card(child:ListTile(
               leading:Icon(Icons.inbox_outlined),title:Text(t('Aucune demande ouverte')),
@@ -885,7 +884,9 @@ class _AgendaScreenState extends State<AgendaScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState((){future=api.bookings();}),child:Text(t('Réessayer'))));
+        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.bookings();}))
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.bookings();}));
         final items=s.data??[];
         if(items.isEmpty)return Center(child:Text(t('Aucune course confirmée.')));
         return ListView(padding:const EdgeInsets.all(16),children:items.map((raw){
@@ -1047,7 +1048,9 @@ class _RideScreenState extends State<RideScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:reload,child:Text(t('Réessayer'))));
+        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+          ?VeyraOfflineBanner(onRetry:reload)
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
         final x=s.data??{};
         final status=(x['status']??'').toString();
         final phone=x['customer_phone']?.toString();
@@ -1210,7 +1213,9 @@ class _WalletScreenState extends State<WalletScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return Center(child:FilledButton(onPressed:()=>setState((){future=api.wallet();}),child:Text(t('Réessayer'))));
+        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.wallet();}))
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.wallet();}));
         final x=s.data??{};
         return ListView(padding:const EdgeInsets.all(20),children:[
           Card(child:ListTile(title:Text(t('À recevoir (ONLINE)')),trailing:Text(VeyraMoneyFormatter.fromMinor(x['onlinePayableMinor'])))),

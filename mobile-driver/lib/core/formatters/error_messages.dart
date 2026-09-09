@@ -106,6 +106,16 @@ class VeyraErrorMessages {
   ///
   /// Centralise un pattern auparavant dupliqué manuellement dans
   /// plusieurs écrans (ex: `(e.response?.data is Map) ? ... : null`).
+  static bool isOffline(Object error) {
+    if (error is DioException) {
+      return error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout;
+    }
+    return false;
+  }
+
   static String forException(Object error) {
     if (error is DioException) {
       final isConnectivityIssue = error.type == DioExceptionType.connectionError ||
