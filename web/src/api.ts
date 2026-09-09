@@ -95,6 +95,9 @@ export class Api {
   partnerOrganizations(){return this.request('/partner/organizations');}
   partnerFinance(id:string){return this.request('/partner/'+id+'/finance');}
   partnerBookings(id:string){return this.request('/partner/'+id+'/bookings');}
+  partnerBeneficiaries(id:string){return this.request('/partner/'+id+'/beneficiaries');}
+  createPartnerBeneficiary(id:string,body:any){return this.request('/partner/'+id+'/beneficiaries',{method:'POST',body:JSON.stringify(body)});}
+  partnerInvoices(id:string){return this.request('/partner/'+id+'/invoices');}
   autocomplete(q:string){return this.request('/addresses/autocomplete?q='+encodeURIComponent(q));}
   vehicleCategories(){return this.request('/reference/vehicle-categories');}
   createScheduledBooking(body:any){return this.request('/scheduled-bookings',{method:'POST',body:JSON.stringify(body)});}

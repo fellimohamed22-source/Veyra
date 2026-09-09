@@ -41,6 +41,15 @@ const KYC_STATUS_FR: Record<string,string> = {
   REJECTED: 'Dossier refusé',
 };
 
+// Seules deux valeurs sont réellement posées dans le code
+// (PartnerInvoiceController) : DRAFT (défaut schéma) et ISSUED (à la
+// génération). Pas de transition PAID/OVERDUE implémentée à ce jour --
+// ne pas en inventer le libellé.
+const INVOICE_STATUS_FR: Record<string,string> = {
+  DRAFT: 'Brouillon',
+  ISSUED: 'Émise',
+};
+
 // 19 codes officiels de 10_ANTI_ERROR_PROTOCOL/ERROR_MAPPING.md, wording
 // identique à celui utilisé côté Flutter (core/formatters/error_messages.dart),
 // plus les codes réels rencontrés en pratique et vérifiés dans le backend.
@@ -82,6 +91,11 @@ export function partnerOrgStatusLabel(code: string|null|undefined): string {
 export function kycStatusLabel(code: string|null|undefined): string {
   if (!code) return '—';
   return KYC_STATUS_FR[code] ?? code;
+}
+
+export function invoiceStatusLabel(code: string|null|undefined): string {
+  if (!code) return '—';
+  return INVOICE_STATUS_FR[code] ?? code;
 }
 
 /** [minor] en centimes -> "195,00 €". Jamais de calcul, affichage seul. */

@@ -2,7 +2,7 @@ import {CommonModule} from '@angular/common';
 import {Component,OnInit} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {Api} from '../api';
-import {statusLabel,paymentMethodLabel,partnerOrgStatusLabel,money,dateTime,errorMessage} from '../formatters';
+import {statusLabel,paymentMethodLabel,partnerOrgStatusLabel,money,dateTime,errorMessage,invoiceStatusLabel} from '../formatters';
 
 @Component({
   standalone:true,
@@ -131,6 +131,36 @@ import {statusLabel,paymentMethodLabel,partnerOrgStatusLabel,money,dateTime,erro
         <button (click)="loadFinance()">Voir l'encours</button>
         <pre *ngIf="finance">{{finance | json}}</pre>
       </div>
+
+      <div class="card" *ngIf="partnerId">
+        <h3>Clients enregistrés</h3>
+        <p>Optionnel : enregistrez vos clients habituels pour les retrouver rapidement. Une réservation ne nécessite pas un client enregistré.</p>
+        <input [(ngModel)]="newBeneficiaryName" placeholder="Nom complet">
+        <input [(ngModel)]="newBeneficiaryPhone" placeholder="Téléphone">
+        <input [(ngModel)]="newBeneficiaryEmail" placeholder="Email (optionnel)">
+        <button (click)="createBeneficiary()" [disabled]="creatingBeneficiary || !newBeneficiaryName.trim()">
+          {{creatingBeneficiary?'Enregistrement…':'Ajouter ce client'}}
+        </button>
+        <p *ngIf="beneficiaryMessage">{{beneficiaryMessage}}</p>
+        <hr>
+        <button (click)="loadBeneficiaries()">Actualiser la liste</button>
+        <p *ngIf="beneficiariesLoaded && beneficiaries.length===0">Aucun client enregistré pour le moment.</p>
+        <div *ngFor="let b of beneficiaries" style="border-top:1px solid #e5e7eb;padding:8px 0">
+          <strong>{{b.full_name}}</strong>
+          <div>{{b.phone}}<span *ngIf="b.email"> • {{b.email}}</span></div>
+        </div>
+      </div>
+
+      <div class="card" *ngIf="partnerId">
+        <h3>Mes factures</h3>
+        <button (click)="loadInvoices()">Actualiser</button>
+        <p *ngIf="invoicesLoaded && invoices.length===0">Aucune facture pour le moment.</p>
+        <div *ngFor="let inv of invoices" style="border-top:1px solid #e5e7eb;padding:8px 0">
+          <strong>{{money(inv.total_minor,inv.currency)}}</strong> — {{invoiceStatusLabel(inv.status)}}
+          <div>Période : {{dateTime(inv.period_start)}} → {{dateTime(inv.period_end)}}</div>
+          <div *ngIf="inv.due_at">Échéance : {{dateTime(inv.due_at)}}</div>
+        </div>
+      </div>
     </div>
   `
 })
@@ -141,6 +171,7 @@ export class Partner implements OnInit{
   statusLabel=statusLabel;
   paymentMethodLabel=paymentMethodLabel;
   partnerOrgStatusLabel=partnerOrgStatusLabel;
+  invoiceStatusLabel=invoiceStatusLabel;
   money=money;
   dateTime=dateTime;
 
@@ -161,6 +192,12 @@ export class Partner implements OnInit{
   accepting=false;acceptError='';
   finance:any=null;
   publishing=false;publishMessage='';
+
+  newBeneficiaryName='';newBeneficiaryPhone='';newBeneficiaryEmail='';
+  creatingBeneficiary=false;beneficiaryMessage='';
+  beneficiaries:any[]=[];beneficiariesLoaded=false;
+
+  invoices:any[]=[];invoicesLoaded=false;
 
   constructor(private api:Api){}
 
@@ -286,5 +323,47 @@ export class Partner implements OnInit{
 
   async loadFinance(){
     try{this.finance=await this.api.partnerFinance(this.partnerId);}catch{this.finance={error:'indisponible'};}
+  }
+
+  async createBeneficiary(){
+    if(!this.partnerId||this.creatingBeneficiary||!this.newBeneficiaryName.trim())return;
+    this.creatingBeneficiary=true;this.beneficiaryMessage='';
+    try{
+      await this.api.createPartnerBeneficiary(this.partnerId,{
+        fullName:this.newBeneficiaryName.trim(),
+        phone:this.newBeneficiaryPhone.trim()||null,
+        email:this.newBeneficiaryEmail.trim()||null,
+        externalReference:null,
+      });
+      this.newBeneficiaryName='';this.newBeneficiaryPhone='';this.newBeneficiaryEmail='';
+      this.beneficiaryMessage='Client ajouté.';
+      await this.loadBeneficiaries();
+    }catch(e:any){
+      this.beneficiaryMessage=errorMessage(e?.code);
+    }finally{
+      this.creatingBeneficiary=false;
+    }
+  }
+
+  async loadBeneficiaries(){
+    if(!this.partnerId)return;
+    try{
+      this.beneficiaries=await this.api.partnerBeneficiaries(this.partnerId);
+    }catch{
+      this.beneficiaries=[];
+    }finally{
+      this.beneficiariesLoaded=true;
+    }
+  }
+
+  async loadInvoices(){
+    if(!this.partnerId)return;
+    try{
+      this.invoices=await this.api.partnerInvoices(this.partnerId);
+    }catch{
+      this.invoices=[];
+    }finally{
+      this.invoicesLoaded=true;
+    }
   }
 }
