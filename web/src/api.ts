@@ -25,6 +25,20 @@ export class Api {
     return response.status===204?null:response.json();
   }
 
+  // request() always parses JSON -- documents/{id}/content returns raw
+  // bytes (image/PDF), which would throw trying to JSON-parse it.
+  // Separate method rather than a flag on request(), to keep the much
+  // more common JSON path simple and not risk it accidentally taking
+  // the blob branch.
+  async requestBlob(path:string):Promise<Blob>{
+    const token=localStorage.getItem('accessToken');
+    const headers=new Headers();
+    if(token)headers.set('Authorization','Bearer '+token);
+    const response=await fetch(this.base+path,{headers});
+    if(!response.ok)throw new Error('HTTP_'+response.status);
+    return response.blob();
+  }
+
   private async refreshAccessToken():Promise<boolean>{
     if(this.refreshPromise)return this.refreshPromise;
     this.refreshPromise=(async()=>{
@@ -71,6 +85,7 @@ export class Api {
   adminDashboard(){return this.request('/admin/dashboard');}
   adminBookings(){return this.request('/admin/bookings');}
   adminDrivers(){return this.request('/admin/drivers');}
+  adminDriverDocuments(id:string){return this.request('/admin/drivers/'+id+'/documents');}
   adminPartners(){return this.request('/admin/partners');}
   approveDriver(id:string){return this.request('/admin/drivers/'+id+'/approve',{method:'POST'});}
   rejectDriver(id:string,reasonCode:string){return this.request('/admin/drivers/'+id+'/reject',{method:'POST',body:JSON.stringify({reasonCode})});}

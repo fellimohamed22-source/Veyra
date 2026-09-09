@@ -33,6 +33,20 @@ public class AdminController {
       "from drivers d join users u on u.id=d.user_id order by d.created_at desc limit 500");
   }
 
+  // Gap réel trouvé en auditant DocumentController : GET /{id}/content
+  // existe et fonctionne (autorise ADMIN/SUPPORT ou le propriétaire),
+  // mais rien ne permettait à l'admin de savoir QUELS documents lister
+  // avant de les consulter -- approveDriver()/rejectDriver()
+  // ci-dessous étaient donc appelables sans qu'aucun document n'ait
+  // jamais été concrètement affiché à l'écran.
+  @GetMapping("/drivers/{id}/documents")
+  public List<Map<String,Object>> driverDocuments(@PathVariable UUID id){
+    return db.queryForList(
+      "select id,type,status,original_filename,content_type,expires_at,rejection_reason_code,created_at " +
+      "from driver_documents where driver_id=? order by created_at desc",
+      id);
+  }
+
   @PostMapping("/drivers/{id}/approve")
   public void approveDriver(@PathVariable UUID id){
     db.update(

@@ -50,6 +50,17 @@ const INVOICE_STATUS_FR: Record<string,string> = {
   ISSUED: 'Émise',
 };
 
+// Mêmes 5 types et même wording que mobile-driver/lib/main.dart (écran
+// KYC) -- vérifiés dans ce fichier avant d'écrire cette liste, pas
+// devinés.
+const DOCUMENT_TYPE_FR: Record<string,string> = {
+  IDENTITY: "Pièce d'identité",
+  VTC_CARD: 'Carte professionnelle VTC',
+  DRIVING_LICENSE: 'Permis de conduire',
+  INSURANCE: 'Assurance professionnelle / véhicule',
+  VEHICLE_REGISTRATION: 'Carte grise du véhicule',
+};
+
 // 19 codes officiels de 10_ANTI_ERROR_PROTOCOL/ERROR_MAPPING.md, wording
 // identique à celui utilisé côté Flutter (core/formatters/error_messages.dart),
 // plus les codes réels rencontrés en pratique et vérifiés dans le backend.
@@ -96,6 +107,11 @@ export function kycStatusLabel(code: string|null|undefined): string {
 export function invoiceStatusLabel(code: string|null|undefined): string {
   if (!code) return '—';
   return INVOICE_STATUS_FR[code] ?? code;
+}
+
+export function documentTypeLabel(code: string|null|undefined): string {
+  if (!code) return '—';
+  return DOCUMENT_TYPE_FR[code] ?? code;
 }
 
 /** [minor] en centimes -> "195,00 €". Jamais de calcul, affichage seul. */

@@ -2,7 +2,7 @@ import {CommonModule} from '@angular/common';
 import {Component,OnInit} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {Api} from '../api';
-import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel} from '../formatters';
+import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel,documentTypeLabel} from '../formatters';
 
 @Component({
   standalone:true,
@@ -25,6 +25,17 @@ import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel} from '../formatt
       <div *ngFor="let d of drivers" style="border-top:1px solid #e5e7eb;padding:12px 0">
         <strong>{{d.first_name}} {{d.last_name}}</strong>
         <div>{{d.email}} • {{d.phone||'sans téléphone'}} • {{kycStatusLabel(d.kyc_status)}}</div>
+        <button (click)="toggleDocuments(d.id)">{{expandedDriverId===d.id?'Masquer les documents':'Voir les documents'}}</button>
+        <div *ngIf="expandedDriverId===d.id" style="margin:8px 0;padding:8px;background:#f9fafb">
+          <p *ngIf="documentsLoading">Chargement des documents…</p>
+          <p *ngIf="!documentsLoading && documents.length===0">Aucun document soumis.</p>
+          <div *ngFor="let doc of documents" style="padding:4px 0">
+            {{documentTypeLabel(doc.type)}} — {{kycStatusLabel(doc.status)}}
+            <span *ngIf="doc.expires_at"> — expire le {{dateTime(doc.expires_at)}}</span>
+            <button (click)="viewDocument(doc.id)">Voir</button>
+          </div>
+          <p *ngIf="documentViewError" style="color:#dc2626">{{documentViewError}}</p>
+        </div>
         <button *ngIf="d.kyc_status!=='APPROVED'" (click)="approveDriver(d.id)">Approuver</button>
         <button *ngIf="d.kyc_status!=='APPROVED'" (click)="rejectDriver(d.id)">Rejeter</button>
       </div>
@@ -134,10 +145,15 @@ export class Admin implements OnInit{
   paymentMethodLabel=paymentMethodLabel;
   dateTime=dateTime;
   kycStatusLabel=kycStatusLabel;
+  documentTypeLabel=documentTypeLabel;
 
   dashboard:any=null;
   bookings:any[]=[];
   drivers:any[]=[];
+  expandedDriverId='';
+  documents:any[]=[];
+  documentsLoading=false;
+  documentViewError='';
   partners:any[]=[];
   loading=false;
   error='';
@@ -181,6 +197,36 @@ export class Admin implements OnInit{
   }
 
   async approveDriver(id:string){await this.api.approveDriver(id);await this.load();}
+
+  async toggleDocuments(driverId:string){
+    if(this.expandedDriverId===driverId){
+      this.expandedDriverId='';
+      this.documents=[];
+      return;
+    }
+    this.expandedDriverId=driverId;
+    this.documents=[];
+    this.documentViewError='';
+    this.documentsLoading=true;
+    try{
+      this.documents=await this.api.adminDriverDocuments(driverId);
+    }catch{
+      this.documents=[];
+    }finally{
+      this.documentsLoading=false;
+    }
+  }
+
+  async viewDocument(id:string){
+    this.documentViewError='';
+    try{
+      const blob=await this.api.requestBlob('/documents/'+id+'/content');
+      const url=URL.createObjectURL(blob);
+      window.open(url,'_blank');
+    }catch{
+      this.documentViewError='Document introuvable ou accès refusé.';
+    }
+  }
   async rejectDriver(id:string){
     const reason=prompt('Motif de rejet KYC')||'DOCUMENT_INVALID';
     await this.api.rejectDriver(id,reason);await this.load();
