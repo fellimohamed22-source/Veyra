@@ -12,11 +12,11 @@ CREATE TABLE offer_visibility_policy_versions(
   effective_to TIMESTAMPTZ
 );
 INSERT INTO offer_visibility_policy_versions(mode,version_no,status,effective_from)
-VALUES ('PRIVATE',1,'ACTIVE',now());
+VALUES ('BEST_VISIBLE',1,'ACTIVE',now());
 
 -- Snapshotté à la CRÉATION de la réservation (pas relu dynamiquement),
 -- pour la même raison que commission_bps est snapshotté dans
 -- booking_financial_snapshots : si l'admin change le réglage global
 -- pendant qu'une enchère est déjà ouverte, les chauffeurs déjà invités
 -- ne doivent pas voir les règles du jeu changer en cours de route.
-ALTER TABLE scheduled_bookings ADD COLUMN IF NOT EXISTS offer_visibility_mode VARCHAR(20) NOT NULL DEFAULT 'PRIVATE' CHECK (offer_visibility_mode IN ('PRIVATE','BEST_VISIBLE'));
+ALTER TABLE scheduled_bookings ADD COLUMN IF NOT EXISTS offer_visibility_mode VARCHAR(20) NOT NULL DEFAULT 'BEST_VISIBLE' CHECK (offer_visibility_mode IN ('PRIVATE','BEST_VISIBLE'));
