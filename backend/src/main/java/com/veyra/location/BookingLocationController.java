@@ -35,6 +35,7 @@ public class BookingLocationController {
   }
 
   private void authorize(UUID bookingId){
+    if(CurrentUser.hasRole("ADMIN")||CurrentUser.hasRole("SUPPORT"))return;
     UUID userId=CurrentUser.id();
     Integer allowed=db.queryForObject(
       "select count(*) from scheduled_bookings sb " +

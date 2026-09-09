@@ -142,4 +142,46 @@ class ChatControllerTest {
 
     assertEquals(1, messages.size());
   }
+
+  @Test
+  void adminCanListMessagesForABookingTheyAreNotAParticipantOf() {
+    // Real gap found and fixed: ADMIN/SUPPORT staff investigating a
+    // dispute (sections 27/72) were previously treated identically to
+    // any uninvolved stranger here -- CHAT_NOT_ALLOWED even though
+    // reviewing the conversation is exactly their job. Do NOT stub
+    // stubParticipant() at all: the point of this test is that the
+    // ownership query must never even run for staff.
+    SecurityContextHolder.getContext().setAuthentication(
+        new TestingAuthenticationToken(userId, null, "ROLE_ADMIN"));
+    when(db.queryForList(contains("from chat_messages cm join chat_conversations"), eq(bookingId)))
+        .thenReturn(List.of(Map.of("id", UUID.randomUUID(), "body", "hi")));
+
+    List<Map<String, Object>> messages = controller().list(bookingId);
+
+    assertEquals(1, messages.size());
+    verify(db, never()).queryForObject(contains("from scheduled_bookings sb left join drivers"), eq(Integer.class), any(Object[].class));
+  }
+
+  @Test
+  void supportCanListMessagesToo() {
+    SecurityContextHolder.getContext().setAuthentication(
+        new TestingAuthenticationToken(userId, null, "ROLE_SUPPORT"));
+    when(db.queryForList(contains("from chat_messages cm join chat_conversations"), eq(bookingId)))
+        .thenReturn(List.of());
+
+    assertDoesNotThrow(() -> controller().list(bookingId));
+  }
+
+  @Test
+  void aRegularDriverRoleWithoutAdminOrSupportIsStillSubjectToTheOwnershipCheck() {
+    // Guards against a too-broad bypass -- e.g. accidentally matching on
+    // any authenticated role instead of specifically ADMIN/SUPPORT.
+    SecurityContextHolder.getContext().setAuthentication(
+        new TestingAuthenticationToken(userId, null, "ROLE_DRIVER"));
+    stubParticipant(0);
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().list(bookingId));
+
+    assertEquals("CHAT_NOT_ALLOWED", ex.code());
+  }
 }

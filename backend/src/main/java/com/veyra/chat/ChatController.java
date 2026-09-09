@@ -36,6 +36,7 @@ import java.util.*;
         return id;
     }
     private void participant(UUID b){
+        if(CurrentUser.hasRole("ADMIN")||CurrentUser.hasRole("SUPPORT"))return;
         UUID u=CurrentUser.id();
         Integer n=db.queryForObject("select count(*) from scheduled_bookings sb left join drivers d on d.id=sb.selected_driver_id left join partner_users pu on pu.partner_id=sb.partner_id and pu.user_id=? where sb.id=? and sb.status in ('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CLOSED') and (sb.creator_user_id=? or d.user_id=? or pu.id is not null)",Integer.class,u,b,u,u);
         if(n==0)throw new ApiException(HttpStatus.FORBIDDEN,"CHAT_NOT_ALLOWED");

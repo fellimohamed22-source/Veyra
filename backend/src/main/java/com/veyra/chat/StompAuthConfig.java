@@ -58,6 +58,11 @@ public class StompAuthConfig implements WebSocketMessageBrokerConfigurer {
                 !(auth.getPrincipal() instanceof UUID userId)){
               throw new AccessDeniedException("Authenticated user required");
             }
+            boolean isStaff=auth.getAuthorities().stream()
+                .anyMatch(a->a.getAuthority().equals("ROLE_ADMIN")||a.getAuthority().equals("ROLE_SUPPORT"));
+            if(isStaff){
+              return message;
+            }
             UUID bookingId=UUID.fromString(matcher.group(1));
             Integer allowed=db.queryForObject(
               "select count(*) from scheduled_bookings sb " +
