@@ -137,12 +137,65 @@ class RatingControllerTest {
   }
 
   @Test
-  void listingRatingsReturnsThemForTheBooking() {
+  void listingRatingsReturnsThemForAParticipant() {
+    asUser(customerId);
+    stubBookingForList(driverUserId);
     when(db.queryForList(contains("from ride_ratings where booking_id=?"), eq(bookingId)))
         .thenReturn(List.of(Map.of("score", 5)));
 
     List<Map<String, Object>> ratings = controller().list(bookingId);
 
     assertEquals(1, ratings.size());
+  }
+
+  @Test
+  void listingRatingsRejectsSomeoneNotInvolvedInTheBooking() {
+    // Real privacy gap this closes: list() previously had ZERO
+    // authorization at all -- any authenticated user could read the
+    // private free-text comment for any booking id they could guess or
+    // enumerate, entirely independent of what the mobile apps
+    // themselves call (confirmed neither app currently calls this GET
+    // at all, so this fix carries no regression risk client-side, but
+    // the endpoint itself was exploitable directly regardless).
+    asUser(UUID.randomUUID());
+    stubBookingForList(driverUserId);
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().list(bookingId));
+
+    assertEquals("NOT_A_PARTICIPANT", ex.code());
+    verify(db, never()).queryForList(contains("from ride_ratings"), eq(bookingId));
+  }
+
+  @Test
+  void listingRatingsRejectsAnUnknownBooking() {
+    asUser(customerId);
+    when(db.queryForList(contains("from scheduled_bookings sb left join drivers"), eq(bookingId)))
+        .thenReturn(List.of());
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().list(bookingId));
+
+    assertEquals("BOOKING_NOT_FOUND", ex.code());
+  }
+
+  @Test
+  void listingRatingsAllowsAdminForABookingTheyAreNotAParticipantOf() {
+    SecurityContextHolder.getContext().setAuthentication(
+        new TestingAuthenticationToken(UUID.randomUUID(), null, "ROLE_ADMIN"));
+    when(db.queryForList(contains("from ride_ratings where booking_id=?"), eq(bookingId)))
+        .thenReturn(List.of(Map.of("score", 2, "comment", "disputed")));
+
+    List<Map<String, Object>> ratings = controller().list(bookingId);
+
+    assertEquals(1, ratings.size());
+    // The ownership query must never even run for staff.
+    verify(db, never()).queryForList(contains("from scheduled_bookings sb left join drivers"), eq(bookingId));
+  }
+
+  private void stubBookingForList(UUID driverUserIdOrNull) {
+    Map<String, Object> row = new HashMap<>();
+    row.put("creator_user_id", customerId);
+    row.put("driver_user_id", driverUserIdOrNull);
+    when(db.queryForList(contains("from scheduled_bookings sb left join drivers"), eq(bookingId)))
+        .thenReturn(List.of(row));
   }
 }

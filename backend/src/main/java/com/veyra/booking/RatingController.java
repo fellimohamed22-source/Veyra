@@ -90,6 +90,29 @@ public class RatingController {
 
   @GetMapping
   public List<Map<String, Object>> list(@PathVariable UUID bookingId) {
+    // Real privacy gap found and fixed: this had ZERO authorization
+    // check before -- any authenticated user could read the private
+    // free-text comment (up to 1000 chars) for any booking id they
+    // could guess or enumerate, matching exactly the section 71 concern
+    // ("CLIENT A ne peut jamais obtenir booking CLIENT B") but broader,
+    // since it never even checked booking involvement at all.
+    if (!CurrentUser.hasRole("ADMIN") && !CurrentUser.hasRole("SUPPORT")) {
+      UUID currentUserId = CurrentUser.id();
+      List<Map<String, Object>> rows = db.queryForList(
+          "select sb.creator_user_id,d.user_id as driver_user_id " +
+          "from scheduled_bookings sb left join drivers d on d.id=sb.selected_driver_id " +
+          "where sb.id=?",
+          bookingId);
+      if (rows.isEmpty()) {
+        throw new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND");
+      }
+      Map<String, Object> booking = rows.getFirst();
+      boolean participant = currentUserId.equals(booking.get("creator_user_id")) ||
+          currentUserId.equals(booking.get("driver_user_id"));
+      if (!participant) {
+        throw new ApiException(HttpStatus.FORBIDDEN, "NOT_A_PARTICIPANT");
+      }
+    }
     return db.queryForList(
         "select id,rater_id,rated_user_id,score,comment,created_at from ride_ratings where booking_id=?",
         bookingId);
