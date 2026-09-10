@@ -23,11 +23,11 @@ class VeyraColors {
   static const border = Color(0xFFE5E7EB);
 
   // Semantic
-  static const success = Color(0xFF16A34A);
+  static const success = Color(0xFF12883E);
   static const successBackground = Color(0xFFE8F7EE);
   static const info = Color(0xFF2563EB);
   static const infoBackground = Color(0xFFEAF1FD);
-  static const warning = Color(0xFFF59E0B);
+  static const warning = Color(0xFFA46907);
   static const warningBackground = Color(0xFFFDF3E3);
   static const danger = Color(0xFFDC2626);
   static const dangerBackground = Color(0xFFFDEAEA);
