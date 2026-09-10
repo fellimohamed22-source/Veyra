@@ -1076,10 +1076,13 @@ class _OffersScreenState extends State<OffersScreen>{
                       Expanded(child:Text('${x['vehicleCategory']??'VTC'} • $vehicle',style:const TextStyle(color:Colors.black54,fontSize:12),overflow:TextOverflow.ellipsis)),
                     ]),
                   ])),
-                  Text(VeyraMoneyFormatter.fromMinor(x['totalMinor']),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
+                  Column(crossAxisAlignment:CrossAxisAlignment.end,children:[
+                    Text(t('Total à payer'),style:const TextStyle(fontSize:11,color:Colors.black45)),
+                    Text(VeyraMoneyFormatter.fromMinor(x['totalMinor']),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
+                  ]),
                 ]),
                 const SizedBox(height:4),
-                Text(t('Prix chauffeur: ')+VeyraMoneyFormatter.fromMinor(x['driverPriceMinor']),style:const TextStyle(fontSize:12,color:Colors.black45)),
+                Text(t('Chauffeur : ')+VeyraMoneyFormatter.fromMinor(x['driverPriceMinor'])+'  •  '+t('Frais Veyra : ')+VeyraMoneyFormatter.fromMinor(x['commissionMinor']),style:const TextStyle(fontSize:12,color:Colors.black45)),
                 const SizedBox(height:12),
                 SizedBox(width:double.infinity,child:FilledButton(
                   style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
