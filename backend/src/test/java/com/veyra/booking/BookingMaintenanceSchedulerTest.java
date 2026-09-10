@@ -36,6 +36,8 @@ class BookingMaintenanceSchedulerTest {
   @Test
   void recordsNoOfferOnlyWhenTheUpdateActuallyAffectedARow() {
     UUID bookingId = UUID.randomUUID();
+    when(db.update(contains("driver_offers set status='EXPIRED' where status='ACTIVE'")))
+        .thenReturn(0);
     when(db.queryForList(contains("and not exists(select 1 from driver_offers"), eq(UUID.class)))
         .thenReturn(List.of(bookingId));
     when(db.queryForList(contains("and sb.selected_driver_id is null"), eq(UUID.class)))
@@ -51,6 +53,8 @@ class BookingMaintenanceSchedulerTest {
   @Test
   void doesNotRecordNoOfferWhenTheRaceConditionMeansNothingWasActuallyUpdated() {
     UUID bookingId = UUID.randomUUID();
+    when(db.update(contains("driver_offers set status='EXPIRED' where status='ACTIVE'")))
+        .thenReturn(0);
     when(db.queryForList(contains("and not exists(select 1 from driver_offers"), eq(UUID.class)))
         .thenReturn(List.of(bookingId));
     when(db.queryForList(contains("and sb.selected_driver_id is null"), eq(UUID.class)))
@@ -66,11 +70,15 @@ class BookingMaintenanceSchedulerTest {
   @Test
   void recordsExpiredOnlyWhenTheUpdateActuallyAffectedARow() {
     UUID bookingId = UUID.randomUUID();
+    when(db.update(contains("driver_offers set status='EXPIRED' where status='ACTIVE'")))
+        .thenReturn(0);
     when(db.queryForList(contains("and not exists(select 1 from driver_offers"), eq(UUID.class)))
         .thenReturn(List.of());
     when(db.queryForList(contains("and sb.selected_driver_id is null"), eq(UUID.class)))
         .thenReturn(List.of(bookingId));
-    when(db.update(contains("status='EXPIRED'"), eq(bookingId)))
+    when(db.update(contains("driver_offers set status='EXPIRED' where booking_id=?"), eq(bookingId)))
+        .thenReturn(0);
+    when(db.update(contains("status='EXPIRED',updated_at"), eq(bookingId)))
         .thenReturn(1);
 
     scheduler().closeExpiredOfferWindows();
