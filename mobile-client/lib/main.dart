@@ -838,7 +838,7 @@ class _AddressScreenState extends State<AddressScreen>{
     }
     setState((){submitting=true;error=null;});
     try{
-      await api.createBooking({
+      final created=await api.createBooking({
         'pickup':{
           'lat':pickupPlace!['lat'],
           'lng':pickupPlace!['lng'],
@@ -856,7 +856,37 @@ class _AddressScreenState extends State<AddressScreen>{
         'passengerCount':passengerCount,
         'baggageCount':baggageCount,
       });
-      if(mounted)context.go('/home');
+      if(!mounted)return;
+      final newBookingId=created['id']?.toString();
+      // Spec section 6, explicit: "Current behavior returning immediately
+      // to Home is insufficient UX." Never implies a driver is already
+      // booked -- publishing a request is not a confirmed driver, so this
+      // deliberately stays about the request being sent, not about a
+      // ride being arranged.
+      await showModalBottomSheet(context:context,isDismissible:false,enableDrag:false,builder:(sheetContext)=>SafeArea(child:Padding(
+        padding:const EdgeInsets.all(24),
+        child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
+          const SizedBox(height:12),
+          Text(t('Demande publiée'),textAlign:TextAlign.center,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+          const SizedBox(height:8),
+          Text(t('Votre demande a été envoyée aux chauffeurs Veyra disponibles. Vous recevrez une notification lorsqu’une nouvelle offre sera reçue.'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.black54)),
+          const SizedBox(height:20),
+          if(newBookingId!=null)FilledButton(
+            onPressed:(){
+              Navigator.pop(sheetContext);
+              context.go('/home');
+              context.push('/offers/'+newBookingId);
+            },
+            child:Text(t('Voir ma demande')),
+          ),
+          const SizedBox(height:8),
+          OutlinedButton(
+            onPressed:(){Navigator.pop(sheetContext);context.go('/home');},
+            child:Text(t('Retour à l’accueil')),
+          ),
+        ]),
+      )));
     }on DioException catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }catch(_){
