@@ -108,6 +108,8 @@ class AppLocale {
     'Date et heure de départ': 'Departure date and time',
     'Minimum 2 h à l’avance': 'At least 2 hours ahead',
     'Passagers': 'Passengers',
+    'Diminuer': 'Decrease',
+    'Augmenter': 'Increase',
     'Bagages': 'Luggage',
     'Catégorie de véhicule': 'Vehicle category',
     'Catégories indisponibles.': 'Categories unavailable.',

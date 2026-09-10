@@ -680,6 +680,60 @@ class _RecapLine extends StatelessWidget{
   );
 }
 
+/// Stepper mobile pour un compteur borné (passagers/bagages) -- remplace
+/// les DropdownButtonFormField précédents, explicitement demandé par la
+/// mission UX (section 5 : "prefer mobile steppers rather than awkward
+/// dropdowns"). Boutons +/- de 48dp (section 20 : cible tactile
+/// minimale confortable), désactivés proprement aux bornes plutôt que
+/// de permettre un dépassement silencieux.
+class _CountStepper extends StatelessWidget{
+  final String label;
+  final int value;
+  final int min;
+  final int max;
+  final ValueChanged<int> onChanged;
+  const _CountStepper({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  @override Widget build(BuildContext context)=>Container(
+    decoration:BoxDecoration(
+      border:Border.all(color:const Color(0xFFE5E7EB)),
+      borderRadius:BorderRadius.circular(VeyraRadius.md),
+    ),
+    padding:const EdgeInsets.symmetric(horizontal:8,vertical:4),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Padding(
+        padding:const EdgeInsets.only(left:8,top:6),
+        child:Text(label,style:const TextStyle(fontSize:12,color:Colors.black54)),
+      ),
+      Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+        SizedBox(
+          width:48,height:48,
+          child:IconButton(
+            onPressed:value>min?()=>onChanged(value-1):null,
+            icon:const Icon(Icons.remove_circle_outline),
+            tooltip:t('Diminuer'),
+          ),
+        ),
+        Text('$value',style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
+        SizedBox(
+          width:48,height:48,
+          child:IconButton(
+            onPressed:value<max?()=>onChanged(value+1):null,
+            icon:const Icon(Icons.add_circle_outline),
+            tooltip:t('Augmenter'),
+          ),
+        ),
+      ]),
+    ]),
+  );
+}
+
 class AddressScreen extends StatefulWidget{
   const AddressScreen({super.key});
   @override State<AddressScreen> createState()=>_AddressScreenState();
@@ -971,18 +1025,20 @@ class _AddressScreenState extends State<AddressScreen>{
       ),
       const SizedBox(height:18),
       Row(children:[
-        Expanded(child:DropdownButtonFormField<int>(
-          initialValue:passengerCount,
-          decoration:InputDecoration(labelText:t('Passagers')),
-          items:List.generate(8,(i)=>DropdownMenuItem(value:i+1,child:Text('${i+1}'))),
-          onChanged:(v){if(v!=null)setState(()=>passengerCount=v);},
+        Expanded(child:_CountStepper(
+          label:t('Passagers'),
+          value:passengerCount,
+          min:1,
+          max:8,
+          onChanged:(v)=>setState(()=>passengerCount=v),
         )),
         const SizedBox(width:12),
-        Expanded(child:DropdownButtonFormField<int>(
-          initialValue:baggageCount,
-          decoration:InputDecoration(labelText:t('Bagages')),
-          items:List.generate(7,(i)=>DropdownMenuItem(value:i,child:Text('$i'))),
-          onChanged:(v){if(v!=null)setState(()=>baggageCount=v);},
+        Expanded(child:_CountStepper(
+          label:t('Bagages'),
+          value:baggageCount,
+          min:0,
+          max:6,
+          onChanged:(v)=>setState(()=>baggageCount=v),
         )),
       ]),
       const SizedBox(height:18),
