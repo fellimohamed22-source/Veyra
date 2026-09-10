@@ -40,6 +40,36 @@ public class BookingQueryController {
     }
 
     Map<String,Object> row=rows.getFirst();
+    assertAllowed(row,userId);
+    return new LinkedHashMap<>(row);
+  }
+
+  // Gap found for P32 (Partner "Suivi reservation"): the fiche lists
+  // "timeline" as a required UI component with booking_status_history
+  // as its DB source, but the only endpoint reading that table
+  // (SupportController.timeline()) is ADMIN/SUPPORT-only and bundles in
+  // full chat messages + payment rows, neither appropriate to hand to a
+  // partner (privacy: a partner has no business reading the customer/
+  // driver chat). A narrower, booking-detail-scoped sibling endpoint,
+  // reusing the exact same ownership check as detail() above (extracted
+  // into assertAllowed() rather than duplicated) instead of the
+  // admin-only one.
+  @GetMapping("/{bookingId}/timeline")
+  public List<Map<String,Object>> timeline(@PathVariable UUID bookingId){
+    UUID userId=CurrentUser.id();
+    List<Map<String,Object>> rows=db.queryForList(
+        "select creator_user_id,partner_id,selected_driver_id from scheduled_bookings where id=?",
+        bookingId);
+    if(rows.isEmpty()){
+      throw new ApiException(HttpStatus.NOT_FOUND,"BOOKING_NOT_FOUND");
+    }
+    assertAllowed(rows.getFirst(),userId);
+    return db.queryForList(
+        "select from_status,to_status,actor_type,reason_code,created_at from booking_status_history where booking_id=? order by created_at",
+        bookingId);
+  }
+
+  private void assertAllowed(Map<String,Object> row,UUID userId){
     boolean allowed=userId.equals(row.get("creator_user_id"));
 
     UUID partnerId=(UUID)row.get("partner_id");
@@ -61,7 +91,5 @@ public class BookingQueryController {
     if(!allowed){
       throw new ApiException(HttpStatus.FORBIDDEN,"FORBIDDEN");
     }
-
-    return new LinkedHashMap<>(row);
   }
 }
