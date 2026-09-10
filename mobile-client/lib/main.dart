@@ -21,6 +21,7 @@ import 'core/formatters/status_labels.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/status_badge.dart';
+import 'core/widgets/pin_display.dart';
 
 /// Short alias used throughout this file -- AppLocale.t() everywhere
 /// would be far noisier across ~100 call sites.
@@ -1205,7 +1206,13 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))
             FilledButton.icon(onPressed:()=>context.push('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:Text(t('Suivre la course'))),
           if(status=='CONFIRMED'||status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED')...[
-            OutlinedButton(onPressed:loadPin,child:Text(pin==null?t('Afficher le PIN'):t('PIN : ')+pin!)),
+            if(pin==null)
+              OutlinedButton(onPressed:loadPin,child:Text(t('Afficher le PIN')))
+            else...[
+              Text(t('Code à transmettre au chauffeur à son arrivée'),style:const TextStyle(fontSize:13,color:Colors.black54)),
+              const SizedBox(height:8),
+              VeyraPinDisplay(pin:pin!),
+            ],
             TextButton(onPressed:cancelling?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):t('Annuler la réservation'))),
           ],
           if({'COMPLETED','CLOSED'}.contains(status))

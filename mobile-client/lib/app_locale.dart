@@ -135,6 +135,7 @@ class AppLocale {
     'Statut': 'Status',
     'Chauffeur confirmé': 'Confirmed driver',
     'Afficher le PIN': 'Show PIN',
+    'Code à transmettre au chauffeur à son arrivée': 'Code to give the driver when they arrive',
     'PIN : ': 'PIN: ',
     'Le PIN sera disponible à H-1.': 'The PIN will be available 1 hour before pickup.',
     'Annuler la réservation': 'Cancel the booking',
