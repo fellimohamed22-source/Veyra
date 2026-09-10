@@ -40,6 +40,24 @@ void openPush(RemoteMessage message){
   }
 }
 
+/// Section 19 (mission UX/fonctionnelle) : "Do not rely on RouteObserver
+/// if it is unreliable with the nested Navigator. Use the simplest
+/// explicit refresh/invalidation mechanism consistent with the current
+/// architecture." Un simple compteur global, incrémenté par tout écran
+/// qui vient de terminer une mutation, et écouté par tout écran de liste
+/// qui doit se rafraîchir en réponse -- ne dépend d'aucune particularité
+/// de Navigator/Observer, fonctionne identiquement quel que soit
+/// l'endroit de l'arbre de widgets où se trouvent l'un et l'autre.
+/// Vient s'ajouter à didPopNext (pas le remplacer) : si RouteObserver se
+/// révèle en fait fiable ici, les deux mécanismes se contentent de
+/// rafraîchir deux fois sans effet secondaire ; s'il ne l'est pas,
+/// celui-ci garantit que le rafraîchissement a bien lieu.
+class RefreshBus {
+  RefreshBus._();
+  static final ValueNotifier<int> tick = ValueNotifier<int>(0);
+  static void bump() => tick.value++;
+}
+
 Future<void> configurePush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
@@ -305,14 +323,22 @@ class HomeScreen extends StatefulWidget{
 }
 class _HomeScreenState extends State<HomeScreen> with RouteAware{
   late Future<List<dynamic>> future;
-  @override void initState(){super.initState();future=api.bookings();}
+  @override void initState(){
+    super.initState();
+    future=api.bookings();
+    RefreshBus.tick.addListener(retry);
+  }
   void retry()=>setState((){future=api.bookings();});
 
   @override void didChangeDependencies(){
     super.didChangeDependencies();
     routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
   }
-  @override void dispose(){routeObserver.unsubscribe(this);super.dispose();}
+  @override void dispose(){
+    routeObserver.unsubscribe(this);
+    RefreshBus.tick.removeListener(retry);
+    super.dispose();
+  }
   // Real gap fixed here: returning to Home after creating a booking,
   // accepting an offer, or completing a payment never refreshed the
   // list -- the same stale Future stayed in place until the whole app
@@ -409,7 +435,10 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
   @override void initState(){
     super.initState();
     _load();
+    RefreshBus.tick.addListener(_refresh);
   }
+
+  void _refresh()=>setState(_load);
 
   void _load(){
     me=api.me();
@@ -433,7 +462,11 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
     super.didChangeDependencies();
     routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
   }
-  @override void dispose(){routeObserver.unsubscribe(this);super.dispose();}
+  @override void dispose(){
+    routeObserver.unsubscribe(this);
+    RefreshBus.tick.removeListener(_refresh);
+    super.dispose();
+  }
   @override void didPopNext(){setState(_load);}
 
   @override Widget build(BuildContext context)=>Scaffold(
@@ -924,6 +957,12 @@ class _AddressScreenState extends State<AddressScreen>{
       });
       if(!mounted)return;
       final newBookingId=created['id']?.toString();
+      // Section 19 : déclenche le mécanisme de rafraîchissement
+      // explicite plutôt que de dépendre uniquement de
+      // RouteObserver/didPopNext (fiabilité incertaine avec le
+      // Navigator imbriqué du shell) pour que Accueil/Réservations
+      // affichent la nouvelle demande dès le retour.
+      RefreshBus.bump();
       // Spec section 6, explicit: "Current behavior returning immediately
       // to Home is insufficient UX." Never implies a driver is already
       // booked -- publishing a request is not a confirmed driver, so this
@@ -1122,6 +1161,7 @@ class _OffersScreenState extends State<OffersScreen>{
       await api.accept(widget.bookingId,offerId);
       final booking=await api.bookingDetail(widget.bookingId);
       if(!mounted)return;
+      RefreshBus.bump();
       if(booking['payment_method']=='ONLINE'){
         context.push('/payment/'+widget.bookingId);
       }else{
@@ -1365,6 +1405,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     try{
       final result=await api.cancel(widget.bookingId);
       if(mounted)setState(()=>message=t('Réservation annulée. Frais éventuels : ')+VeyraMoneyFormatter.fromMinor(result['cancellationFeeMinor']));
+      RefreshBus.bump();
       reload();
     }catch(e){
       if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));

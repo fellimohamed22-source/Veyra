@@ -38,6 +38,16 @@ void openDriverPush(RemoteMessage message){
   }
 }
 
+/// Voir RefreshBus côté client (même fichier main.dart, app soeur) pour
+/// le raisonnement complet -- section 19 : mécanisme de rafraîchissement
+/// explicite, indépendant de la fiabilité incertaine de
+/// RouteObserver/didPopNext avec le Navigator imbriqué du shell.
+class RefreshBus {
+  RefreshBus._();
+  static final ValueNotifier<int> tick = ValueNotifier<int>(0);
+  static void bump() => tick.value++;
+}
+
 Future<void> configureDriverPush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
@@ -530,12 +540,20 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   int? minPassengers;
   late Future<List<dynamic>> future;
 
-  @override void initState(){super.initState();future=load();}
+  @override void initState(){
+    super.initState();
+    future=load();
+    RefreshBus.tick.addListener(reload);
+  }
   @override void didChangeDependencies(){
     super.didChangeDependencies();
     routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
   }
-  @override void dispose(){routeObserver.unsubscribe(this);super.dispose();}
+  @override void dispose(){
+    routeObserver.unsubscribe(this);
+    RefreshBus.tick.removeListener(reload);
+    super.dispose();
+  }
   // Real gap fixed here: returning from submitting an offer, or from
   // anywhere else, never refreshed the request list -- same stale
   // Future stayed in place until the app was fully closed and reopened.
@@ -758,6 +776,7 @@ class _RequestScreenState extends State<RequestScreen>{
     try{
       await api.offer(widget.bookingId,(euros*100).round());
       if(!mounted)return;
+      RefreshBus.bump();
       // Spec section 2, explicit: "The current Driver implementation
       // contains post-submit comparison messaging such as
       // differenceFromBestMinor / 'your offer is X more expensive'.
@@ -877,7 +896,16 @@ class AgendaScreen extends StatefulWidget{
 }
 class _AgendaScreenState extends State<AgendaScreen>{
   late Future<List<dynamic>> future;
-  @override void initState(){super.initState();future=api.bookings();}
+  @override void initState(){
+    super.initState();
+    future=api.bookings();
+    RefreshBus.tick.addListener(_refresh);
+  }
+  @override void dispose(){
+    RefreshBus.tick.removeListener(_refresh);
+    super.dispose();
+  }
+  void _refresh()=>setState(()=>future=api.bookings());
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes courses à venir'))),
@@ -1035,6 +1063,7 @@ class _RideScreenState extends State<RideScreen>{
       await fn();
       if(startGps)startTracking();
       if(stopGps)stopTracking();
+      RefreshBus.bump();
       reload();
     }catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
@@ -1155,6 +1184,7 @@ class _RideScreenState extends State<RideScreen>{
                 try{
                   final result=await api.cancelAssignedBooking(widget.bookingId);
                   stopTracking();
+                  RefreshBus.bump();
                   if(mounted){
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content:Text(result['republished']==true
@@ -1225,7 +1255,16 @@ class WalletScreen extends StatefulWidget{
 }
 class _WalletScreenState extends State<WalletScreen>{
   late Future<Map<String,dynamic>> future;
-  @override void initState(){super.initState();future=api.wallet();}
+  @override void initState(){
+    super.initState();
+    future=api.wallet();
+    RefreshBus.tick.addListener(_refresh);
+  }
+  @override void dispose(){
+    RefreshBus.tick.removeListener(_refresh);
+    super.dispose();
+  }
+  void _refresh()=>setState(()=>future=api.wallet());
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Portefeuille'))),
