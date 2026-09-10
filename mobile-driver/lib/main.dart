@@ -1280,7 +1280,17 @@ class _RideScreenState extends State<RideScreen>{
             TextButton(onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),child:Text(t('Signaler un no-show'))),
           ],
           if(status=='IN_PROGRESS')
-            FilledButton(onPressed:busy?null:()=>action(()=>api.complete(widget.bookingId),stopGps:true),child:Text(t('Terminer la course'))),
+            FilledButton(onPressed:busy?null:()async{
+              final confirmed=await showDialog<bool>(context:context,builder:(dialogContext)=>AlertDialog(
+                title:Text(t('Terminer la course ?')),
+                content:Text(t('Confirmez uniquement lorsque le passager est arrivé à destination.')),
+                actions:[
+                  TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Continuer la course'))),
+                  FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Terminer la course'))),
+                ],
+              ));
+              if(confirmed==true)action(()=>api.complete(widget.bookingId),stopGps:true);
+            },child:Text(t('Terminer la course'))),
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
