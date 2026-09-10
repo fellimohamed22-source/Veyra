@@ -163,29 +163,70 @@ class _LoginScreenState extends State<LoginScreen>{
   String? error;
   bool offline=false;
 
+  bool startupChecking=false;
+  bool startupRetryAvailable=false;
+
   @override void initState(){
     super.initState();
-    // Same reasoning as the client app: checked after the first frame
-    // rather than via an async GoRouter redirect, which proved
-    // genuinely unreliable to settle correctly in widget tests. Mirrors
-    // the exact same approved/kyc decision submit() below already makes
-    // right after a fresh login.
-    WidgetsBinding.instance.addPostFrameCallback((_)async{
-      String? token;
-      try{
-        token=await api.storage.read(key:'accessToken');
-      }catch(_){
+    // P0 fix: root cause of "driver session lost at restart, sent to
+    // onboarding instead" -- any exception from onboardingStatus() was
+    // previously treated identically (context.go('/kyc')), including a
+    // plain network timeout or a 5xx from Render's free tier cold-starting
+    // (the exact scenario already confirmed and fixed once this session
+    // for _refreshToken()). A driver with a perfectly valid, active
+    // session reopening the app while the backend is briefly slow was
+    // being sent straight to the onboarding screen, looking exactly like
+    // they needed to register again.
+    //
+    // Real backend limitation found while diagnosing this (not fixed
+    // here -- out of this mission's scope, no backend change without a
+    // demonstrated need beyond this): DriverOnboardingController's own
+    // driver() helper uses a raw queryForObject() with no empty-result
+    // handling, so "no driver profile exists yet" and "genuine
+    // unexpected server error" are BOTH indistinguishable 500 responses
+    // from this client's perspective. Given that, only a clean 401/403
+    // (the token itself was actually rejected, confirmed after this
+    // app's own interceptor already attempted a silent refresh) is
+    // treated as a real logout -- anything else (timeout, connection
+    // error, 5xx) preserves the session and offers a retry instead of
+    // ever silently routing to onboarding on a technical failure alone.
+    WidgetsBinding.instance.addPostFrameCallback((_)=>_restoreSession());
+  }
+
+  Future<void> _restoreSession()async{
+    String? token;
+    try{
+      token=await api.storage.read(key:'accessToken');
+    }catch(_){
+      return;
+    }
+    if(token==null||!mounted)return;
+    setState((){startupChecking=true;startupRetryAvailable=false;});
+    try{
+      final status=await api.onboardingStatus();
+      if(!mounted)return;
+      final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+      context.go(approved?'/home':'/kyc');
+    }on DioException catch(e){
+      if(!mounted)return;
+      if(e.response?.statusCode==401||e.response?.statusCode==403){
+        // The token itself was genuinely rejected (this app's own
+        // interceptor already tried a silent refresh before this
+        // surfaces) -- a real, expired/invalid session, not a technical
+        // hiccup. Clear it and let the person log in again explicitly.
+        try{await api.storage.deleteAll();}catch(_){}
+        setState((){startupChecking=false;startupRetryAvailable=false;});
         return;
       }
-      if(token==null||!mounted)return;
-      try{
-        final status=await api.onboardingStatus();
-        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
-        if(mounted)context.go(approved?'/home':'/kyc');
-      }catch(_){
-        if(mounted)context.go('/kyc');
-      }
-    });
+      // Any other failure (timeout, connection error, 5xx, or the
+      // no-profile-yet case this backend endpoint can't currently
+      // distinguish from a real error) -- session stays untouched,
+      // offer a retry instead of guessing.
+      setState((){startupChecking=false;startupRetryAvailable=true;});
+    }catch(_){
+      if(!mounted)return;
+      setState((){startupChecking=false;startupRetryAvailable=true;});
+    }
   }
 
   Future<void> submit()async{
@@ -241,6 +282,22 @@ class _LoginScreenState extends State<LoginScreen>{
       ),
       Expanded(child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
         Text(t('Connectez-vous à votre compte'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
+        if(startupChecking)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Row(children:[
+          const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)),
+          const SizedBox(width:12),
+          Text(t('Restauration de votre session…'),style:const TextStyle(color:Colors.black54)),
+        ])),
+        if(startupRetryAvailable)Card(
+          color:const Color(0xFFFFF7ED),
+          margin:const EdgeInsets.symmetric(vertical:12),
+          child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(t('Connexion impossible'),style:const TextStyle(fontWeight:FontWeight.bold)),
+            const SizedBox(height:4),
+            Text(t('Votre session est conservée.'),style:const TextStyle(color:Colors.black54)),
+            const SizedBox(height:12),
+            OutlinedButton(onPressed:_restoreSession,child:Text(t('Réessayer'))),
+          ])),
+        ),
         const SizedBox(height:20),
         TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
         const SizedBox(height:12),
