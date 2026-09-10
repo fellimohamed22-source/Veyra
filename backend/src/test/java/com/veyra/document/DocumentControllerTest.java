@@ -63,8 +63,21 @@ class DocumentControllerTest {
 
   @Test
   void theOwnerCanReadTheirOwnDocument() throws Exception {
+    // Real runtime NPE found via the actual test-execution log the user
+    // pasted (backend-ci run on 8e7bc89): DocumentController.content()
+    // computes the ADMIN/SUPPORT role check UNCONDITIONALLY, even on the
+    // owner-access path where its result ends up unused (a real, minor
+    // inefficiency in the controller itself -- an extra DB round-trip
+    // even when owner access already succeeds -- but not something to
+    // "fix" here without being asked; this test just needs to correctly
+    // stub what the controller actually, unconditionally calls).
+    // Mockito's default answer for an unstubbed queryForObject(...,
+    // Integer.class, ...) is null, and `null > 0` NPEs on unboxing --
+    // exactly matching the real stack trace at DocumentController.java:22.
     SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(ownerId, null));
     stubDocumentRow();
+    when(db.queryForObject(contains("from user_roles ur join roles r"), eq(Integer.class), any()))
+        .thenReturn(0);
     when(storage.load("some/key.jpg")).thenReturn(new ByteArrayInputStream("bytes".getBytes()));
 
     ResponseEntity<byte[]> response = controller().content(documentId);
