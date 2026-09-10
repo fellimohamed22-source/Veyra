@@ -127,6 +127,9 @@ class Api {
   Future<Map<String,dynamic>> accept(String bookingId,String offerId) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings/$bookingId/offers/$offerId/accept')).data);
 
+  Future<Map<String,dynamic>> cancellationPreview(String bookingId) async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/cancellation-preview')).data);
+
   Future<Map<String,dynamic>> cancel(String bookingId) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/bookings/$bookingId/cancel')).data);
 

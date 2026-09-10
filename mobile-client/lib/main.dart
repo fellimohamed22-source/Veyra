@@ -1206,27 +1206,51 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     }
   }
 
+  bool loadingPreview=false;
+
   Future<void> confirmAndCancel()async{
-    if(cancelling)return;
-    // Trouvé pendant l'étude UX/navigation : aucune confirmation
-    // n'existait avant cette action, alors qu'elle est irréversible et
-    // peut entraîner des frais réels selon la politique d'annulation
-    // (H-6/H-2). Contrairement au chauffeur (qui a déjà cette
-    // confirmation), le client pouvait annuler d'un simple tap
-    // accidentel. Volontairement AUCUN pourcentage précis affiché ici :
-    // la politique est configurable dynamiquement côté admin
-    // (ConfigController, réservé ADMIN, non accessible au client) --
-    // afficher un chiffre en dur risquerait de devenir faux si l'admin
-    // change la politique. Le montant réel exact reste affiché après
-    // coup, tel que déjà renvoyé par le serveur.
+    if(cancelling||loadingPreview)return;
+    setState(()=>loadingPreview=true);
+    Map<String,dynamic>? preview;
+    String? previewError;
+    try{
+      preview=await api.cancellationPreview(widget.bookingId);
+    }catch(e){
+      previewError=VeyraErrorMessages.forException(e);
+    }finally{
+      if(mounted)setState(()=>loadingPreview=false);
+    }
+    if(!mounted)return;
+
+    // Real gap this closes: a confirmation dialog already existed, but
+    // deliberately avoided showing an exact figure (see the git history
+    // for why -- the admin-configurable policy endpoint was ADMIN-only,
+    // not reachable from here). The new cancellation-preview endpoint
+    // unblocks exactly that: the server's own calculated fee, shown
+    // before the client commits to anything irreversible.
+    final isFree=previewError==null&&preview?['free']==true;
+    final feeMinor=preview?['cancellationFeeMinor'];
     final confirmed=await showDialog<bool>(
       context:context,
       builder:(dialogContext)=>AlertDialog(
         title:Text(t('Annuler cette réservation ?')),
-        content:Text(t('Des frais peuvent s’appliquer selon le délai avant le départ. Cette action est irréversible.')),
+        content:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+          if(previewError!=null)
+            Text(t('Impossible de calculer les frais pour le moment. Vous pouvez réessayer.'),style:TextStyle(color:Theme.of(context).colorScheme.error))
+          else if(isFree)...[
+            Text(t('L’annulation est gratuite.')),
+            const SizedBox(height:8),
+            Text(t('Frais d’annulation')+' : '+VeyraMoneyFormatter.fromMinor(0),style:const TextStyle(fontWeight:FontWeight.bold)),
+          ]else...[
+            Text(t('Des frais d’annulation s’appliquent.')),
+            const SizedBox(height:8),
+            Text(t('Frais d’annulation'),style:const TextStyle(color:Colors.black54,fontSize:12)),
+            Text(VeyraMoneyFormatter.fromMinor(feeMinor),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:20)),
+          ],
+        ]),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Garder la réservation'))),
-          FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
+          FilledButton(onPressed:previewError!=null?null:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
         ],
       ),
     );
@@ -1296,7 +1320,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
               const SizedBox(height:8),
               VeyraPinDisplay(pin:pin!),
             ],
-            TextButton(onPressed:cancelling?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):t('Annuler la réservation'))),
+            TextButton(onPressed:(cancelling||loadingPreview)?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):loadingPreview?t('Calcul des frais…'):t('Annuler la réservation'))),
           ],
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
