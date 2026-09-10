@@ -117,6 +117,10 @@ export class Api {
   vehicleCategories(){return this.request('/reference/vehicle-categories');}
   createScheduledBooking(body:any){return this.request('/scheduled-bookings',{method:'POST',body:JSON.stringify(body)});}
   myBookings(){return this.request('/scheduled-bookings');}
+  bookingDetail(id:string){return this.request('/scheduled-bookings/'+id);}
+  bookingTimeline(id:string){return this.request('/scheduled-bookings/'+id+'/timeline');}
+  cancelBooking(id:string){return this.request('/bookings/'+id+'/cancel',{method:'POST'});}
+  bookingLocation(id:string){return this.request('/bookings/'+id+'/location');}
   bookingOffers(id:string){return this.request('/scheduled-bookings/'+id+'/offers');}
   acceptOffer(bookingId:string,offerId:string){return this.request('/scheduled-bookings/'+bookingId+'/offers/'+offerId+'/accept',{method:'POST'});}
 }

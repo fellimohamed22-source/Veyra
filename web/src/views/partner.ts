@@ -109,6 +109,50 @@ import {statusLabel,paymentMethodLabel,partnerOrgStatusLabel,money,dateTime,erro
           <strong>{{b.pickup_address}} → {{b.dropoff_address}}</strong>
           <div>{{dateTime(b.scheduled_at)}} • {{statusLabel(b.status)}} • {{paymentMethodLabel(b.payment_method)}}</div>
           <button *ngIf="b.status==='OPEN_FOR_OFFERS'||b.status==='OFFERS_RECEIVED'" (click)="loadOffers(b.id)">Voir les offres</button>
+          <button (click)="viewBooking(b.id)">Suivre</button>
+        </div>
+      </div>
+
+      <div class="card" *ngIf="viewingBookingId">
+        <h3>Suivi de la réservation</h3>
+        <p *ngIf="bookingDetailLoading">Chargement…</p>
+        <p *ngIf="bookingDetailError" style="color:#dc2626">{{bookingDetailError}}
+          <button (click)="viewBooking(viewingBookingId)">Réessayer</button>
+        </p>
+        <div *ngIf="bookingDetail">
+          <strong>{{bookingDetail.beneficiary_name_snapshot||'Client'}}</strong>
+          <div>{{statusLabel(bookingDetail.status)}} • {{dateTime(bookingDetail.scheduled_at)}}</div>
+          <div>{{bookingDetail.pickup_address}} → {{bookingDetail.dropoff_address}}</div>
+
+          <h4>Historique</h4>
+          <p *ngIf="bookingTimeline.length===0">Aucun évènement enregistré pour le moment.</p>
+          <div *ngFor="let h of bookingTimeline" style="padding:2px 0;font-size:0.9em">
+            {{statusLabel(h.to_status)}} — {{dateTime(h.created_at)}}
+          </div>
+
+          <h4>Chauffeur</h4>
+          <p *ngIf="!bookingDetail.selected_driver_id">Aucun chauffeur attribué pour le moment.</p>
+          <div *ngIf="bookingDetail.selected_driver_id">
+            {{bookingDetail.driver_first_name}} {{bookingDetail.driver_last_name}} • note {{bookingDetail.driver_rating}}
+            <div>{{bookingDetail.vehicle_brand}} {{bookingDetail.vehicle_model}} • {{bookingDetail.plate_number}}</div>
+          </div>
+
+          <h4>Facturation</h4>
+          <div *ngIf="bookingDetail.customer_total_amount_minor">
+            Total client : {{money(bookingDetail.customer_total_amount_minor,bookingDetail.currency)}}
+          </div>
+          <p *ngIf="!bookingDetail.customer_total_amount_minor">Montant pas encore déterminé.</p>
+
+          <h4>Position</h4>
+          <button (click)="loadBookingLocation(viewingBookingId)">Actualiser la position</button>
+          <p *ngIf="bookingLocation && !bookingLocation.available">Position non disponible pour le moment.</p>
+          <div *ngIf="bookingLocation && bookingLocation.available">
+            Dernière position : {{dateTime(bookingLocation.recorded_at)}}
+            <a [href]="'https://www.google.com/maps?q='+bookingLocation.lat+','+bookingLocation.lng" target="_blank">Ouvrir dans Google Maps</a>
+          </div>
+
+          <button (click)="cancelViewedBooking()" [disabled]="cancellingBooking">{{cancellingBooking?'Annulation…':'Annuler cette réservation'}}</button>
+          <p *ngIf="cancelBookingMessage">{{cancelBookingMessage}}</p>
         </div>
       </div>
 
@@ -188,6 +232,10 @@ export class Partner implements OnInit{
   scheduledAt='';categoryId='';paymentMethod='CASH';passengerCount=1;baggageCount=0;
   offerVisibilityMode='';
   categories:any[]=[];bookings:any[]=[];offers:any[]=[];
+  viewingBookingId='';bookingDetail:any=null;bookingTimeline:any[]=[];
+  bookingDetailLoading=false;bookingDetailError='';
+  bookingLocation:any=null;
+  cancellingBooking=false;cancelBookingMessage='';
   selectedBookingId='';
   accepting=false;acceptError='';
   finance:any=null;
@@ -305,6 +353,51 @@ export class Partner implements OnInit{
   async loadOffers(id:string){
     this.selectedBookingId=id;
     try{this.offers=await this.api.bookingOffers(id);}catch{this.offers=[];}
+  }
+
+  async viewBooking(id:string){
+    this.viewingBookingId=id;
+    this.bookingDetailError='';
+    this.bookingLocation=null;
+    this.cancelBookingMessage='';
+    this.bookingDetailLoading=true;
+    try{
+      // Fetched separately rather than in parallel (Promise.all) so a
+      // failure on either one produces a clear, attributable error
+      // rather than an ambiguous combined one.
+      this.bookingDetail=await this.api.bookingDetail(id);
+      this.bookingTimeline=await this.api.bookingTimeline(id);
+    }catch(e:any){
+      this.bookingDetail=null;
+      this.bookingDetailError=errorMessage(e?.code);
+    }finally{
+      this.bookingDetailLoading=false;
+    }
+  }
+
+  async loadBookingLocation(id:string){
+    try{
+      this.bookingLocation=await this.api.bookingLocation(id);
+    }catch{
+      this.bookingLocation={available:false};
+    }
+  }
+
+  async cancelViewedBooking(){
+    if(!this.viewingBookingId||this.cancellingBooking)return;
+    this.cancellingBooking=true;
+    this.cancelBookingMessage='';
+    try{
+      const result=await this.api.cancelBooking(this.viewingBookingId);
+      const fee=result?.cancellationFeeMinor;
+      this.cancelBookingMessage=fee?('Réservation annulée. Frais : '+money(fee)):'Réservation annulée.';
+      await this.loadBookings();
+      await this.viewBooking(this.viewingBookingId);
+    }catch(e:any){
+      this.cancelBookingMessage=errorMessage(e?.code);
+    }finally{
+      this.cancellingBooking=false;
+    }
   }
 
   async accept(offerId:string){
