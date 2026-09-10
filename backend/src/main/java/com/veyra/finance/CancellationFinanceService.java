@@ -25,31 +25,67 @@ public class CancellationFinanceService {
       String currency,
       boolean refundQueued){}
 
-  @Transactional
-  public ChargeResult cancellation(UUID bookingId,long minutesToDeparture){
-    Map<String,Object> policy=activePolicy();
+  private record FeeBracket(int feeBps,int driverShareBps,long minimumFeeMinor,Long maximumFeeMinor){}
+
+  /**
+   * Bracket selection (free / H-6..H-2 / <H-2) shared by both the real
+   * charge path and the pure preview below -- the one piece that must
+   * never be duplicated, since a preview showing a different bracket
+   * than what actually gets charged moments later would be a real,
+   * visible bug (spec requirement: "cancellation preview uses same
+   * calculation as cancellation").
+   */
+  private FeeBracket selectBracket(Map<String,Object> policy,long minutesToDeparture){
     int free=((Number)policy.get("free_until_minutes")).intValue();
     int midFrom=((Number)policy.get("mid_window_from_minutes")).intValue();
-
     if(minutesToDeparture>=free){
-      return charge(bookingId,policy,0,0,0,null);
+      return new FeeBracket(0,0,0,null);
     }
     if(minutesToDeparture>=midFrom){
-      return charge(
-          bookingId,
-          policy,
+      return new FeeBracket(
           ((Number)policy.get("mid_fee_bps")).intValue(),
           ((Number)policy.get("driver_share_mid_bps")).intValue(),
           ((Number)policy.get("mid_fee_min_minor")).longValue(),
           null);
     }
-    return charge(
-        bookingId,
-        policy,
+    return new FeeBracket(
         ((Number)policy.get("late_fee_bps")).intValue(),
         ((Number)policy.get("driver_share_late_bps")).intValue(),
         0,
         null);
+  }
+
+  /**
+   * Pure preview: same bracket selection as the real cancellation path,
+   * and the exact same fee arithmetic (percentage, min, max, capped at
+   * the base amount) -- but never writes anything (no
+   * cancellation_charges row, no refund request, no driver payable, no
+   * customer debt). Safe to call as many times as a client wants while
+   * just looking at a confirmation dialog.
+   */
+  public record Preview(long feeMinor,String currency,boolean free){}
+
+  public Preview previewCancellation(UUID bookingId,long minutesToDeparture){
+    Map<String,Object> policy=activePolicy();
+    Map<String,Object> financial=financialSnapshot(bookingId);
+    if(financial.get("driver_proposed_amount_minor")==null||financial.get("selected_driver_id")==null){
+      return new Preview(0,"EUR",true);
+    }
+    long base=((Number)financial.get("driver_proposed_amount_minor")).longValue();
+    FeeBracket b=selectBracket(policy,minutesToDeparture);
+    long fee=percentage(base,b.feeBps());
+    if(fee>0&&b.minimumFeeMinor()>0)fee=Math.max(fee,b.minimumFeeMinor());
+    if(b.maximumFeeMinor()!=null)fee=Math.min(fee,b.maximumFeeMinor());
+    fee=Math.min(fee,base);
+    String currency=(String)financial.get("currency");
+    return new Preview(fee,currency,fee==0);
+  }
+
+  @Transactional
+  public ChargeResult cancellation(UUID bookingId,long minutesToDeparture){
+    Map<String,Object> policy=activePolicy();
+    FeeBracket b=selectBracket(policy,minutesToDeparture);
+    return charge(bookingId,policy,b.feeBps(),b.driverShareBps(),b.minimumFeeMinor(),b.maximumFeeMinor());
   }
 
   @Transactional
@@ -74,6 +110,19 @@ public class CancellationFinanceService {
     return rows.getFirst();
   }
 
+  private Map<String,Object> financialSnapshot(UUID bookingId){
+    List<Map<String,Object>> rows=db.queryForList(
+        "select sb.payment_method,sb.creator_user_id,sb.selected_driver_id,bfs.driver_proposed_amount_minor," +
+        "bfs.customer_total_amount_minor,bfs.currency " +
+        "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
+        "where sb.id=?",
+        bookingId);
+    if(rows.isEmpty()){
+      throw new ApiException(HttpStatus.NOT_FOUND,"BOOKING_NOT_FOUND");
+    }
+    return rows.getFirst();
+  }
+
   private ChargeResult charge(
       UUID bookingId,
       Map<String,Object> policy,
@@ -82,18 +131,7 @@ public class CancellationFinanceService {
       long minimumFeeMinor,
       Long maximumFeeMinor){
 
-    List<Map<String,Object>> financialRows=db.queryForList(
-        "select sb.payment_method,sb.creator_user_id,sb.selected_driver_id,bfs.driver_proposed_amount_minor," +
-        "bfs.customer_total_amount_minor,bfs.currency " +
-        "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
-        "where sb.id=?",
-        bookingId);
-
-    if(financialRows.isEmpty()){
-      throw new ApiException(HttpStatus.NOT_FOUND,"BOOKING_NOT_FOUND");
-    }
-
-    Map<String,Object> financial=financialRows.getFirst();
+    Map<String,Object> financial=financialSnapshot(bookingId);
     if(financial.get("driver_proposed_amount_minor")==null || financial.get("selected_driver_id")==null){
       return new ChargeResult(0,0,0,"EUR",false);
     }

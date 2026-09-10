@@ -108,4 +108,47 @@ class BookingExtraControllerTest {
     verifyNoInteractions(history);
     verifyNoInteractions(cancellationFinance);
   }
+
+  @Test
+  void previewReturnsTheServiceComputedFeeWithoutCancellingAnything() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(creatorId, null));
+    when(db.queryForList(eq("select creator_user_id,partner_id,scheduled_at,status from scheduled_bookings where id=?"), eq(bookingId)))
+        .thenReturn(List.of(bookingRow("CONFIRMED", null)));
+    when(cancellationFinance.previewCancellation(eq(bookingId), anyLong()))
+        .thenReturn(new CancellationFinanceService.Preview(1200, "EUR", false));
+
+    Map<String, Object> result = controller().cancellationPreview(bookingId);
+
+    assertEquals(1200L, result.get("cancellationFeeMinor"));
+    assertEquals("EUR", result.get("currency"));
+    assertEquals(false, result.get("free"));
+    // The whole point of a preview: never touches the booking's own
+    // status or writes anything, regardless of how the fee comes out.
+    verify(db, never()).update(anyString(), any(Object[].class));
+    verifyNoInteractions(history);
+  }
+
+  @Test
+  void previewOnAnAlreadyTerminalBookingIsRejectedTheSameWayCancelItselfWouldBe() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(creatorId, null));
+    when(db.queryForList(eq("select creator_user_id,partner_id,scheduled_at,status from scheduled_bookings where id=?"), eq(bookingId)))
+        .thenReturn(List.of(bookingRow("COMPLETED", null)));
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().cancellationPreview(bookingId));
+
+    assertEquals("CANNOT_CANCEL", ex.code());
+    verifyNoInteractions(cancellationFinance);
+  }
+
+  @Test
+  void previewRejectsSomeoneWhoIsNeitherTheCreatorNorAuthorizedPartnerStaff() {
+    UUID someoneElse = UUID.randomUUID();
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(someoneElse, null));
+    when(db.queryForList(eq("select creator_user_id,partner_id,scheduled_at,status from scheduled_bookings where id=?"), eq(bookingId)))
+        .thenReturn(List.of(bookingRow("CONFIRMED", null)));
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().cancellationPreview(bookingId));
+
+    assertEquals("FORBIDDEN", ex.code());
+  }
 }

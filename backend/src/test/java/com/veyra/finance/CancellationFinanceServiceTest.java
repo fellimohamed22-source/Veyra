@@ -12,7 +12,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * Zero coverage existed for this before -- real financial math (percentage
@@ -138,5 +138,69 @@ class CancellationFinanceServiceTest {
     CancellationFinanceService.ChargeResult result = svc.cancellation(bookingId, 10);
 
     assertEquals(0, result.feeMinor());
+  }
+
+  @Test
+  void previewMatchesTheRealChargeExactlyForTheSameScenario() {
+    // The one guarantee that actually matters for a preview: showing a
+    // different number than what gets charged moments later would be a
+    // real, visible bug (spec requirement: "cancellation preview uses
+    // same calculation as cancellation").
+    CancellationFinanceService svc = new CancellationFinanceService(db);
+    UUID bookingId = UUID.randomUUID();
+    stubPolicyAndBooking(bookingId, UUID.randomUUID(), 10000, "CASH");
+
+    CancellationFinanceService.Preview preview = svc.previewCancellation(bookingId, 600);
+    CancellationFinanceService.ChargeResult real = svc.cancellation(bookingId, 600);
+
+    assertEquals(real.feeMinor(), preview.feeMinor());
+    assertEquals(real.currency(), preview.currency());
+    assertFalse(preview.free());
+  }
+
+  @Test
+  void previewOfAFreeWindowCancellationReportsFree() {
+    CancellationFinanceService svc = new CancellationFinanceService(db);
+    UUID bookingId = UUID.randomUUID();
+    stubPolicyAndBooking(bookingId, UUID.randomUUID(), 10000, "ONLINE");
+
+    CancellationFinanceService.Preview preview = svc.previewCancellation(bookingId, 2000);
+
+    assertEquals(0, preview.feeMinor());
+    assertTrue(preview.free());
+  }
+
+  @Test
+  void previewNeverWritesAnythingToTheDatabase() {
+    CancellationFinanceService svc = new CancellationFinanceService(db);
+    UUID bookingId = UUID.randomUUID();
+    stubPolicyAndBooking(bookingId, UUID.randomUUID(), 10000, "CASH");
+
+    svc.previewCancellation(bookingId, 600);
+
+    // No cancellation_charges row, no refund, no driver payable, no
+    // customer debt -- a preview must be entirely read-only regardless
+    // of how many times someone opens the confirmation dialog.
+    verify(db, never()).update(anyString(), any(Object[].class));
+  }
+
+  @Test
+  void previewOfABookingWithNoSelectedDriverIsFreeRatherThanErroring() {
+    CancellationFinanceService svc = new CancellationFinanceService(db);
+    UUID bookingId = UUID.randomUUID();
+    when(db.queryForList(contains("cancellation_policy_versions"))).thenReturn(List.of(policy()));
+
+    java.util.Map<String, Object> bookingRow = new java.util.HashMap<>();
+    bookingRow.put("payment_method", "ONLINE");
+    bookingRow.put("creator_user_id", UUID.randomUUID());
+    bookingRow.put("selected_driver_id", null);
+    bookingRow.put("driver_proposed_amount_minor", null);
+    when(db.queryForList(contains("from scheduled_bookings sb left join booking_financial_snapshots"), any(Object[].class)))
+        .thenReturn(List.of(bookingRow));
+
+    CancellationFinanceService.Preview preview = svc.previewCancellation(bookingId, 10);
+
+    assertEquals(0, preview.feeMinor());
+    assertTrue(preview.free());
   }
 }

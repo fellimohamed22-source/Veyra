@@ -43,6 +43,33 @@ public class BookingExtraController {
             :"Available at H-1");
   }
 
+  @GetMapping("/{id}/cancellation-preview")
+  public Map<String,Object> cancellationPreview(@PathVariable UUID id){
+    Map<String,Object> booking=one(
+        "select creator_user_id,partner_id,scheduled_at,status from scheduled_bookings where id=?",
+        id);
+    owner(booking);
+
+    String status=(String)booking.get("status");
+    if(Set.of(
+        "IN_PROGRESS","COMPLETED","CLOSED","CANCELLED","CUSTOMER_NO_SHOW")
+        .contains(status)){
+      throw new ApiException(HttpStatus.CONFLICT,"CANNOT_CANCEL");
+    }
+
+    long minutes=Duration.between(
+        OffsetDateTime.now(),
+        DbTime.toOffsetDateTime(booking.get("scheduled_at"))).toMinutes();
+
+    CancellationFinanceService.Preview preview=cancellationFinance.previewCancellation(id,minutes);
+
+    Map<String,Object> result=new LinkedHashMap<>();
+    result.put("cancellationFeeMinor",preview.feeMinor());
+    result.put("currency",preview.currency());
+    result.put("free",preview.free());
+    return result;
+  }
+
   @PostMapping("/{id}/cancel")
   @Transactional
   public Map<String,Object> cancel(@PathVariable UUID id){
