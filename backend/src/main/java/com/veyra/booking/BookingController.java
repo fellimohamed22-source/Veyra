@@ -35,9 +35,10 @@ import java.util.*;
     private final PasswordEncoder enc;
     private final com.veyra.security.PinCrypto pinCrypto;
     private final com.veyra.finance.LedgerService ledger;
+    private final BookingStatusHistoryService history;
     private final SecureRandom rnd=new SecureRandom();
     private final long minLead,maxWindow,normalClose,shortClose;
-    public BookingController(JdbcTemplate d,PasswordEncoder e,com.veyra.security.PinCrypto pc,com.veyra.finance.LedgerService l,@Value("${veyra.marketplace.min-lead-minutes}")long a,@Value("${veyra.marketplace.max-offer-window-hours}")long b,@Value("${veyra.marketplace.normal-close-before-minutes}")long c,@Value("${veyra.marketplace.short-close-before-minutes}")long f){
+    public BookingController(JdbcTemplate d,PasswordEncoder e,com.veyra.security.PinCrypto pc,com.veyra.finance.LedgerService l,@Value("${veyra.marketplace.min-lead-minutes}")long a,@Value("${veyra.marketplace.max-offer-window-hours}")long b,@Value("${veyra.marketplace.normal-close-before-minutes}")long c,@Value("${veyra.marketplace.short-close-before-minutes}")long f,BookingStatusHistoryService h){
         db=d;
         enc=e;
         pinCrypto=pc;
@@ -46,6 +47,7 @@ import java.util.*;
         maxWindow=b;
         normalClose=c;
         shortClose=f;
+        history=h;
     }
     @PostMapping("/scheduled-bookings") @Transactional ResponseEntity<Map<String,Object>> create(@Valid@RequestBody Create r){
         UUID u=CurrentUser.id();
@@ -148,7 +150,12 @@ import java.util.*;
         }
         UUID id=UUID.randomUUID();
         db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,?,?,'ACTIVE',?)",id,bookingId,d,r.amountMinor(),r.currency(),b.get("offer_window_ends_at"));
-        db.update("update scheduled_bookings set status='OFFERS_RECEIVED',updated_at=now() where id=? and status='OPEN_FOR_OFFERS'",bookingId);
+        int transitioned=db.update("update scheduled_bookings set status='OFFERS_RECEIVED',updated_at=now() where id=? and status='OPEN_FOR_OFFERS'",bookingId);
+        // The UPDATE above is conditional (WHERE status='OPEN_FOR_OFFERS')
+        // -- only the FIRST offer on a booking actually causes this
+        // transition; every subsequent offer's UPDATE affects 0 rows.
+        // Only record history when the transition genuinely happened.
+        if(transitioned>0)history.record(bookingId,"OPEN_FOR_OFFERS","OFFERS_RECEIVED","DRIVER",CurrentUser.id(),null);
         event(bookingId,"offer.created");
         Map<String,Object>response=new HashMap<>(Map.of("offerId",id));
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
@@ -228,6 +235,7 @@ import java.util.*;
         db.update("update scheduled_bookings set selected_offer_id=?,selected_driver_id=?,pin_hash=?,pin_encrypted=?,status='CONFIRMED',updated_at=now() where id=?",offerId,d,enc.encode(pin),pinCrypto.encrypt(pin),bookingId);
         UUID policy=db.queryForObject("select id from commission_policy_versions where status='ACTIVE' and ((?::uuid is not null and scope_type='PARTNER' and partner_id=?) or scope_type='STANDARD') order by case when scope_type='PARTNER' then 0 else 1 end,version_no desc limit 1",UUID.class,b.get("partner_id"),b.get("partner_id"));
         db.update("insert into booking_financial_snapshots values (?,?,?,?,?,?,?,?,?,?)",bookingId,offerId,policy,rate,p,c,total,p,o.get("currency"),b.get("payment_method"));
+        history.record(bookingId,(String)b.get("status"),"CONFIRMED",b.get("partner_id")!=null?"PARTNER":"CLIENT",CurrentUser.id(),null);
         event(bookingId,"booking.confirmed");
         return Map.of("bookingId",bookingId,"status","CONFIRMED","driverId",d,"driverNetMinor",p,"commissionMinor",c,"totalMinor",total,"currency",o.get("currency"));
     }
@@ -294,6 +302,7 @@ import java.util.*;
             }
         }
         db.update("update scheduled_bookings set status=?,updated_at=now() where id=?",to,id);
+        history.record(id,from,to,"DRIVER",CurrentUser.id(),null);
         event(id,"booking.status."+to.toLowerCase());
     }
     private UUID driver(){

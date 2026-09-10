@@ -41,6 +41,7 @@ class PinLockoutTest {
   @Mock PasswordEncoder enc;
   @Mock PinCrypto pinCrypto;
   @Mock LedgerService ledger;
+  @Mock BookingStatusHistoryService history;
 
   private final UUID userId = UUID.randomUUID();
   private final UUID driverId = UUID.randomUUID();
@@ -59,7 +60,7 @@ class PinLockoutTest {
   }
 
   private BookingController controller() {
-    return new BookingController(db, enc, pinCrypto, ledger, 30L, 24L, 60L, 30L);
+    return new BookingController(db, enc, pinCrypto, ledger, 30L, 24L, 60L, 30L, history);
   }
 
   private void stubDriverLookup() {

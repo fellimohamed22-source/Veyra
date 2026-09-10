@@ -38,6 +38,7 @@ class BookingControllerOfferVisibilityOverrideTest {
   @Mock PasswordEncoder enc;
   @Mock PinCrypto pinCrypto;
   @Mock LedgerService ledger;
+  @Mock BookingStatusHistoryService history;
 
   private final UUID userId = UUID.randomUUID();
   private final UUID partnerId = UUID.randomUUID();
@@ -57,7 +58,7 @@ class BookingControllerOfferVisibilityOverrideTest {
   }
 
   private BookingController controller() {
-    return new BookingController(db, enc, pinCrypto, ledger, 120L, 24L, 60L, 30L);
+    return new BookingController(db, enc, pinCrypto, ledger, 120L, 24L, 60L, 30L, history);
   }
 
   private Create request(UUID partner, String offerVisibilityMode) {

@@ -29,9 +29,10 @@ class BookingControllerOfferVisibilityModeTest {
   @Mock PasswordEncoder enc;
   @Mock PinCrypto pinCrypto;
   @Mock LedgerService ledger;
+  @Mock BookingStatusHistoryService history;
 
   private BookingController controller() {
-    return new BookingController(db, enc, pinCrypto, ledger, 120L, 24L, 60L, 30L);
+    return new BookingController(db, enc, pinCrypto, ledger, 120L, 24L, 60L, 30L, history);
   }
 
   @Test
