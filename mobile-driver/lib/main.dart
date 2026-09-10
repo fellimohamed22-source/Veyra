@@ -905,7 +905,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
   }
-  void _refresh()=>setState(()=>future=api.bookings());
+  void _refresh()=>setState((){future=api.bookings();});
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes courses à venir'))),
@@ -1305,7 +1305,7 @@ class _WalletScreenState extends State<WalletScreen>{
                 return Card(child:ListTile(
                   leading:const Icon(Icons.cloud_off),
                   title:Text(t('Historique indisponible')),
-                  trailing:TextButton(onPressed:()=>setState(()=>transactionsFuture=api.walletTransactions()),child:Text(t('Réessayer'))),
+                  trailing:TextButton(onPressed:()=>setState((){transactionsFuture=api.walletTransactions();}),child:Text(t('Réessayer'))),
                 ));
               }
               final items=ts.data??[];
@@ -1385,8 +1385,8 @@ class _AccountScreenState extends State<AccountScreen>{
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
         if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:()=>setState(()=>future=api.me()))
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(()=>future=api.me()));
+          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.me();}))
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.me();}));
         final me=s.data??{};
         final firstName=(me['first_name']??'').toString();
         final lastName=(me['last_name']??'').toString();

@@ -625,8 +625,8 @@ class _AccountScreenState extends State<AccountScreen>{
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
         if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:()=>setState(()=>future=api.me()))
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(()=>future=api.me()));
+          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.me();}))
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.me();}));
         final me=s.data??{};
         final firstName=(me['first_name']??'').toString();
         final lastName=(me['last_name']??'').toString();
