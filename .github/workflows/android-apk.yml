@@ -103,7 +103,7 @@ jobs:
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
           grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-          echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.client' android/app/google-services.json
           flutter pub get
           flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
@@ -146,7 +146,7 @@ jobs:
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
           grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-          echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.driver' android/app/google-services.json
           flutter pub get
           flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}

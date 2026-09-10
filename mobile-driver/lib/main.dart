@@ -50,7 +50,9 @@ Future<void> configureDriverPush() async {
       final initial=await FirebaseMessaging.instance.getInitialMessage();
       if(initial!=null)openDriverPush(initial);
     }
-  }catch(_){}
+  }catch(e){
+    debugPrint('PUSH_CONFIGURE_FAILED: $e');
+  }
 }
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));

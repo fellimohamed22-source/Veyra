@@ -6,6 +6,8 @@ import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,6 +19,7 @@ import java.util.*;
 @Component
 @ConditionalOnProperty(name="veyra.firebase.enabled",havingValue="true")
 public class FirebasePushProvider implements PushProvider {
+  private static final Logger log=LoggerFactory.getLogger(FirebasePushProvider.class);
   private final JdbcTemplate db;
 
   public FirebasePushProvider(
@@ -32,6 +35,7 @@ public class FirebasePushProvider implements PushProvider {
           .setCredentials(GoogleCredentials.fromStream(in))
           .build();
         FirebaseApp.initializeApp(options);
+        log.info("PUSH_PROVIDER_FIREBASE_INITIALIZED credentialsPath={}",credentialsPath);
       }
     }
   }
@@ -65,7 +69,10 @@ public class FirebasePushProvider implements PushProvider {
     List<String> tokens=db.queryForList(
       "select push_token from user_devices where user_id=? and active=true order by last_seen_at desc",
       String.class,userId);
-    if(tokens.isEmpty()) return false;
+    if(tokens.isEmpty()){
+      log.warn("PUSH_NO_ACTIVE_DEVICE userId={} templateCode={}",userId,templateCode);
+      return false;
+    }
     boolean success=false;
     for(String token:tokens){
       try{
@@ -81,7 +88,20 @@ public class FirebasePushProvider implements PushProvider {
         }
         FirebaseMessaging.getInstance().send(builder.build());
         success=true;
-      }catch(Exception ignored){}
+      }catch(Exception e){
+        // Real bug fixed here: this used to be catch(Exception
+        // ignored){}, silently discarding every failure with zero
+        // trace -- meaning a bad service-account JSON, an expired/
+        // invalid FCM token, a Firebase project mismatch, or any other
+        // real cause of "notifications don't work" was completely
+        // invisible in production. Logs the token's last 8 characters
+        // only (never the full token, which is itself a sensitive
+        // credential-like value) so a specific bad registration can
+        // still be identified without exposing it wholesale.
+        String tokenSuffix=token.length()>8?token.substring(token.length()-8):token;
+        log.warn("PUSH_SEND_FAILED userId={} templateCode={} tokenSuffix=...{} error={}",
+            userId,templateCode,tokenSuffix,e.toString());
+      }
     }
     return success;
   }

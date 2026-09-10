@@ -52,7 +52,19 @@ Future<void> configurePush() async {
       final initial=await FirebaseMessaging.instance.getInitialMessage();
       if(initial!=null)openPush(initial);
     }
-  }catch(_){}
+  }catch(e){
+    // Real bug fixed here while investigating "push notifications don't
+    // work": this used to be catch(_){}, silently discarding every
+    // failure -- a missing/mismatched google-services.json, a denied
+    // notification permission, a getToken() failure, or the
+    // registerDevice() API call itself failing were all completely
+    // invisible, with no way to tell which one without instrumenting
+    // the code by hand. debugPrint (not print) since it's the
+    // Flutter-idiomatic diagnostic channel, visible in `flutter logs`/
+    // device logs without shipping a full logging framework for what
+    // is, for now, a single diagnostic line.
+    debugPrint('PUSH_CONFIGURE_FAILED: $e');
+  }
 }
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
