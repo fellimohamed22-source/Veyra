@@ -1067,9 +1067,18 @@ class _RideScreenState extends State<RideScreen>{
           WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)startTracking();});
         }
 
+        // Section 13 : "map becomes dominant" spécifiquement pendant
+        // DRIVER_EN_ROUTE/IN_PROGRESS -- auparavant hauteur fixe à 240
+        // quel que soit le statut. DRIVER_ARRIVED reste volontairement
+        // compact : la spec y demande explicitement que le PIN
+        // "prominently" domine l'écran, pas la carte (le chauffeur est
+        // déjà sur place, le suivi de position perd son intérêt premier
+        // à ce stade précis).
+        final mapHeight={'DRIVER_EN_ROUTE','IN_PROGRESS'}.contains(status)?340.0:180.0;
+
         return ListView(padding:const EdgeInsets.all(20),children:[
           SizedBox(
-            height:240,
+            height:mapHeight,
             child:ClipRRect(
               borderRadius:BorderRadius.circular(20),
               child:FlutterMap(
