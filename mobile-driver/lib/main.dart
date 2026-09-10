@@ -1255,16 +1255,21 @@ class WalletScreen extends StatefulWidget{
 }
 class _WalletScreenState extends State<WalletScreen>{
   late Future<Map<String,dynamic>> future;
+  late Future<List<dynamic>> transactionsFuture;
   @override void initState(){
     super.initState();
     future=api.wallet();
+    transactionsFuture=api.walletTransactions();
     RefreshBus.tick.addListener(_refresh);
   }
   @override void dispose(){
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
   }
-  void _refresh()=>setState(()=>future=api.wallet());
+  void _refresh()=>setState((){
+    future=api.wallet();
+    transactionsFuture=api.walletTransactions();
+  });
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Portefeuille'))),
@@ -1287,6 +1292,60 @@ class _WalletScreenState extends State<WalletScreen>{
               ' • '+t('blocage CASH')+' ${VeyraMoneyFormatter.fromMinor(x['cashBlockedThresholdMinor'])}',
             ),
           )),
+          const SizedBox(height:20),
+          Text(t('Transactions'),style:const TextStyle(fontSize:16,fontWeight:FontWeight.w600)),
+          const SizedBox(height:8),
+          FutureBuilder<List<dynamic>>(
+            future:transactionsFuture,
+            builder:(context,ts){
+              if(ts.connectionState!=ConnectionState.done){
+                return const Padding(padding:EdgeInsets.all(16),child:Center(child:CircularProgressIndicator()));
+              }
+              if(ts.hasError){
+                return Card(child:ListTile(
+                  leading:const Icon(Icons.cloud_off),
+                  title:Text(t('Historique indisponible')),
+                  trailing:TextButton(onPressed:()=>setState(()=>transactionsFuture=api.walletTransactions()),child:Text(t('Réessayer'))),
+                ));
+              }
+              final items=ts.data??[];
+              if(items.isEmpty){
+                return Card(child:ListTile(
+                  leading:const Icon(Icons.receipt_long_outlined),
+                  title:Text(t('Aucune transaction pour le moment.')),
+                ));
+              }
+              return Column(children:items.map((raw){
+                final tx=Map<String,dynamic>.from(raw as Map);
+                final eventType=tx['event_type']?.toString();
+                // Le sens comptable brut (DEBIT/CREDIT) ne correspond PAS
+                // directement à "bon/mauvais pour le chauffeur" ici : un
+                // DEBIT sur DRIVER_PAYABLE (compte de passif) signifie
+                // qu'il vient d'être payé (bonne nouvelle), alors qu'un
+                // DEBIT sur DRIVER_PLATFORM_DEBT (compte d'actif) signifie
+                // que sa dette augmente (mauvaise nouvelle). On classe donc
+                // explicitement par type d'événement plutôt que par sens
+                // comptable brut.
+                final isPositive={
+                  'BOOKING_COMPLETED_ONLINE',
+                  'BOOKING_COMPLETED_PARTNER_INVOICE',
+                  'DRIVER_PAYABLE_PAID',
+                  'DRIVER_CASH_DEBT_SETTLED',
+                  'CUSTOMER_CASH_DEBT_PAID',
+                }.contains(eventType);
+                final amount=VeyraMoneyFormatter.fromMinor(tx['amount_minor']);
+                return Card(child:ListTile(
+                  leading:Icon(isPositive?Icons.add_circle_outline:Icons.remove_circle_outline,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
+                  title:Text(VeyraStatusLabels.ledgerEvent(eventType)),
+                  subtitle:Text(VeyraDateFormatter.dateTime(tx['created_at'])),
+                  trailing:Text(
+                    (isPositive?'+ ':'- ')+amount,
+                    style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
+                  ),
+                ));
+              }).toList());
+            },
+          ),
         ]);
       },
     ),

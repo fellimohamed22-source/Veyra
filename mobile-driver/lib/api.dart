@@ -152,6 +152,9 @@ class Api {
   Future<Map<String,dynamic>> wallet() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/wallet')).data);
 
+  Future<List<dynamic>> walletTransactions() async =>
+      List<dynamic>.from((await dio.get('/api/v1/driver/wallet/transactions')).data);
+
   Future<Map<String,dynamic>> createProfile() async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/driver/profile')).data);
 
