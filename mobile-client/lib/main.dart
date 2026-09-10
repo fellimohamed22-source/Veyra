@@ -483,13 +483,39 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
                 : VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(_load));
             }
             final items=s.data??[];
-            if(items.isEmpty){
+            // Bug réel trouvé pendant l'étude UX/navigation : le endpoint
+            // GET /scheduled-bookings trie "order by scheduled_at desc"
+            // (le plus tardif en premier, pensé pour l'onglet
+            // Réservations/historique) -- prendre naïvement items.first
+            // ici affichait donc la réservation la PLUS ÉLOIGNÉE dans le
+            // temps comme "prochaine réservation", pas la plus proche.
+            // Sélectionne explicitement, parmi les statuts actifs
+            // (non terminaux -- mêmes valeurs que le mapping couleur de
+            // VeyraStatusBadge), celle dont scheduled_at est la plus
+            // proche, sans dépendre de l'ordre renvoyé par le serveur.
+            const terminalStatuses={
+              'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT',
+              'CANCELLED_BY_DRIVER','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER',
+            };
+            Map<String,dynamic>? next;
+            DateTime? nextAt;
+            for(final raw in items){
+              final candidate=Map<String,dynamic>.from(raw as Map);
+              if(terminalStatuses.contains(candidate['status']))continue;
+              final at=DateTime.tryParse(candidate['scheduled_at']?.toString()??'');
+              if(at==null)continue;
+              if(nextAt==null||at.isBefore(nextAt)){
+                next=candidate;
+                nextAt=at;
+              }
+            }
+            if(next==null){
               return VeyraEmptyView(
                 icon:Icons.event_available,
                 message:t('Aucune réservation à venir. Votre prochain trajet apparaîtra ici.'),
               );
             }
-            final x=Map<String,dynamic>.from(items.first as Map);
+            final x=next;
             final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
             final status=(x['status']??'').toString();
             return Card(
@@ -1096,6 +1122,34 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     }
   }
 
+  Future<void> confirmAndCancel()async{
+    if(cancelling)return;
+    // Trouvé pendant l'étude UX/navigation : aucune confirmation
+    // n'existait avant cette action, alors qu'elle est irréversible et
+    // peut entraîner des frais réels selon la politique d'annulation
+    // (H-6/H-2). Contrairement au chauffeur (qui a déjà cette
+    // confirmation), le client pouvait annuler d'un simple tap
+    // accidentel. Volontairement AUCUN pourcentage précis affiché ici :
+    // la politique est configurable dynamiquement côté admin
+    // (ConfigController, réservé ADMIN, non accessible au client) --
+    // afficher un chiffre en dur risquerait de devenir faux si l'admin
+    // change la politique. Le montant réel exact reste affiché après
+    // coup, tel que déjà renvoyé par le serveur.
+    final confirmed=await showDialog<bool>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Annuler cette réservation ?')),
+        content:Text(t('Des frais peuvent s’appliquer selon le délai avant le départ. Cette action est irréversible.')),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Garder la réservation'))),
+          FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
+        ],
+      ),
+    );
+    if(confirmed!=true)return;
+    await cancel();
+  }
+
   Future<void> cancel()async{
     if(cancelling)return;
     setState(()=>cancelling=true);
@@ -1152,7 +1206,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             FilledButton.icon(onPressed:()=>context.push('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:Text(t('Suivre la course'))),
           if(status=='CONFIRMED'||status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED')...[
             OutlinedButton(onPressed:loadPin,child:Text(pin==null?t('Afficher le PIN'):t('PIN : ')+pin!)),
-            TextButton(onPressed:cancelling?null:cancel,child:Text(cancelling?t('Annulation…'):t('Annuler la réservation'))),
+            TextButton(onPressed:cancelling?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):t('Annuler la réservation'))),
           ],
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
