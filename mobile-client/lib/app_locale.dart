@@ -138,6 +138,8 @@ class AppLocale {
     'bagage(s)': 'bag(s)',
     'Choisissez librement selon le prix, le véhicule et le chauffeur.': 'Choose freely based on price, vehicle, and driver.',
     'Total à payer': 'Total to pay',
+    'Votre chauffeur est arrivé': 'Your driver has arrived',
+    'Donnez ce code à votre chauffeur': 'Give this code to your driver',
     'Demande publiée': 'Request published',
     'Votre demande a été envoyée aux chauffeurs Veyra disponibles. Vous recevrez une notification lorsqu’une nouvelle offre sera reçue.': 'Your request has been sent to available Veyra drivers. You will be notified when a new offer is received.',
     'Voir ma demande': 'View my request',

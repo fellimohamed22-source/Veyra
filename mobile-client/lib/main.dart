@@ -1345,11 +1345,17 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           ],
           if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))
             FilledButton.icon(onPressed:()=>context.push('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:Text(t('Suivre la course'))),
+          if(status=='DRIVER_ARRIVED')
+            Card(color:const Color(0xFF16A34A),child:Padding(padding:const EdgeInsets.all(16),child:Row(children:[
+              const Icon(Icons.directions_car,color:Colors.white,size:28),
+              const SizedBox(width:12),
+              Expanded(child:Text(t('Votre chauffeur est arrivé'),style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold,fontSize:16))),
+            ]))),
           if(status=='CONFIRMED'||status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED')...[
             if(pin==null)
               OutlinedButton(onPressed:loadPin,child:Text(t('Afficher le PIN')))
             else...[
-              Text(t('Code à transmettre au chauffeur à son arrivée'),style:const TextStyle(fontSize:13,color:Colors.black54)),
+              Text(status=='DRIVER_ARRIVED'?t('Donnez ce code à votre chauffeur'):t('Code à transmettre au chauffeur à son arrivée'),style:const TextStyle(fontSize:13,color:Colors.black54)),
               const SizedBox(height:8),
               VeyraPinDisplay(pin:pin!),
             ],
