@@ -634,6 +634,40 @@ class AppShell extends StatelessWidget{
   );
 }
 
+/// Repère visuel non interactif pour AddressScreen (le formulaire de
+/// réservation reste un seul écran à défilement, pas 3 écrans distincts
+/// comme la maquette C03→C05) -- une simple carte mentale des sections
+/// du formulaire, pas un traceur de progression (rien ne distingue une
+/// section "en cours" d'une autre puisque l'utilisateur peut revenir
+/// modifier n'importe quel champ à tout moment dans ce même écran).
+class _WizardStep extends StatelessWidget{
+  final String label;
+  const _WizardStep({required this.label});
+  @override Widget build(BuildContext context)=>Container(
+    padding:const EdgeInsets.symmetric(vertical:8),
+    decoration:BoxDecoration(
+      color:const Color(0xFFEAF1FD),
+      borderRadius:BorderRadius.circular(VeyraRadius.pill),
+    ),
+    alignment:Alignment.center,
+    child:Text(label,style:const TextStyle(fontSize:12,fontWeight:FontWeight.w600,color:Color(0xFF123A66))),
+  );
+}
+
+class _RecapLine extends StatelessWidget{
+  final IconData icon;
+  final String text;
+  const _RecapLine({required this.icon,required this.text});
+  @override Widget build(BuildContext context)=>Padding(
+    padding:const EdgeInsets.symmetric(vertical:4),
+    child:Row(children:[
+      Icon(icon,size:18,color:Colors.black54),
+      const SizedBox(width:10),
+      Expanded(child:Text(text,style:const TextStyle(fontSize:14))),
+    ]),
+  );
+}
+
 class AddressScreen extends StatefulWidget{
   const AddressScreen({super.key});
   @override State<AddressScreen> createState()=>_AddressScreenState();
@@ -650,6 +684,7 @@ class _AddressScreenState extends State<AddressScreen>{
   int passengerCount=1;
   int baggageCount=0;
   String? categoryId;
+  String? categoryName;
   late Future<List<dynamic>> categories;
   String? visibilityMode;
   bool loadingPickup=false;
@@ -834,6 +869,22 @@ class _AddressScreenState extends State<AddressScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Planifier une réservation'))),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(20),children:[
+      // Repère visuel ajouté suite à l'étude UX/navigation : le
+      // formulaire reste un seul écran (pas le wizard C03→C04→C05 en 3
+      // écrans distincts de la maquette -- changement jugé trop risqué
+      // à restructurer sans pouvoir tester visuellement), mais rien
+      // n'indiquait auparavant à l'utilisateur où il en est dans un
+      // long formulaire à défilement. Purement informatif, non
+      // interactif -- ne remplace pas un vrai wizard, réduit seulement
+      // la charge cognitive de "où en suis-je ?".
+      Row(children:[
+        Expanded(child:_WizardStep(label:t('Trajet'))),
+        const SizedBox(width:6),
+        Expanded(child:_WizardStep(label:t('Options'))),
+        const SizedBox(width:6),
+        Expanded(child:_WizardStep(label:t('Confirmation'))),
+      ]),
+      const SizedBox(height:20),
       addressField(true),
       const SizedBox(height:16),
       addressField(false),
@@ -862,7 +913,17 @@ class _AddressScreenState extends State<AddressScreen>{
                 child:Text((x['display_name']??x['code']).toString()),
               );
             }).toList(),
-            onChanged:(v)=>setState(()=>categoryId=v),
+            onChanged:(v){
+              if(v==null)return;
+              final match=items.firstWhere(
+                (raw)=>(raw as Map)['id'].toString()==v,
+                orElse:()=>null,
+              );
+              setState((){
+                categoryId=v;
+                categoryName=match==null?null:((match as Map)['display_name']??match['code'])?.toString();
+              });
+            },
           );
         },
       ),
@@ -906,6 +967,28 @@ class _AddressScreenState extends State<AddressScreen>{
           )),
         ]),
       ),
+      const SizedBox(height:18),
+      // Ajouté suite à l'étude UX/navigation : rien ne permettait
+      // auparavant de revoir d'un coup d'œil les choix faits dans ce
+      // long formulaire avant de s'engager -- l'utilisateur devait
+      // remonter manuellement pour vérifier chaque champ. Cette carte
+      // se met à jour en direct avec les valeurs déjà saisies, sans
+      // dupliquer aucun calcul serveur (aucun prix n'est estimé ici).
+      Card(
+        color:const Color(0xFFF7FAFD),
+        shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(VeyraRadius.md)),
+        child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(t('Récapitulatif'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
+          const SizedBox(height:10),
+          _RecapLine(icon:Icons.trip_origin,text:pickup.text.trim().isEmpty?t('Départ non renseigné'):pickup.text.trim()),
+          _RecapLine(icon:Icons.flag_outlined,text:dropoff.text.trim().isEmpty?t('Destination non renseignée'):dropoff.text.trim()),
+          _RecapLine(icon:Icons.event,text:scheduledAt==null?t('Date non choisie'):VeyraDateFormatter.dateTime(scheduledAt!.toIso8601String())),
+          _RecapLine(icon:Icons.directions_car_outlined,text:categoryName??t('Catégorie non choisie')),
+          _RecapLine(icon:Icons.people_outline,text:'$passengerCount '+t('passager(s)')+' • $baggageCount '+t('bagage(s)')),
+          _RecapLine(icon:Icons.payments_outlined,text:VeyraStatusLabels.paymentMethod(paymentMethod)),
+        ])),
+      ),
+      const SizedBox(height:18),
       if(error!=null)Padding(
         padding:const EdgeInsets.symmetric(vertical:12),
         child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
