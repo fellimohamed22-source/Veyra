@@ -49,8 +49,24 @@ class Api {
       await storage.write(key:'accessToken',value:r.data['accessToken']);
       await storage.write(key:'refreshToken',value:r.data['refreshToken']);
       return true;
+    }on DioException catch(e){
+      // Real, critical bug fixed here: this used to clear the whole
+      // session on ANY exception here, including a plain network
+      // timeout -- this project's free-tier backend can take 50+
+      // seconds to respond after being idle (Render's own documented
+      // free-tier spin-down behavior), so a driver opening the app
+      // right as it's cold-starting could have a perfectly valid
+      // refreshToken wiped out by nothing more than a slow response.
+      // Only a response the backend actually sent back rejecting the
+      // token (401/403) means the token is genuinely invalid -- a
+      // missing response (timeout, DNS failure, connection reset) means
+      // the attempt simply didn't complete, and the stored session must
+      // survive to be retried later.
+      if(e.response?.statusCode==401||e.response?.statusCode==403){
+        await storage.deleteAll();
+      }
+      return false;
     }catch(_){
-      await storage.deleteAll();
       return false;
     }
   }

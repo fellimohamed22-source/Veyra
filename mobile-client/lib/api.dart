@@ -49,8 +49,16 @@ class Api {
       await storage.write(key:'accessToken',value:r.data['accessToken']);
       await storage.write(key:'refreshToken',value:r.data['refreshToken']);
       return true;
+    }on DioException catch(e){
+      // Real, critical bug fixed here: same as the driver app -- this
+      // used to clear the whole session on ANY exception, including a
+      // plain network timeout, not just a genuine token rejection. See
+      // the driver app's own api.dart for the full reasoning.
+      if(e.response?.statusCode==401||e.response?.statusCode==403){
+        await storage.deleteAll();
+      }
+      return false;
     }catch(_){
-      await storage.deleteAll();
       return false;
     }
   }
