@@ -754,23 +754,20 @@ class _RequestScreenState extends State<RequestScreen>{
     if(euros==null||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
     setState((){sending=true;error=null;});
     try{
-      final result=await api.offer(widget.bookingId,(euros*100).round());
+      await api.offer(widget.bookingId,(euros*100).round());
       if(!mounted)return;
-      final bestOthersMinor=result['currentBestOtherOfferMinor'];
-      if(bestOthersMinor!=null){
-        final diffMinor=result['differenceFromBestMinor'] as int?;
-        final message=diffMinor==null?t('Aucune autre offre active pour le moment.')
-          :diffMinor>0
-            ?t('Votre offre est supérieure de')+' ${VeyraMoneyFormatter.fromMinor(diffMinor.abs())} '+t('à la meilleure offre actuelle')+' (${VeyraMoneyFormatter.fromMinor(bestOthersMinor)}).'
-            :diffMinor<0
-              ?t('Vous proposez actuellement le meilleur prix')+' (${VeyraMoneyFormatter.fromMinor(bestOthersMinor)} '+t('pour les autres offres')+').'
-              :t('Votre offre égale la meilleure offre actuelle')+' (${VeyraMoneyFormatter.fromMinor(bestOthersMinor)}).';
-        await showDialog(context:context,builder:(_)=>AlertDialog(
-          title:Text(t('Offre envoyée')),
-          content:Text(message),
-          actions:[FilledButton(onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
-        ));
-      }
+      // Spec section 2, explicit: "The current Driver implementation
+      // contains post-submit comparison messaging such as
+      // differenceFromBestMinor / 'your offer is X more expensive'.
+      // Remove this competitive comparison from the USER INTERFACE."
+      // Backend still returns and computes these fields (not a backend
+      // bug, not touched) -- simply never surfaced in this dialog
+      // anymore.
+      await showDialog(context:context,builder:(_)=>AlertDialog(
+        title:Text(t('Offre envoyée')),
+        content:Text(t('Votre offre : ')+VeyraMoneyFormatter.fromMinor((euros*100).round())+'\n'+t('Vous serez averti si le client vous sélectionne.')),
+        actions:[FilledButton(onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
+      ));
       if(mounted)context.go('/home');
     }on DioException catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
@@ -820,7 +817,7 @@ class _RequestScreenState extends State<RequestScreen>{
           if(mode=='BEST_VISIBLE'){
             final bestMinor=x['currentBestOtherOfferMinor'];
             final subtitle=bestMinor==null
-              ?t('Aucune autre offre active pour le moment. Vous serez informé si la vôtre est battue.')
+              ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
               :t('Meilleure offre actuelle des autres chauffeurs')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor);
             return Card(child:ListTile(
               leading:const Icon(Icons.visibility_outlined),
