@@ -1189,6 +1189,16 @@ class _RideScreenState extends State<RideScreen>{
               FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
             ]))),
           const SizedBox(height:10),
+          if(status=='DRIVER_EN_ROUTE'&&pickupLat!=null&&pickupLng!=null)
+            OutlinedButton.icon(
+              onPressed:()=>launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$pickupLat,$pickupLng&travelmode=driving'),mode:LaunchMode.externalApplication),
+              icon:const Icon(Icons.navigation_outlined),label:Text(t('Naviguer vers le client')),
+            ),
+          if(status=='IN_PROGRESS'&&dropoffLat!=null&&dropoffLng!=null)
+            OutlinedButton.icon(
+              onPressed:()=>launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$dropoffLat,$dropoffLng&travelmode=driving'),mode:LaunchMode.externalApplication),
+              icon:const Icon(Icons.navigation_outlined),label:Text(t('Naviguer vers la destination')),
+            ),
           OutlinedButton.icon(
             onPressed:phone==null||phone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:phone)),
             icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler le client')),

@@ -176,6 +176,8 @@ class AppLocale {
     'Terminer la course': 'End the ride',
     'Signaler un no-show': 'Report a no-show',
     'Appeler le client': 'Call the customer',
+    'Naviguer vers le client': 'Navigate to customer',
+    'Naviguer vers la destination': 'Navigate to destination',
     'Chat Veyra': 'Veyra chat',
     'Message non envoyé, réessayez': 'Message not sent, try again',
     'Votre message': 'Your message',
