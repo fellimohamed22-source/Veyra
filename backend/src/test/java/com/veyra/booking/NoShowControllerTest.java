@@ -35,6 +35,7 @@ class NoShowControllerTest {
 
   @Mock JdbcTemplate db;
   @Mock CancellationFinanceService cancellationFinance;
+  @Mock BookingStatusHistoryService history;
 
   private final UUID userId = UUID.randomUUID();
   private final UUID driverId = UUID.randomUUID();
@@ -53,7 +54,7 @@ class NoShowControllerTest {
   }
 
   private NoShowController controller() {
-    return new NoShowController(db, cancellationFinance);
+    return new NoShowController(db, cancellationFinance, history);
   }
 
   private void stubBooking(UUID selectedDriverId, String status, OffsetDateTime scheduledAt) {

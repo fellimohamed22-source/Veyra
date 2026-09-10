@@ -17,12 +17,15 @@ import java.util.*;
 public class NoShowController {
   private final JdbcTemplate db;
   private final CancellationFinanceService cancellationFinance;
+  private final BookingStatusHistoryService history;
 
   public NoShowController(
       JdbcTemplate db,
-      CancellationFinanceService cancellationFinance){
+      CancellationFinanceService cancellationFinance,
+      BookingStatusHistoryService history){
     this.db=db;
     this.cancellationFinance=cancellationFinance;
+    this.history=history;
   }
 
   @PostMapping("/{id}/no-show")
@@ -52,6 +55,7 @@ public class NoShowController {
     db.update(
         "update scheduled_bookings set status='CUSTOMER_NO_SHOW',updated_at=now() where id=?",
         id);
+    history.record(id,"DRIVER_ARRIVED","CUSTOMER_NO_SHOW","DRIVER",CurrentUser.id(),null);
     db.update(
         "insert into outbox_events(aggregate_type,aggregate_id,event_type,payload) " +
         "values ('BOOKING',?,'booking.status.customer_no_show',jsonb_build_object('bookingId',?::text))",
