@@ -17,12 +17,15 @@ import java.util.*;
 public class BookingExtraController {
   private final JdbcTemplate db;
   private final CancellationFinanceService cancellationFinance;
+  private final BookingStatusHistoryService history;
 
   public BookingExtraController(
       JdbcTemplate db,
-      CancellationFinanceService cancellationFinance){
+      CancellationFinanceService cancellationFinance,
+      BookingStatusHistoryService history){
     this.db=db;
     this.cancellationFinance=cancellationFinance;
+    this.history=history;
   }
 
   @GetMapping("/{id}/pin-status")
@@ -65,6 +68,7 @@ public class BookingExtraController {
     db.update(
         "update scheduled_bookings set status='CANCELLED',updated_at=now() where id=?",
         id);
+    history.record(id,status,"CANCELLED",booking.get("partner_id")!=null?"PARTNER":"CLIENT",CurrentUser.id(),null);
     db.update(
         "insert into outbox_events(aggregate_type,aggregate_id,event_type,payload) " +
         "values ('BOOKING',?,'booking.status.cancelled',jsonb_build_object('bookingId',?::text))",
