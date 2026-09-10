@@ -17,7 +17,7 @@ public class MeController {
   public Map<String,Object> me(){
     UUID userId=CurrentUser.id();
     Map<String,Object> user=db.queryForMap(
-        "select id,first_name,last_name,email,phone,status,locale,timezone from users where id=?",
+        "select id,first_name,last_name,email::text as email,phone,status,locale,timezone from users where id=?",
         userId);
     List<String> roles=db.queryForList(
         "select r.code from roles r join user_roles ur on ur.role_id=r.id where ur.user_id=? order by r.code",

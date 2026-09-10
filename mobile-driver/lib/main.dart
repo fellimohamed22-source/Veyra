@@ -920,15 +920,25 @@ class _AgendaScreenState extends State<AgendaScreen>{
         if(items.isEmpty)return Center(child:Text(t('Aucune course confirmée.')));
         return ListView(padding:const EdgeInsets.all(16),children:items.map((raw){
           final x=Map<String,dynamic>.from(raw as Map);
-          return Card(child:ListTile(
-            title:Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString()),
-            subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-            trailing:Row(mainAxisSize:MainAxisSize.min,children:[
-              VeyraStatusBadge(status:(x['status']??'').toString()),
-              const SizedBox(width:4),
-              const Icon(Icons.chevron_right),
-            ]),
-            onTap:()=>context.push('/ride/'+x['id'].toString()),
+          return Card(child:Padding(
+            padding:const EdgeInsets.all(12),
+            child:InkWell(
+              onTap:()=>context.push('/ride/'+x['id'].toString()),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(
+                  (x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
+                  style:const TextStyle(fontWeight:FontWeight.w600),
+                ),
+                const SizedBox(height:4),
+                Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
+                const SizedBox(height:8),
+                Row(children:[
+                  VeyraStatusBadge(status:(x['status']??'').toString()),
+                  const Spacer(),
+                  const Icon(Icons.chevron_right,color:Colors.black38),
+                ]),
+              ]),
+            ),
           ));
         }).toList());
       },

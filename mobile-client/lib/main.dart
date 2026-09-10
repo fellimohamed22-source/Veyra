@@ -1084,10 +1084,11 @@ class _AddressScreenState extends State<AddressScreen>{
       const Text('Paiement',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
       DropdownButtonFormField<String>(
         initialValue:paymentMethod,
+        isExpanded:true,
         decoration:InputDecoration(labelText:t('Mode de paiement')),
         items:[
-          DropdownMenuItem(value:'CASH',child:Text(t('Cash — le total inclut la commission Veyra'))),
-          DropdownMenuItem(value:'ONLINE',child:Text(t('En ligne — paiement sécurisé'))),
+          DropdownMenuItem(value:'CASH',child:Text(t('Cash — le total inclut la commission Veyra'),overflow:TextOverflow.ellipsis,maxLines:1)),
+          DropdownMenuItem(value:'ONLINE',child:Text(t('En ligne — paiement sécurisé'),overflow:TextOverflow.ellipsis,maxLines:1)),
         ],
         onChanged:(v){if(v!=null)setState(()=>paymentMethod=v);},
       ),
@@ -1151,9 +1152,20 @@ class OffersScreen extends StatefulWidget{
 }
 class _OffersScreenState extends State<OffersScreen>{
   late Future<List<dynamic>> future;
+  late Future<Map<String,dynamic>> bookingFuture;
   String? error;
   String? acceptingOfferId;
-  @override void initState(){super.initState();future=api.offers(widget.bookingId);}
+  @override void initState(){
+    super.initState();
+    future=api.offers(widget.bookingId);
+    // Real gap fixed here: this screen only ever fetched the offers
+    // list, never the booking's own details -- someone landing here
+    // before any offer exists (the normal, expected state right after
+    // publishing) had no way to see their own trip's pickup, dropoff,
+    // date, or status anywhere, on this screen or otherwise, since this
+    // is the only screen a not-yet-assigned booking actually routes to.
+    bookingFuture=api.bookingDetail(widget.bookingId);
+  }
 
   Future<void> chooseOffer(String offerId)async{
     setState((){acceptingOfferId=offerId;error=null;});
@@ -1179,24 +1191,47 @@ class _OffersScreenState extends State<OffersScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
     appBar:AppBar(title:Text(t('Offres reçues')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
-    body:FutureBuilder<List<dynamic>>(
-      future:future,
-      builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId);}))
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
-        final items=s.data??[];
-        if(items.isEmpty)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.'))));
-        return ListView(padding:const EdgeInsets.all(16),children:[
-          Text(t('Choisissez librement selon le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:Colors.black54)),
-          if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-          const SizedBox(height:14),
-          for(final raw in items)Builder(builder:(context){
-            final x=Map<String,dynamic>.from(raw as Map);
-            final driverName=(x['driverFirstName']??'Chauffeur').toString();
-            final vehicle=[(x['vehicleBrand']??'').toString(),(x['vehicleModel']??'').toString()].where((v)=>v.isNotEmpty).join(' ');
-            final rating=(x['rating']??'-').toString();
+    body:ListView(padding:const EdgeInsets.all(16),children:[
+      FutureBuilder<Map<String,dynamic>>(
+        future:bookingFuture,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done||s.hasError)return const SizedBox.shrink();
+          final b=s.data??{};
+          return Card(
+            shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),
+            child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(
+                (b['pickup_address']??'').toString()+' → '+(b['dropoff_address']??'').toString(),
+                style:const TextStyle(fontWeight:FontWeight.w600),
+              ),
+              const SizedBox(height:6),
+              Row(children:[
+                Expanded(child:Text(VeyraDateFormatter.dateTime(b['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13))),
+                VeyraStatusBadge(status:(b['status']??'').toString()),
+              ]),
+            ])),
+          );
+        },
+      ),
+      const SizedBox(height:16),
+      FutureBuilder<List<dynamic>>(
+        future:future,
+        builder:(context,s){
+          if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+          if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+            ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId);}))
+            :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
+          final items=s.data??[];
+          if(items.isEmpty)return Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.')));
+          return Column(children:[
+            Text(t('Choisissez librement selon le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:Colors.black54)),
+            if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+            const SizedBox(height:14),
+            for(final raw in items)Builder(builder:(context){
+              final x=Map<String,dynamic>.from(raw as Map);
+              final driverName=(x['driverFirstName']??'Chauffeur').toString();
+              final vehicle=[(x['vehicleBrand']??'').toString(),(x['vehicleModel']??'').toString()].where((v)=>v.isNotEmpty).join(' ');
+              final rating=(x['rating']??'-').toString();
             return Card(
               margin:const EdgeInsets.only(bottom:12),
               shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16)),
@@ -1232,9 +1267,10 @@ class _OffersScreenState extends State<OffersScreen>{
               ])),
             );
           }),
-        ]);
-      },
-    ),
+          ]);
+        },
+      ),
+    ]),
   );
 }
 
