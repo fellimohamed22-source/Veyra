@@ -10,9 +10,11 @@ import java.util.*;
 @Component
 public class BookingMaintenanceScheduler {
   private final JdbcTemplate db;
+  private final BookingStatusHistoryService history;
 
-  public BookingMaintenanceScheduler(JdbcTemplate db){
+  public BookingMaintenanceScheduler(JdbcTemplate db,BookingStatusHistoryService history){
     this.db=db;
+    this.history=history;
   }
 
   @Scheduled(fixedDelayString="${veyra.booking-maintenance.poll-ms:60000}")
@@ -33,7 +35,10 @@ public class BookingMaintenanceScheduler {
           "update scheduled_bookings set status='NO_OFFER',updated_at=now() " +
           "where id=? and status='OPEN_FOR_OFFERS'",
           id);
-      if(updated>0) event(id,"booking.no_offer");
+      if(updated>0){
+        history.record(id,"OPEN_FOR_OFFERS","NO_OFFER","SYSTEM",null,"OFFER_WINDOW_CLOSED_NO_OFFER");
+        event(id,"booking.no_offer");
+      }
     }
 
     List<UUID> expired=db.queryForList(
@@ -50,7 +55,10 @@ public class BookingMaintenanceScheduler {
           "update scheduled_bookings set status='EXPIRED',updated_at=now() " +
           "where id=? and status='OFFERS_RECEIVED'",
           id);
-      if(updated>0) event(id,"booking.expired");
+      if(updated>0){
+        history.record(id,"OFFERS_RECEIVED","EXPIRED","SYSTEM",null,"OFFER_WINDOW_CLOSED_NO_SELECTION");
+        event(id,"booking.expired");
+      }
     }
   }
 
