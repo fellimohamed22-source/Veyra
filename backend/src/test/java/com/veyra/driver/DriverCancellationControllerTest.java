@@ -34,6 +34,7 @@ import static org.mockito.Mockito.*;
 class DriverCancellationControllerTest {
 
   @Mock JdbcTemplate db;
+  @Mock com.veyra.booking.BookingStatusHistoryService history;
 
   private final UUID userId = UUID.randomUUID();
   private final UUID driverId = UUID.randomUUID();
@@ -55,7 +56,7 @@ class DriverCancellationControllerTest {
   }
 
   private DriverCancellationController controller() {
-    return new DriverCancellationController(db);
+    return new DriverCancellationController(db,history);
   }
 
   private void stubBooking(UUID selectedDriverId, String status, OffsetDateTime scheduledAt) {

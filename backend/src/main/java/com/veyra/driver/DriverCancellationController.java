@@ -15,9 +15,11 @@ import java.util.*;
 @RequestMapping("/api/v1/driver/bookings")
 public class DriverCancellationController {
   private final JdbcTemplate db;
+  private final com.veyra.booking.BookingStatusHistoryService history;
 
-  public DriverCancellationController(JdbcTemplate db){
+  public DriverCancellationController(JdbcTemplate db,com.veyra.booking.BookingStatusHistoryService history){
     this.db=db;
+    this.history=history;
   }
 
   public record CancelRequest(String reasonCode){}
@@ -74,6 +76,7 @@ public class DriverCancellationController {
           "update scheduled_bookings set status='OPEN_FOR_OFFERS',selected_offer_id=null," +
           "selected_driver_id=null,pin_hash=null,pin_encrypted=null,offer_window_ends_at=?,updated_at=now() where id=?",
           newClose,bookingId);
+      history.record(bookingId,status,"OPEN_FOR_OFFERS","DRIVER",CurrentUser.id(),reason);
 
       db.update(
           "insert into outbox_events(aggregate_type,aggregate_id,event_type,payload) " +
@@ -87,6 +90,7 @@ public class DriverCancellationController {
       db.update(
           "update scheduled_bookings set status='DRIVER_CANCELLED',updated_at=now() where id=?",
           bookingId);
+      history.record(bookingId,status,"DRIVER_CANCELLED","DRIVER",CurrentUser.id(),reason);
       db.update(
           "insert into outbox_events(aggregate_type,aggregate_id,event_type,payload) " +
           "values ('BOOKING',?,'booking.driver_cancelled',jsonb_build_object('bookingId',?::text,'urgent',true))",
