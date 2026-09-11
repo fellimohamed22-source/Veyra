@@ -169,6 +169,34 @@ import java.util.*;
         }
         return ResponseEntity.status(201).body(response);
     }
+    // New feature: a driver adjusting the price of an offer they've
+    // already submitted, rather than being permanently locked to their
+    // first number for a booking that might stay open for offers for a
+    // while. Deliberately a separate, narrower endpoint from offer()
+    // above rather than reusing it -- it only updates the amount on the
+    // driver's own existing ACTIVE offer, and does not re-run the
+    // CASH-debt-limit or eligibility checks that only make sense for a
+    // brand new offer being placed for the first time; the driver was
+    // already eligible when they first offered, and this isn't a new
+    // financial commitment on top of what they already had active, just
+    // a revision of the same one. Still enforces the offer window still
+    // being open, same as a new submission would.
+    @PatchMapping("/driver/opportunities/{bookingId}/offers") @Transactional Map<String,Object> updateOffer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
+        UUID d=driver();
+        Map<String,Object>b=one("select status,offer_window_ends_at from scheduled_bookings where id=? for update",bookingId);
+        if(!Set.of("OPEN_FOR_OFFERS","OFFERS_RECEIVED").contains(b.get("status"))||DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
+        List<UUID> offerIds=db.queryForList("select id from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",UUID.class,bookingId,d);
+        if(offerIds.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"NO_ACTIVE_OFFER");
+        UUID offerId=offerIds.getFirst();
+        db.update("update driver_offers set proposed_amount_minor=?,currency=? where id=?",r.amountMinor(),r.currency(),offerId);
+        Map<String,Object>response=new HashMap<>(Map.of("offerId",offerId));
+        String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
+        if("BEST_VISIBLE".equals(visibilityMode)){
+            Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",Long.class,bookingId,d);
+            response.put("currentBestOtherOfferMinor",bestOthers);
+        }
+        return response;
+    }
     @GetMapping("/scheduled-bookings/{bookingId}/offers") List<Map<String,Object>> ownerOffers(@PathVariable UUID bookingId){
         Map<String,Object>b=one("select creator_user_id,partner_id from scheduled_bookings where id=?",bookingId);
         owner(b);
