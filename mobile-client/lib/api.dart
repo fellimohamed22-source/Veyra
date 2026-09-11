@@ -117,6 +117,16 @@ class Api {
     await storage.deleteAll();
   }
 
+  Future<bool> hasStoredSession() async {
+    try{
+      final access=await storage.read(key:'accessToken');
+      final refresh=await storage.read(key:'refreshToken');
+      return (access!=null&&access.isNotEmpty)||(refresh!=null&&refresh.isNotEmpty);
+    }catch(_){
+      return false;
+    }
+  }
+
   /// Validates a persisted session without destroying it on transient
   /// network/server failures. Returns true for a valid (or successfully
   /// refreshed) session, false only when the backend genuinely rejects the
