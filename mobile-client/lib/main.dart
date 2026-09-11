@@ -791,6 +791,7 @@ class _AddressScreenState extends State<AddressScreen>{
   bool locating=false;
   bool submitting=false;
   String? error;
+  Timer? _searchDebounce;
 
   @override void initState(){
     super.initState();
@@ -801,6 +802,11 @@ class _AddressScreenState extends State<AddressScreen>{
     // but there was previously no way for anyone but an admin to even
     // see which mode is currently active.
     api.offerVisibilityMode().then((mode){if(mounted)setState(()=>visibilityMode=mode);}).catchError((_){});
+  }
+
+  @override void dispose(){
+    _searchDebounce?.cancel();
+    super.dispose();
   }
 
   Future<void> search(bool isPickup,String q)async{
@@ -873,7 +879,19 @@ class _AddressScreenState extends State<AddressScreen>{
           final current=isPickup?pickupPlace:dropoffPlace;
           if(current!=null&&current['label']==q)return;
           if(isPickup)pickupPlace=null;else dropoffPlace=null;
-          search(isPickup,q);
+          // Real bug found from an actual production log: every single
+          // keystroke called search() immediately, each one hitting
+          // LocationIQ's geocoding API directly -- typing a normal
+          // address (e.g. "Marseille") fired up to 9+ requests within
+          // a couple of seconds, comfortably exceeding LocationIQ's
+          // per-second rate limit and surfacing as repeated 429 "Rate
+          // Limited Second" errors server-side (AddressController ->
+          // LocationIqGeocodingProvider). Standard debounce: cancel any
+          // pending search and wait 400ms of no further typing before
+          // actually calling the API, same UX pattern virtually every
+          // autocomplete field uses.
+          _searchDebounce?.cancel();
+          _searchDebounce=Timer(const Duration(milliseconds:400),()=>search(isPickup,q));
         },
         decoration:InputDecoration(
           labelText:isPickup?t('Adresse de départ'):t('Destination'),
