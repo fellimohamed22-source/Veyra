@@ -170,8 +170,15 @@ class _AppState extends State<App> with WidgetsBindingObserver{
           router.go('/home');
         }
       }
-      // null = transient network/server failure. Keep the current session
-      // and screen untouched; never force the user to clear app data.
+      if(valid==null){
+        final current=router.routerDelegate.currentConfiguration.uri.path;
+        if(current=='/login'&&await api.hasStoredSession()){
+          router.go('/home');
+        }
+      }
+      // A transient network/server failure never clears credentials. If a
+      // stored session exists after process recreation, enter the app and
+      // let individual screens present their normal offline state.
     }finally{
       _sessionCheckRunning=false;
     }
@@ -287,10 +294,14 @@ class _LoginScreenState extends State<LoginScreen>{
     if(valid==true){
       unawaited(configurePush());
       context.go('/home');
+      return;
+    }
+    if(valid==null&&await api.hasStoredSession()&&mounted){
+      context.go('/home');
     }
     // false: credentials were genuinely rejected and have already been
-    // cleared. null: offline/temporary backend failure; keep the login
-    // screen usable without destroying the persisted refresh token.
+    // cleared. null with stored credentials: preserve the session and
+    // enter the app, where normal offline states handle connectivity.
   }
 
   Future<void> submit()async{
