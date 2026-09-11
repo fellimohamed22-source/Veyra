@@ -22,6 +22,9 @@ import 'core/widgets/veyra_button.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/status_badge.dart';
 import 'core/widgets/pin_display.dart';
+import 'core/maps/route_geometry.dart';
+import 'core/maps/veyra_map.dart';
+import 'core/maps/location_socket.dart';
 
 /// Short alias used throughout this file -- AppLocale.t() everywhere
 /// would be far noisier across ~100 call sites.
@@ -1740,139 +1743,290 @@ class LiveLocationScreen extends StatefulWidget{
   const LiveLocationScreen({required this.bookingId,super.key});
   @override State<LiveLocationScreen> createState()=>_LiveLocationScreenState();
 }
+
 class _LiveLocationScreenState extends State<LiveLocationScreen>{
-  Timer? timer;
+  static const _staleThreshold=Duration(minutes:2);
+
+  Timer? fallbackTimer;
   Timer? etaTimer;
+  BookingLocationSocket? locationSocket;
   Map<String,dynamic>? location;
   Map<String,dynamic>? bookingMap;
   Map<String,dynamic>? etaInfo;
   String? error;
+  bool loading=true;
 
   @override void initState(){
     super.initState();
-    api.bookingDetail(widget.bookingId).then((value){
-      if(mounted)setState(()=>bookingMap=value);
-    }).catchError((_){});
-    refresh();
-    timer=Timer.periodic(const Duration(seconds:10),(_)=>refresh());
-    etaTimer=Timer.periodic(const Duration(seconds:30),(_)=>refreshEta());
+    _bootstrap();
+    locationSocket=BookingLocationSocket(
+      api:api,
+      bookingId:widget.bookingId,
+      onLocation:_onSocketLocation,
+    )..connect();
+
+    // WebSocket is primary; HTTP polling remains a resilient fallback
+    // for captive portals, proxies or short-lived socket interruptions.
+    fallbackTimer=Timer.periodic(const Duration(seconds:15),(_)=>_refreshSnapshot());
+    etaTimer=Timer.periodic(const Duration(seconds:30),(_)=>_refreshEta());
   }
 
-  @override void dispose(){
-    timer?.cancel();
-    etaTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> refresh()async{
+  Future<void> _bootstrap() async {
+    setState(()=>loading=true);
     try{
-      final value=await api.currentLocation(widget.bookingId);
-      if(mounted)setState((){location=value;error=null;});
-      await refreshEta();
-    }catch(_){
-      if(mounted)setState(()=>error=t('Position en cours de mise à jour.'));
+      final booking=await api.bookingDetail(widget.bookingId);
+      final live=await api.currentLocation(widget.bookingId);
+      if(!mounted)return;
+      setState((){
+        bookingMap=booking;
+        location=live;
+        error=null;
+        loading=false;
+      });
+      await _refreshEta();
+    }catch(e){
+      if(!mounted)return;
+      setState((){
+        loading=false;
+        error=VeyraErrorMessages.forException(e);
+      });
     }
   }
 
-  // Fiche C09 : "Si GPS stale : afficher dernière mise à jour, ne pas
-  // inventer l'ETA." Seuil de 2 minutes = plusieurs cycles du refresh
-  // de 10s ci-dessus, largement au-delà d'une simple gigue réseau.
-  static const _staleThreshold = Duration(minutes: 2);
-
-  bool get _isStale {
-    final raw = location?['recorded_at'];
-    if (raw == null) return false;
-    final dt = DateTime.tryParse(raw.toString());
-    if (dt == null) return false;
-    return DateTime.now().toUtc().difference(dt.toUtc()) > _staleThreshold;
+  Future<void> _refreshSnapshot() async {
+    try{
+      final booking=await api.bookingDetail(widget.bookingId);
+      final live=await api.currentLocation(widget.bookingId);
+      if(!mounted)return;
+      setState((){
+        bookingMap=booking;
+        location=live;
+        error=null;
+      });
+      await _refreshEta();
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }
   }
 
-  Future<void> refreshEta()async{
+  void _onSocketLocation(Map<String,dynamic> message){
+    if(!mounted)return;
+    setState((){
+      location={
+        'available':true,
+        'lat':message['lat'],
+        'lng':message['lng'],
+        'accuracy_m':message['accuracyM']??message['accuracy_m'],
+        'heading':message['heading'],
+        'speed_mps':message['speedMps']??message['speed_mps'],
+        'sequence_no':message['sequenceNo']??message['sequence_no'],
+        'recorded_at':message['recordedAt']??message['recorded_at']??DateTime.now().toUtc().toIso8601String(),
+      };
+      error=null;
+    });
+  }
+
+  DateTime? get _recordedAt {
+    final raw=location?['recorded_at']??location?['recordedAt'];
+    if(raw==null)return null;
+    return DateTime.tryParse(raw.toString());
+  }
+
+  bool get _isStale {
+    final dt=_recordedAt;
+    if(dt==null)return false;
+    return DateTime.now().toUtc().difference(dt.toUtc())>_staleThreshold;
+  }
+
+  Future<void> _refreshEta() async {
     final live=location;
     final booking=bookingMap;
-    if(live?['available']!=true||booking==null)return;
-    if(_isStale){
-      // Une position obsolète ne doit jamais servir de base à un ETA
-      // recalculé -- on efface plutôt un ETA précédent qui deviendrait
-      // trompeur.
+    if(live?['available']!=true||booking==null||_isStale){
       if(mounted&&etaInfo!=null)setState(()=>etaInfo=null);
       return;
     }
-    final toLat=(booking['dropoff_lat'] as num?)?.toDouble();
-    final toLng=(booking['dropoff_lng'] as num?)?.toDouble();
-    if(toLat==null||toLng==null)return;
+
+    final status=(booking['status']??'').toString();
+    final approaching=status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED';
+    final toLat=(booking[approaching?'pickup_lat':'dropoff_lat'] as num?)?.toDouble();
+    final toLng=(booking[approaching?'pickup_lng':'dropoff_lng'] as num?)?.toDouble();
+    final fromLat=(live?['lat'] as num?)?.toDouble();
+    final fromLng=(live?['lng'] as num?)?.toDouble();
+    if(toLat==null||toLng==null||fromLat==null||fromLng==null)return;
+
     try{
       final eta=await api.routeEstimate(
-        fromLat:(live!['lat'] as num).toDouble(),
-        fromLng:(live['lng'] as num).toDouble(),
-        toLat:toLat,toLng:toLng,
+        fromLat:fromLat,
+        fromLng:fromLng,
+        toLat:toLat,
+        toLng:toLng,
       );
       if(mounted)setState(()=>etaInfo=eta);
-    }catch(_){}
+    }catch(_){
+      // Keep the live position visible even when the routing provider is
+      // temporarily unavailable. ETA/route simply disappear.
+      if(mounted)setState(()=>etaInfo=null);
+    }
+  }
+
+  @override void dispose(){
+    fallbackTimer?.cancel();
+    etaTimer?.cancel();
+    locationSocket?.dispose();
+    super.dispose();
   }
 
   @override Widget build(BuildContext context){
+    if(loading){
+      return Scaffold(
+        appBar:AppBar(title:Text(t('Suivi en direct'))),
+        body:const VeyraLoadingView(),
+      );
+    }
+
+    final booking=bookingMap;
+    if(booking==null){
+      return Scaffold(
+        appBar:AppBar(title:Text(t('Suivi en direct'))),
+        body:VeyraErrorView(
+          customMessage:error??t('Suivi indisponible.'),
+          onRetry:_bootstrap,
+        ),
+      );
+    }
+
+    final status=(booking['status']??'').toString();
     final available=location?['available']==true;
-    final pickupLat=(bookingMap?['pickup_lat'] as num?)?.toDouble();
-    final pickupLng=(bookingMap?['pickup_lng'] as num?)?.toDouble();
-    final dropoffLat=(bookingMap?['dropoff_lat'] as num?)?.toDouble();
-    final dropoffLng=(bookingMap?['dropoff_lng'] as num?)?.toDouble();
-    final lat=available?((location!['lat'] as num).toDouble()):(pickupLat??43.2965);
-    final lng=available?((location!['lng'] as num).toDouble()):(pickupLng??5.3698);
+    final pickupLat=(booking['pickup_lat'] as num?)?.toDouble();
+    final pickupLng=(booking['pickup_lng'] as num?)?.toDouble();
+    final dropoffLat=(booking['dropoff_lat'] as num?)?.toDouble();
+    final dropoffLng=(booking['dropoff_lng'] as num?)?.toDouble();
+    final driverLat=(location?['lat'] as num?)?.toDouble();
+    final driverLng=(location?['lng'] as num?)?.toDouble();
+    final driverHeading=(location?['heading'] as num?)?.toDouble();
+    final driverPhone=booking['driver_phone']?.toString();
+
+    final pickup=pickupLat==null||pickupLng==null?null:LatLng(pickupLat,pickupLng);
+    final dropoff=dropoffLat==null||dropoffLng==null?null:LatLng(dropoffLat,dropoffLng);
+    final driver=available&&driverLat!=null&&driverLng!=null?LatLng(driverLat,driverLng):null;
+    final route=VeyraRouteGeometry.fromApi(etaInfo);
+
+    final approaching=status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED';
+    final title=status=='IN_PROGRESS'
+      ?t('Course en cours')
+      :status=='DRIVER_ARRIVED'
+        ?t('Votre chauffeur est arrivé')
+        :t('Votre chauffeur arrive');
+
     return Scaffold(
       appBar:AppBar(title:Text(t('Suivi en direct'))),
       body:Stack(children:[
-        FlutterMap(
-          options:MapOptions(initialCenter:LatLng(lat,lng),initialZoom:available?14:9),
-          children:[
-            TileLayer(
-              urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName:'com.veyra.client',
-            ),
-            MarkerLayer(markers:[
-              if(pickupLat!=null&&pickupLng!=null)Marker(
-                point:LatLng(pickupLat,pickupLng),
-                width:44,height:44,
-                child:const Icon(Icons.trip_origin,size:34),
-              ),
-              if(dropoffLat!=null&&dropoffLng!=null)Marker(
-                point:LatLng(dropoffLat,dropoffLng),
-                width:44,height:44,
-                child:const Icon(Icons.location_on,size:38),
-              ),
-              if(available)Marker(
-                point:LatLng(lat,lng),
-                width:56,height:56,
-                child:const Icon(Icons.local_taxi,size:44),
-              ),
-            ]),
-          ],
+        Positioned.fill(
+          child:VeyraMap(
+            pickup:pickup,
+            dropoff:dropoff,
+            driver:driver,
+            driverHeading:driverHeading,
+            route:route,
+            userAgentPackageName:'com.veyra.client',
+          ),
         ),
-        Positioned(
-          left:16,right:16,bottom:20,
-          child:Card(child:Padding(
-            padding:const EdgeInsets.all(16),
-            child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(available?t('Position actuelle du chauffeur'):t('Position indisponible'),style:const TextStyle(fontWeight:FontWeight.bold)),
-              Text(error??(available?t('Mise à jour automatique toutes les 10 secondes.'):t('En attente de la première position GPS.'))),
-              if(etaInfo!=null)Text(
-                t('ETA destination : ')+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])+
-                ' • '+VeyraMoneyFormatter.distance(etaInfo!['distanceMeters']),
-                style:const TextStyle(fontWeight:FontWeight.w600),
+        if(error!=null)
+          Positioned(
+            top:12,left:16,right:16,
+            child:Material(
+              elevation:2,
+              borderRadius:BorderRadius.circular(12),
+              color:const Color(0xFFFFF7ED),
+              child:Padding(
+                padding:const EdgeInsets.all(12),
+                child:Row(children:[
+                  const Icon(Icons.wifi_off,color:Color(0xFFD97706)),
+                  const SizedBox(width:10),
+                  Expanded(child:Text(error!,style:const TextStyle(fontSize:12))),
+                  TextButton(onPressed:_refreshSnapshot,child:Text(t('Réessayer'))),
+                ]),
               ),
-              if(available&&location!['recorded_at']!=null)Text(
-                t('Dernière position : ')+VeyraDateFormatter.dateTime(location!['recorded_at']),
-                style:TextStyle(color:_isStale?const Color(0xFFDC2626):null),
-              ),
-              if(available&&_isStale)Padding(
-                padding:const EdgeInsets.only(top:4),
-                child:Text(
-                  t('Position possiblement obsolète — le chauffeur n’a pas transmis de nouvelle position récemment.'),
-                  style:const TextStyle(color:Color(0xFFDC2626),fontSize:12),
+            ),
+          ),
+        DraggableScrollableSheet(
+          initialChildSize:.30,
+          minChildSize:.24,
+          maxChildSize:.58,
+          builder:(context,scrollController)=>Material(
+            elevation:8,
+            color:Theme.of(context).scaffoldBackgroundColor,
+            borderRadius:const BorderRadius.vertical(top:Radius.circular(24)),
+            child:ListView(
+              controller:scrollController,
+              padding:const EdgeInsets.fromLTRB(20,12,20,24),
+              children:[
+                Center(child:Container(width:44,height:4,decoration:BoxDecoration(color:Colors.black12,borderRadius:BorderRadius.circular(3)))),
+                const SizedBox(height:16),
+                Text(title,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+                const SizedBox(height:6),
+                Text(
+                  approaching
+                    ?(booking['pickup_address']??'').toString()
+                    :(booking['dropoff_address']??'').toString(),
+                  maxLines:2,
+                  overflow:TextOverflow.ellipsis,
+                  style:const TextStyle(color:Colors.black54),
                 ),
-              ),
-            ]),
-          )),
+                if(route.durationSeconds!=null||route.distanceMeters!=null)...[
+                  const SizedBox(height:14),
+                  Row(children:[
+                    if(route.durationSeconds!=null)...[
+                      const Icon(Icons.schedule,size:18),
+                      const SizedBox(width:6),
+                      Text(VeyraMoneyFormatter.duration(route.durationSeconds)),
+                    ],
+                    if(route.distanceMeters!=null)...[
+                      const SizedBox(width:18),
+                      const Icon(Icons.route,size:18),
+                      const SizedBox(width:6),
+                      Text(VeyraMoneyFormatter.distance(route.distanceMeters)),
+                    ],
+                  ]),
+                ],
+                const SizedBox(height:12),
+                if(!available)
+                  Text(t('En attente de la première position GPS.'),style:const TextStyle(color:Colors.black54)),
+                if(available&&_recordedAt!=null)
+                  Text(
+                    t('Dernière position : ')+VeyraDateFormatter.dateTime(_recordedAt!.toIso8601String()),
+                    style:TextStyle(
+                      color:_isStale?const Color(0xFFDC2626):Colors.black54,
+                      fontSize:12,
+                    ),
+                  ),
+                if(available&&_isStale)
+                  Padding(
+                    padding:const EdgeInsets.only(top:6),
+                    child:Text(
+                      t('Position possiblement obsolète — aucun ETA n’est affiché tant qu’une position récente n’est pas reçue.'),
+                      style:const TextStyle(color:Color(0xFFDC2626),fontSize:12,fontWeight:FontWeight.w600),
+                    ),
+                  ),
+                const SizedBox(height:16),
+                Row(children:[
+                  Expanded(child:OutlinedButton.icon(
+                    onPressed:driverPhone==null||driverPhone.isEmpty
+                      ?null
+                      :()=>launchUrl(Uri(scheme:'tel',path:driverPhone)),
+                    icon:const Icon(Icons.phone_outlined),
+                    label:Text(t('Appeler')),
+                  )),
+                  const SizedBox(width:12),
+                  Expanded(child:OutlinedButton.icon(
+                    onPressed:()=>context.push('/chat/'+widget.bookingId),
+                    icon:const Icon(Icons.chat_bubble_outline),
+                    label:Text(t('Message')),
+                  )),
+                ]),
+              ],
+            ),
+          ),
         ),
       ]),
     );
