@@ -129,6 +129,14 @@ jobs:
           # text from a real failed run.
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          # Driver live tracking uses geolocator while the driver is
+          # DRIVER_EN_ROUTE / DRIVER_ARRIVED / IN_PROGRESS. The Android
+          # folder is generated on every CI run, so these permissions must
+          # be re-applied here just like the client permissions above.
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
           # Same real package-name mismatch fix as the client build --
           # google-services.json declares "com.veyra.driver" for this app.
           sed -i 's/namespace = "com.example.veyra_driver"/namespace = "com.veyra.driver"/' android/app/build.gradle.kts
