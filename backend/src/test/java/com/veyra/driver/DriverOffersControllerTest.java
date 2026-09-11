@@ -74,8 +74,15 @@ class DriverOffersControllerTest {
 
     controller().list("closed");
 
+    // SUPERSEDED added alongside the offer-price-adjustment history fix
+    // earlier this session: an offer replaced by a driver's own revised
+    // one is genuinely closed (not the current live offer anymore),
+    // same practical bucket as rejected/expired/withdrawn even though
+    // the underlying reason differs. This test's expected SQL string
+    // was not updated at the time -- caught here from the real CI
+    // failure log, not by re-reading every call site by hand.
     verify(db).queryForList(
-        contains("o.status in ('REJECTED_BY_SELECTION','EXPIRED','WITHDRAWN')"), eq(driverId));
+        contains("o.status in ('REJECTED_BY_SELECTION','EXPIRED','WITHDRAWN','SUPERSEDED')"), eq(driverId));
   }
 
   @Test
