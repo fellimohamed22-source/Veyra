@@ -795,6 +795,8 @@ class _AddressScreenState extends State<AddressScreen>{
   bool submitting=false;
   String? error;
   Timer? _searchDebounce;
+  Map<String,dynamic>? routePreview;
+  bool routePreviewLoading=false;
 
   @override void initState(){
     super.initState();
@@ -856,6 +858,7 @@ class _AddressScreenState extends State<AddressScreen>{
         pickupPlace=place;
         pickupResults=[];
       });
+      await _refreshRoutePreview();
     }catch(_){
       if(mounted)setState(()=>error=t('Impossible d’obtenir votre position actuelle.'));
     }finally{
@@ -882,6 +885,7 @@ class _AddressScreenState extends State<AddressScreen>{
           final current=isPickup?pickupPlace:dropoffPlace;
           if(current!=null&&current['label']==q)return;
           if(isPickup)pickupPlace=null;else dropoffPlace=null;
+          routePreview=null;
           // Real bug found from an actual production log: every single
           // keystroke called search() immediately, each one hitting
           // LocationIQ's geocoding API directly -- typing a normal
@@ -925,9 +929,42 @@ class _AddressScreenState extends State<AddressScreen>{
                 dropoffResults=[];
               }
             });
+            _refreshRoutePreview();
           },
         ),
     ]);
+  }
+
+  Future<void> _refreshRoutePreview() async {
+    final from=pickupPlace;
+    final to=dropoffPlace;
+    if(from==null||to==null){
+      if(mounted)setState(()=>routePreview=null);
+      return;
+    }
+    final fromLat=(from['lat'] as num?)?.toDouble();
+    final fromLng=(from['lng'] as num?)?.toDouble();
+    final toLat=(to['lat'] as num?)?.toDouble();
+    final toLng=(to['lng'] as num?)?.toDouble();
+    if(fromLat==null||fromLng==null||toLat==null||toLng==null)return;
+
+    setState(()=>routePreviewLoading=true);
+    try{
+      final route=await api.routeEstimate(
+        fromLat:fromLat,
+        fromLng:fromLng,
+        toLat:toLat,
+        toLng:toLng,
+      );
+      if(mounted)setState(()=>routePreview=route);
+    }catch(_){
+      // The booking can still be prepared if the free routing provider is
+      // temporarily unavailable. The backend remains authoritative when
+      // the request is finally published.
+      if(mounted)setState(()=>routePreview=null);
+    }finally{
+      if(mounted)setState(()=>routePreviewLoading=false);
+    }
   }
 
   Future<void> chooseDateTime()async{
@@ -1045,6 +1082,49 @@ class _AddressScreenState extends State<AddressScreen>{
       const SizedBox(height:16),
       addressField(false),
       const SizedBox(height:18),
+      if(pickupPlace!=null&&dropoffPlace!=null)...[
+        SizedBox(
+          height:220,
+          child:ClipRRect(
+            borderRadius:BorderRadius.circular(VeyraRadius.lg),
+            child:Stack(children:[
+              Positioned.fill(child:VeyraMap(
+                pickup:LatLng(
+                  (pickupPlace!['lat'] as num).toDouble(),
+                  (pickupPlace!['lng'] as num).toDouble(),
+                ),
+                dropoff:LatLng(
+                  (dropoffPlace!['lat'] as num).toDouble(),
+                  (dropoffPlace!['lng'] as num).toDouble(),
+                ),
+                route:VeyraRouteGeometry.fromApi(routePreview),
+                showRecenter:false,
+                userAgentPackageName:'com.veyra.client',
+              )),
+              if(routePreviewLoading)
+                const Positioned.fill(
+                  child:ColoredBox(
+                    color:Color(0x33000000),
+                    child:Center(child:CircularProgressIndicator()),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+        const SizedBox(height:8),
+        if(routePreview!=null)
+          Row(children:[
+            const Icon(Icons.route,size:18,color:Colors.black54),
+            const SizedBox(width:6),
+            Text(
+              VeyraMoneyFormatter.distance(routePreview!['distanceMeters'])+
+              ' • '+
+              VeyraMoneyFormatter.duration(routePreview!['durationSeconds']),
+              style:const TextStyle(fontSize:12,color:Colors.black54,fontWeight:FontWeight.w600),
+            ),
+          ]),
+        const SizedBox(height:10),
+      ],
       ListTile(
         contentPadding:EdgeInsets.zero,
         leading:const Icon(Icons.event),
