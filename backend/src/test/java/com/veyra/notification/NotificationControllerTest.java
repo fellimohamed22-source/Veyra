@@ -54,7 +54,7 @@ class NotificationControllerTest {
     List<Map<String, Object>> result = new NotificationController(db).mine();
 
     assertEquals(1, result.size());
-    verify(db).queryForList(contains("where user_id=?"), eq(userId));
+    verify(db).queryForList(contains("where n.user_id=?"), eq(userId));
     // The enriched joins (booking/offer/driver) must not weaken privacy:
     // the query still has exactly one bind parameter and it is the
     // caller's own id, never anything from a request body/path.
