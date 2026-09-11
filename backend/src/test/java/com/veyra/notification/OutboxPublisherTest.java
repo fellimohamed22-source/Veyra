@@ -73,7 +73,7 @@ class OutboxPublisherTest {
 
     publisher().publish();
 
-    verify(db).update(contains("set published_at=now()"), eq(eventId));
+    verify(db).update(contains("set published_at=now()"), eq((Object) eventId));
   }
 
   @Test
@@ -90,7 +90,7 @@ class OutboxPublisherTest {
     publisher().publish();
 
     verify(db, never()).update(contains("into notifications"), any(), any(), any(), any());
-    verify(db).update(contains("set published_at=now()"), eq(eventId));
+    verify(db).update(contains("set published_at=now()"), eq((Object) eventId));
   }
 
   @Test
@@ -100,6 +100,6 @@ class OutboxPublisherTest {
     publisher().publish();
 
     verify(db, never()).update(contains("into notifications"), any(), any(), any(), any());
-    verify(db, never()).update(contains("set published_at=now()"), any());
+    verify(db, never()).update(contains("set published_at=now()"), any(Object.class));
   }
 }
