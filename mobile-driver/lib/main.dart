@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -21,6 +20,9 @@ import 'core/formatters/money_formatter.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/status_badge.dart';
+import 'core/maps/route_geometry.dart';
+import 'core/maps/veyra_map.dart';
+import 'core/maps/driver_location_tracker.dart';
 
 /// Short alias used throughout this file.
 String t(String french) => AppLocale.t(french);
@@ -1049,38 +1051,45 @@ class RideScreen extends StatefulWidget{
   const RideScreen({required this.bookingId,super.key});
   @override State<RideScreen> createState()=>_RideScreenState();
 }
+
 class _RideScreenState extends State<RideScreen>{
   late Future<Map<String,dynamic>> future;
+  late final DriverLocationTracker tracker;
   final pin=TextEditingController();
+
   bool busy=false;
   String? error;
-  Timer? gpsTimer;
   Position? position;
   Map<String,dynamic>? etaInfo;
-  int sequence=0;
   DateTime? lastEtaRefresh;
   int ratingScore=0;
   bool ratingSubmitting=false;
   bool ratingSubmitted=false;
+  bool trackingStarting=false;
 
   @override void initState(){
     super.initState();
     future=api.bookingDetail(widget.bookingId);
+    tracker=DriverLocationTracker(api:api);
   }
 
   @override void dispose(){
-    gpsTimer?.cancel();
+    tracker.dispose();
+    pin.dispose();
     super.dispose();
   }
 
-  void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
+  void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
 
-  Future<void> submitRating()async{
+  Future<void> submitRating() async {
     if(ratingScore<1)return;
     setState(()=>ratingSubmitting=true);
     try{
       await api.rate(widget.bookingId,ratingScore);
-      if(mounted)setState((){ratingSubmitted=true;ratingSubmitting=false;});
+      if(mounted)setState((){
+        ratingSubmitted=true;
+        ratingSubmitting=false;
+      });
     }on DioException catch(e){
       final alreadyRated=(e.response?.data is Map)&&((e.response?.data as Map)['code']=='ALREADY_RATED');
       if(mounted)setState((){
@@ -1091,88 +1100,156 @@ class _RideScreenState extends State<RideScreen>{
     }
   }
 
-  Future<bool> ensureLocationPermission()async{
-    if(!await Geolocator.isLocationServiceEnabled()){
-      if(mounted)setState(()=>error=t('Activez la localisation du téléphone.'));
-      return false;
+  Future<void> _startTrackingIfNeeded(String status) async {
+    if(!{'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status)||
+       tracker.running||
+       trackingStarting){
+      return;
     }
-    var permission=await Geolocator.checkPermission();
-    if(permission==LocationPermission.denied){
-      permission=await Geolocator.requestPermission();
-    }
-    if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
-      if(mounted)setState(()=>error=t('La localisation est obligatoire pendant la prise en charge et la course.'));
-      return false;
-    }
-    return true;
-  }
-
-  Future<void> sendLocation()async{
-    if(!await ensureLocationPermission())return;
+    trackingStarting=true;
     try{
-      final p=await Geolocator.getCurrentPosition(
-        locationSettings:const LocationSettings(accuracy:LocationAccuracy.high),
-      );
-      sequence++;
-      await api.updateLocation(
+      await tracker.start(
         bookingId:widget.bookingId,
-        lat:p.latitude,
-        lng:p.longitude,
-        sequenceNo:sequence,
-        accuracyM:p.accuracy,
-        heading:p.heading,
-        speedMps:p.speed,
+        onPosition:(p){
+          if(!mounted)return;
+          setState((){
+            position=p;
+            error=null;
+          });
+          final now=DateTime.now();
+          if(lastEtaRefresh==null||now.difference(lastEtaRefresh!)>=const Duration(seconds:30)){
+            lastEtaRefresh=now;
+            _refreshEta(p);
+          }
+        },
+        onError:(e){
+          if(mounted)setState(()=>error=_locationErrorMessage(e));
+        },
       );
-      if(mounted)setState(()=>position=p);
-      final now=DateTime.now();
-      if(lastEtaRefresh==null||now.difference(lastEtaRefresh!)>=const Duration(seconds:30)){
-        lastEtaRefresh=now;
-        await refreshEta(p);
-      }
-    }catch(_){
-      if(mounted)setState(()=>error=t('Position GPS momentanément indisponible.'));
+    }catch(e){
+      if(mounted)setState(()=>error=_locationErrorMessage(e));
+    }finally{
+      trackingStarting=false;
     }
   }
 
-  Future<void> refreshEta(Position p)async{
+  String _locationErrorMessage(Object error){
+    final raw=error.toString();
+    if(raw.contains('LOCATION_SERVICE_DISABLED')){
+      return t('Activez la localisation du téléphone.');
+    }
+    if(raw.contains('LOCATION_PERMISSION_DENIED')){
+      return t('La localisation est obligatoire pendant la prise en charge et la course.');
+    }
+    return t('Position GPS momentanément indisponible.');
+  }
+
+  Future<void> _refreshEta(Position p) async {
     try{
-      final x=await api.bookingDetail(widget.bookingId);
-      final status=(x['status']??'').toString();
+      final booking=await api.bookingDetail(widget.bookingId);
+      final status=(booking['status']??'').toString();
       double? toLat;
       double? toLng;
       if(status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED'){
-        toLat=(x['pickup_lat'] as num?)?.toDouble();
-        toLng=(x['pickup_lng'] as num?)?.toDouble();
+        toLat=(booking['pickup_lat'] as num?)?.toDouble();
+        toLng=(booking['pickup_lng'] as num?)?.toDouble();
       }else if(status=='IN_PROGRESS'){
-        toLat=(x['dropoff_lat'] as num?)?.toDouble();
-        toLng=(x['dropoff_lng'] as num?)?.toDouble();
+        toLat=(booking['dropoff_lat'] as num?)?.toDouble();
+        toLng=(booking['dropoff_lng'] as num?)?.toDouble();
       }
       if(toLat==null||toLng==null)return;
+
       final eta=await api.routeEstimate(
-        fromLat:p.latitude,fromLng:p.longitude,toLat:toLat,toLng:toLng);
+        fromLat:p.latitude,
+        fromLng:p.longitude,
+        toLat:toLat,
+        toLng:toLng,
+      );
       if(mounted)setState(()=>etaInfo=eta);
+    }catch(_){
+      if(mounted)setState(()=>etaInfo=null);
+    }
+  }
+
+  Future<void> _routePreview(
+    double? pickupLat,
+    double? pickupLng,
+    double? dropoffLat,
+    double? dropoffLng,
+  ) async {
+    if(pickupLat==null||pickupLng==null||dropoffLat==null||dropoffLng==null)return;
+    try{
+      final route=await api.routeEstimate(
+        fromLat:pickupLat,
+        fromLng:pickupLng,
+        toLat:dropoffLat,
+        toLng:dropoffLng,
+      );
+      if(mounted&&position==null)setState(()=>etaInfo=route);
     }catch(_){}
   }
 
-  void startTracking(){
-    gpsTimer?.cancel();
-    sendLocation();
-    gpsTimer=Timer.periodic(const Duration(seconds:10),(_)=>sendLocation());
-  }
-
-  void stopTracking(){
-    gpsTimer?.cancel();
-    gpsTimer=null;
-  }
-
-  Future<void> action(Future<void> Function() fn,{bool startGps=false,bool stopGps=false})async{
-    setState((){busy=true;error=null;});
+  Future<void> action(
+    Future<void> Function() fn,{
+    bool startGps=false,
+    bool stopGps=false,
+  }) async {
+    setState((){
+      busy=true;
+      error=null;
+    });
     try{
       await fn();
-      if(startGps)startTracking();
-      if(stopGps)stopTracking();
+      if(stopGps)await tracker.stop();
       RefreshBus.bump();
-      reload();
+      final updated=await api.bookingDetail(widget.bookingId);
+      if(!mounted)return;
+      setState(()=>future=Future.value(updated));
+      if(startGps){
+        await _startTrackingIfNeeded((updated['status']??'').toString());
+      }
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }finally{
+      if(mounted)setState(()=>busy=false);
+    }
+  }
+
+  Future<void> _cancelAssigned() async {
+    final confirm=await showDialog<bool>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Annuler cette course ?')),
+        content:Text(t('La réservation sera republiée en priorité si le délai le permet. Cette annulation impactera votre qualité chauffeur.')),
+        actions:[
+          TextButton(
+            onPressed:()=>Navigator.pop(dialogContext,false),
+            child:Text(t('Garder la course')),
+          ),
+          FilledButton(
+            onPressed:()=>Navigator.pop(dialogContext,true),
+            child:Text(t('Confirmer l’annulation')),
+          ),
+        ],
+      ),
+    );
+    if(confirm!=true)return;
+
+    setState(()=>busy=true);
+    try{
+      final result=await api.cancelAssignedBooking(widget.bookingId);
+      await tracker.stop();
+      RefreshBus.bump();
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content:Text(
+            result['republished']==true
+              ?t('Course annulée et demande republiée.')
+              :t('Course annulée. Le support Veyra a été alerté.'),
+          )),
+        );
+        context.go('/agenda');
+      }
     }catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }finally{
@@ -1185,10 +1262,16 @@ class _RideScreenState extends State<RideScreen>{
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:reload)
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
+        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
+        if(s.hasError){
+          return VeyraErrorMessages.isOffline(s.error!)
+            ?VeyraOfflineBanner(onRetry:reload)
+            :VeyraErrorView(
+                customMessage:VeyraErrorMessages.forException(s.error!),
+                onRetry:reload,
+              );
+        }
+
         final x=s.data??{};
         final status=(x['status']??'').toString();
         final phone=x['customer_phone']?.toString();
@@ -1197,175 +1280,244 @@ class _RideScreenState extends State<RideScreen>{
         final pickupLng=(x['pickup_lng'] as num?)?.toDouble();
         final dropoffLat=(x['dropoff_lat'] as num?)?.toDouble();
         final dropoffLng=(x['dropoff_lng'] as num?)?.toDouble();
-        final lat=position?.latitude??pickupLat??43.2965;
-        final lng=position?.longitude??pickupLng??5.3698;
 
-        if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status)&&gpsTimer==null){
-          WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)startTracking();});
+        final pickup=pickupLat==null||pickupLng==null?null:LatLng(pickupLat,pickupLng);
+        final dropoff=dropoffLat==null||dropoffLng==null?null:LatLng(dropoffLat,dropoffLng);
+        final driver=position==null?null:LatLng(position!.latitude,position!.longitude);
+        final route=VeyraRouteGeometry.fromApi(etaInfo);
+        final active={'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status);
+
+        if(active&&!tracker.running&&!trackingStarting){
+          WidgetsBinding.instance.addPostFrameCallback((_){
+            if(mounted)_startTrackingIfNeeded(status);
+          });
+        }else if(!active&&tracker.running){
+          WidgetsBinding.instance.addPostFrameCallback((_){
+            tracker.stop();
+          });
         }
 
-        // Section 13 : "map becomes dominant" spécifiquement pendant
-        // DRIVER_EN_ROUTE/IN_PROGRESS -- auparavant hauteur fixe à 240
-        // quel que soit le statut. DRIVER_ARRIVED reste volontairement
-        // compact : la spec y demande explicitement que le PIN
-        // "prominently" domine l'écran, pas la carte (le chauffeur est
-        // déjà sur place, le suivi de position perd son intérêt premier
-        // à ce stade précis).
-        final mapHeight={'DRIVER_EN_ROUTE','IN_PROGRESS'}.contains(status)?340.0:180.0;
+        if(status=='CONFIRMED'&&etaInfo==null){
+          WidgetsBinding.instance.addPostFrameCallback((_){
+            _routePreview(pickupLat,pickupLng,dropoffLat,dropoffLng);
+          });
+        }
 
-        return ListView(padding:const EdgeInsets.all(20),children:[
-          SizedBox(
-            height:mapHeight,
-            child:ClipRRect(
-              borderRadius:BorderRadius.circular(20),
-              child:FlutterMap(
-                options:MapOptions(initialCenter:LatLng(lat,lng),initialZoom:position==null?9:14),
-                children:[
-                  TileLayer(
-                    urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName:'com.veyra.driver',
-                  ),
-                  MarkerLayer(markers:[
-                    if(pickupLat!=null&&pickupLng!=null)Marker(
-                      point:LatLng(pickupLat,pickupLng),width:44,height:44,
-                      child:const Icon(Icons.trip_origin,size:34),
-                    ),
-                    if(dropoffLat!=null&&dropoffLng!=null)Marker(
-                      point:LatLng(dropoffLat,dropoffLng),width:44,height:44,
-                      child:const Icon(Icons.location_on,size:38),
-                    ),
-                    if(position!=null)Marker(
-                      point:LatLng(lat,lng),width:56,height:56,
-                      child:const Icon(Icons.local_taxi,size:44),
-                    ),
-                  ]),
-                ],
+        final mapHeight={'DRIVER_EN_ROUTE','IN_PROGRESS'}.contains(status)
+          ?420.0
+          :status=='DRIVER_ARRIVED'
+            ?240.0
+            :220.0;
+
+        return ListView(
+          padding:EdgeInsets.zero,
+          children:[
+            SizedBox(
+              height:mapHeight,
+              child:VeyraMap(
+                pickup:pickup,
+                dropoff:dropoff,
+                driver:driver,
+                driverHeading:position?.heading,
+                route:route,
+                userAgentPackageName:'com.veyra.driver',
               ),
             ),
-          ),
-          const SizedBox(height:16),
-          Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
-            style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-          Text(t('Statut')+' : '+VeyraStatusLabels.bookingStatus(status)),
-          if(etaInfo!=null)Card(child:ListTile(
-            leading:const Icon(Icons.schedule),
-            title:Text(t('ETA : ')+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])),
-            subtitle:Text(VeyraMoneyFormatter.distance(etaInfo!['distanceMeters'])+' '+t('restant(s)')),
-          )),
-          if(x['customer_name']!=null)Text(t('Client : ')+x['customer_name'].toString()),
-          if(paymentMethod=='CASH')Card(child:ListTile(
-            leading:const Icon(Icons.payments_outlined),
-            title:Text(t('Montant à encaisser au client : ')+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
-            subtitle:Text(t('Votre montant net : ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])+' • '+t('Commission Veyra : ')+VeyraMoneyFormatter.fromMinor(x['platform_commission_amount_minor'])+' '+t('(dette CASH après la course)')),
-          )),
-          if(paymentMethod=='ONLINE')Card(child:ListTile(
-            leading:const Icon(Icons.credit_card),
-            title:Text(t('Paiement en ligne • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
-            subtitle:Text(t('Le paiement doit être capturé avant le démarrage de la course.')),
-          )),
-          if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
-            leading:const Icon(Icons.receipt_long),
-            title:Text(t('Facturation partenaire • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
-            subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
-          )),
-          if(error!=null)Padding(
-            padding:const EdgeInsets.symmetric(vertical:10),
-            child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
-          ),
-          if(status=='CONFIRMED')...[
-            FilledButton(onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),child:Text(t('Je suis en route'))),
-            TextButton(
-              onPressed:busy?null:()async{
-                final confirm=await showDialog<bool>(
-                  context:context,
-                  builder:(dialogContext)=>AlertDialog(
-                    title:Text(t('Annuler cette course ?')),
-                    content:Text(t('La réservation sera republiée en priorité si le délai le permet. Cette annulation impactera votre qualité chauffeur.')),
-                    actions:[
-                      TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Garder la course'))),
-                      FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
-                    ],
-                  ),
-                );
-                if(confirm!=true)return;
-                setState(()=>busy=true);
-                try{
-                  final result=await api.cancelAssignedBooking(widget.bookingId);
-                  stopTracking();
-                  RefreshBus.bump();
-                  if(mounted){
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content:Text(result['republished']==true
-                        ?t('Course annulée et demande republiée.')
-                        :t('Course annulée. Le support Veyra a été alerté.'))),
-                    );
-                    context.go('/agenda');
-                  }
-                }catch(e){
-                  if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
-                }finally{
-                  if(mounted)setState(()=>busy=false);
-                }
-              },
-              child:Text(t('Annuler ma prise en charge')),
-            ),
-          ],
-          if(status=='DRIVER_EN_ROUTE')
-            FilledButton(onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),child:Text(t('Je suis arrivé'))),
-          if(status=='DRIVER_ARRIVED')...[
-            TextField(
-              controller:pin,maxLength:4,keyboardType:TextInputType.number,
-              decoration:InputDecoration(labelText:t('PIN client (4 chiffres)')),
-            ),
-            FilledButton(onPressed:busy?null:()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),child:Text(t('Démarrer la course'))),
-            TextButton(onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),child:Text(t('Signaler un no-show'))),
-          ],
-          if(status=='IN_PROGRESS')
-            FilledButton(onPressed:busy?null:()async{
-              final confirmed=await showDialog<bool>(context:context,builder:(dialogContext)=>AlertDialog(
-                title:Text(t('Terminer la course ?')),
-                content:Text(t('Confirmez uniquement lorsque le passager est arrivé à destination.')),
-                actions:[
-                  TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Continuer la course'))),
-                  FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Terminer la course'))),
+            Padding(
+              padding:const EdgeInsets.fromLTRB(20,18,20,28),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                Row(children:[
+                  Expanded(child:Text(
+                    VeyraStatusLabels.bookingStatus(status),
+                    style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold),
+                  )),
+                  VeyraStatusBadge(status:status),
+                ]),
+                const SizedBox(height:10),
+                Text(
+                  (x['pickup_address']??'Départ').toString()+
+                    ' → '+
+                    (x['dropoff_address']??'Destination').toString(),
+                  style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600),
+                ),
+                if(route.durationSeconds!=null||route.distanceMeters!=null)...[
+                  const SizedBox(height:12),
+                  Card(child:ListTile(
+                    leading:const Icon(Icons.route),
+                    title:Text(route.durationSeconds==null
+                      ?t('Itinéraire')
+                      :t('ETA : ')+VeyraMoneyFormatter.duration(route.durationSeconds)),
+                    subtitle:route.distanceMeters==null
+                      ?null
+                      :Text(VeyraMoneyFormatter.distance(route.distanceMeters)),
+                  )),
                 ],
-              ));
-              if(confirmed==true)action(()=>api.complete(widget.bookingId),stopGps:true);
-            },child:Text(t('Terminer la course'))),
-          if({'COMPLETED','CLOSED'}.contains(status))
-            Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
-              const SizedBox(height:8),
-              Row(children:[for(int i=1;i<=5;i++)IconButton(
-                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
-                tooltip:AppLocale.code.value=='en'
-                  ?(i==1?'1 star':'$i stars')
-                  :(i==1?'1 étoile':'$i étoiles'),
-                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
-              )]),
-              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
-            ]))),
-          const SizedBox(height:10),
-          if(status=='DRIVER_EN_ROUTE'&&pickupLat!=null&&pickupLng!=null)
-            OutlinedButton.icon(
-              onPressed:()=>launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$pickupLat,$pickupLng&travelmode=driving'),mode:LaunchMode.externalApplication),
-              icon:const Icon(Icons.navigation_outlined),label:Text(t('Naviguer vers le client')),
+                if(x['customer_name']!=null)
+                  Padding(
+                    padding:const EdgeInsets.only(top:8),
+                    child:Text(t('Client : ')+x['customer_name'].toString()),
+                  ),
+                if(paymentMethod=='CASH')Card(child:ListTile(
+                  leading:const Icon(Icons.payments_outlined),
+                  title:Text(t('Montant à encaisser au client : ')+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
+                  subtitle:Text(
+                    t('Votre montant net : ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])+
+                    ' • '+t('Commission Veyra : ')+VeyraMoneyFormatter.fromMinor(x['platform_commission_amount_minor'])+
+                    ' '+t('(dette CASH après la course)'),
+                  ),
+                )),
+                if(paymentMethod=='ONLINE')Card(child:ListTile(
+                  leading:const Icon(Icons.credit_card),
+                  title:Text(t('Paiement en ligne • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
+                  subtitle:Text(t('Le paiement doit être capturé avant le démarrage de la course.')),
+                )),
+                if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
+                  leading:const Icon(Icons.receipt_long),
+                  title:Text(t('Facturation partenaire • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
+                  subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
+                )),
+                if(error!=null)Padding(
+                  padding:const EdgeInsets.symmetric(vertical:10),
+                  child:VeyraErrorView(customMessage:error!,onRetry:active?()=>_startTrackingIfNeeded(status):reload),
+                ),
+                if(status=='CONFIRMED')...[
+                  FilledButton.icon(
+                    onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),
+                    icon:const Icon(Icons.directions_car),
+                    label:Text(t('Je suis en route')),
+                  ),
+                  TextButton(
+                    onPressed:busy?null:_cancelAssigned,
+                    child:Text(t('Annuler ma prise en charge')),
+                  ),
+                ],
+                if(status=='DRIVER_EN_ROUTE')
+                  FilledButton.icon(
+                    onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),
+                    icon:const Icon(Icons.flag_outlined),
+                    label:Text(t('Je suis arrivé')),
+                  ),
+                if(status=='DRIVER_ARRIVED')...[
+                  const SizedBox(height:8),
+                  Text(
+                    t('Code PIN du client'),
+                    style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16),
+                  ),
+                  const SizedBox(height:8),
+                  TextField(
+                    controller:pin,
+                    maxLength:4,
+                    keyboardType:TextInputType.number,
+                    decoration:InputDecoration(labelText:t('PIN client (4 chiffres)')),
+                  ),
+                  FilledButton(
+                    onPressed:busy||pin.text.length!=4
+                      ?null
+                      :()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),
+                    child:Text(t('Démarrer la course')),
+                  ),
+                  TextButton(
+                    onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),
+                    child:Text(t('Signaler un no-show')),
+                  ),
+                ],
+                if(status=='IN_PROGRESS')
+                  FilledButton(
+                    onPressed:busy?null:()async{
+                      final confirmed=await showDialog<bool>(
+                        context:context,
+                        builder:(dialogContext)=>AlertDialog(
+                          title:Text(t('Terminer la course ?')),
+                          content:Text(t('Confirmez uniquement lorsque le passager est arrivé à destination.')),
+                          actions:[
+                            TextButton(
+                              onPressed:()=>Navigator.pop(dialogContext,false),
+                              child:Text(t('Continuer la course')),
+                            ),
+                            FilledButton(
+                              onPressed:()=>Navigator.pop(dialogContext,true),
+                              child:Text(t('Terminer la course')),
+                            ),
+                          ],
+                        ),
+                      );
+                      if(confirmed==true){
+                        action(()=>api.complete(widget.bookingId),stopGps:true);
+                      }
+                    },
+                    child:Text(t('Terminer la course')),
+                  ),
+                if({'COMPLETED','CLOSED'}.contains(status))
+                  Card(child:Padding(
+                    padding:const EdgeInsets.all(16),
+                    child:ratingSubmitted
+                      ?Row(children:[
+                          const Icon(Icons.check_circle,color:Colors.green),
+                          const SizedBox(width:8),
+                          Text(t('Merci pour votre avis !')),
+                        ])
+                      :Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                          Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
+                          const SizedBox(height:8),
+                          Row(children:[
+                            for(int i=1;i<=5;i++)
+                              IconButton(
+                                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
+                                tooltip:AppLocale.code.value=='en'
+                                  ?(i==1?'1 star':'$i stars')
+                                  :(i==1?'1 étoile':'$i étoiles'),
+                                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
+                              ),
+                          ]),
+                          FilledButton(
+                            onPressed:ratingSubmitting||ratingScore<1?null:submitRating,
+                            child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note')),
+                          ),
+                        ]),
+                  )),
+                const SizedBox(height:12),
+                if(status=='DRIVER_EN_ROUTE'&&pickupLat!=null&&pickupLng!=null)
+                  OutlinedButton.icon(
+                    onPressed:()=>launchUrl(
+                      Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$pickupLat,$pickupLng&travelmode=driving'),
+                      mode:LaunchMode.externalApplication,
+                    ),
+                    icon:const Icon(Icons.navigation_outlined),
+                    label:Text(t('Naviguer vers le client')),
+                  ),
+                if(status=='IN_PROGRESS'&&dropoffLat!=null&&dropoffLng!=null)
+                  OutlinedButton.icon(
+                    onPressed:()=>launchUrl(
+                      Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$dropoffLat,$dropoffLng&travelmode=driving'),
+                      mode:LaunchMode.externalApplication,
+                    ),
+                    icon:const Icon(Icons.navigation_outlined),
+                    label:Text(t('Naviguer vers la destination')),
+                  ),
+                Row(children:[
+                  Expanded(child:OutlinedButton.icon(
+                    onPressed:phone==null||phone.isEmpty
+                      ?null
+                      :()=>launchUrl(Uri(scheme:'tel',path:phone)),
+                    icon:const Icon(Icons.phone_outlined),
+                    label:Text(t('Appeler')),
+                  )),
+                  const SizedBox(width:12),
+                  Expanded(child:OutlinedButton.icon(
+                    onPressed:()=>context.push('/chat/'+widget.bookingId),
+                    icon:const Icon(Icons.chat_bubble_outline),
+                    label:Text(t('Message')),
+                  )),
+                ]),
+              ]),
             ),
-          if(status=='IN_PROGRESS'&&dropoffLat!=null&&dropoffLng!=null)
-            OutlinedButton.icon(
-              onPressed:()=>launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$dropoffLat,$dropoffLng&travelmode=driving'),mode:LaunchMode.externalApplication),
-              icon:const Icon(Icons.navigation_outlined),label:Text(t('Naviguer vers la destination')),
-            ),
-          OutlinedButton.icon(
-            onPressed:phone==null||phone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:phone)),
-            icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler le client')),
-          ),
-          OutlinedButton.icon(onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Chat Veyra'))),
-        ]);
+          ],
+        );
       },
     ),
   );
 }
+
 
 class WalletScreen extends StatefulWidget{
   const WalletScreen({super.key});
