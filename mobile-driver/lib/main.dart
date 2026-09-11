@@ -820,6 +820,8 @@ class _RequestScreenState extends State<RequestScreen>{
   late Future<Map<String,dynamic>> detail;
   bool sending=false;
   String? error;
+  bool isAdjusting=false;
+  bool _prefilled=false;
 
   @override void initState(){
     super.initState();
@@ -831,7 +833,16 @@ class _RequestScreenState extends State<RequestScreen>{
     if(euros==null||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
     setState((){sending=true;error=null;});
     try{
-      await api.offer(widget.bookingId,(euros*100).round());
+      final amountMinor=(euros*100).round();
+      // New feature: adjusting an existing offer calls the narrower
+      // PATCH endpoint instead of creating a brand new offer -- see
+      // BookingController.updateOffer's own comment for why this is a
+      // separate endpoint rather than reusing the original one.
+      if(isAdjusting){
+        await api.updateOffer(widget.bookingId,amountMinor);
+      }else{
+        await api.offer(widget.bookingId,amountMinor);
+      }
       if(!mounted)return;
       RefreshBus.bump();
       // Spec section 2, explicit: "The current Driver implementation
@@ -842,8 +853,8 @@ class _RequestScreenState extends State<RequestScreen>{
       // bug, not touched) -- simply never surfaced in this dialog
       // anymore.
       await showDialog(context:context,builder:(_)=>AlertDialog(
-        title:Text(t('Offre envoyée')),
-        content:Text(t('Votre offre : ')+VeyraMoneyFormatter.fromMinor((euros*100).round())+'\n'+t('Vous serez averti si le client vous sélectionne.')),
+        title:Text(isAdjusting?t('Offre mise à jour'):t('Offre envoyée')),
+        content:Text(t('Votre offre : ')+VeyraMoneyFormatter.fromMinor(amountMinor)+'\n'+t('Vous serez averti si le client vous sélectionne.')),
         actions:[FilledButton(onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
       ));
       if(mounted)context.go('/home');
@@ -920,13 +931,43 @@ class _RequestScreenState extends State<RequestScreen>{
           // Flutter -- un chauffeur ayant déjà soumis une offre retombait
           // sur ce même formulaire vide, pouvait retaper un prix et
           // recevait alors ACTIVE_OFFER_EXISTS sans comprendre pourquoi.
+          //
+          // Nouvelle fonctionnalité : plutôt que de bloquer purement et
+          // simplement, le chauffeur peut maintenant réajuster son prix
+          // directement ici -- le champ est pré-rempli avec son offre
+          // active actuelle (ownActiveOfferAmountMinor, ajouté côté
+          // backend pour cette fonctionnalité), et l'envoi appelle le
+          // nouvel endpoint PATCH dédié plutôt que de créer une
+          // deuxième offre.
+          if(x['hasActiveOffer']==true&&!_prefilled){
+            _prefilled=true;
+            isAdjusting=true;
+            final currentMinor=x['ownActiveOfferAmountMinor'];
+            if(currentMinor!=null){
+              amount.text=((currentMinor as num)/100).toStringAsFixed(2).replaceAll('.',',');
+            }
+          }
           if(x['hasActiveOffer']==true){
-            return Card(child:ListTile(
-              leading:const Icon(Icons.check_circle_outline,color:Color(0xFF16A34A)),
-              title:Text(t('Vous avez déjà une offre active pour cette demande.')),
-              subtitle:Text(t('Retrouvez-la dans Mes offres.')),
-              trailing:TextButton(onPressed:()=>context.push('/driver/offers'),child:Text(t('Voir'))),
-            ));
+            return Column(children:[
+              Card(child:ListTile(
+                leading:const Icon(Icons.check_circle_outline,color:Color(0xFF16A34A)),
+                title:Text(t('Vous avez déjà une offre active pour cette demande.')),
+                subtitle:Text(t('Vous pouvez ajuster votre prix ci-dessous, ou la retrouver dans Mes offres.')),
+                trailing:TextButton(onPressed:()=>context.push('/driver/offers'),child:Text(t('Voir'))),
+              )),
+              const SizedBox(height:16),
+              TextField(
+                controller:amount,
+                keyboardType:const TextInputType.numberWithOptions(decimal:true),
+                decoration:InputDecoration(
+                  labelText:t('Votre prix net (€)'),
+                  helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
+                ),
+              ),
+              if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+              const SizedBox(height:20),
+              FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Mettre à jour mon offre'))),
+            ]);
           }
           return Column(children:[
             TextField(

@@ -159,6 +159,12 @@ class Api {
     return Map<String,dynamic>.from(r.data);
   }
 
+  Future<Map<String,dynamic>> updateOffer(String bookingId,int amountMinor) async {
+    final r=await dio.patch('/api/v1/driver/opportunities/$bookingId/offers',
+      data:{'amountMinor':amountMinor,'currency':'EUR'});
+    return Map<String,dynamic>.from(r.data);
+  }
+
   Future<List<dynamic>> bookings({String scope='upcoming'}) async =>
       List<dynamic>.from((await dio.get('/api/v1/driver/bookings',queryParameters:{'scope':scope})).data);
 
