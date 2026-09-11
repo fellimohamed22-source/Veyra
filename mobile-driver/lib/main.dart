@@ -1408,6 +1408,7 @@ class _RideScreenState extends State<RideScreen>{
                     controller:pin,
                     maxLength:4,
                     keyboardType:TextInputType.number,
+                    onChanged:(_)=>setState((){}),
                     decoration:InputDecoration(labelText:t('PIN client (4 chiffres)')),
                   ),
                   FilledButton(
