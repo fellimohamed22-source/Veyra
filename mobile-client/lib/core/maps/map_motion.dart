@@ -52,6 +52,6 @@ Duration driverAnimationDuration(LatLng from,LatLng to){
   final meanLat=((from.latitude+to.latitude)/2)*math.pi/180;
   final lng=(to.longitude-from.longitude)*111320*math.cos(meanLat);
   final meters=math.sqrt(lat*lat+lng*lng);
-  final millis=(350+meters*18).round().clamp(350,1200);
+  final millis=(350+meters*18).round().clamp(350,1200).toInt();
   return Duration(milliseconds:millis);
 }
