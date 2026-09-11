@@ -1,6 +1,8 @@
 package com.veyra.address;
 
 import com.veyra.provider.RoutingProvider;
+import com.veyra.shared.ApiException;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -36,7 +38,7 @@ public class RoutingController {
   private void validateCoordinates(double lat,double lng){
     if(!Double.isFinite(lat)||!Double.isFinite(lng)||
         lat < -90 || lat > 90 || lng < -180 || lng > 180){
-      throw new IllegalArgumentException("INVALID_COORDINATES");
+      throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_COORDINATES");
     }
   }
 }
