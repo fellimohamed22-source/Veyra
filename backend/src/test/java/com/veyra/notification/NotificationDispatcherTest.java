@@ -108,6 +108,21 @@ class NotificationDispatcherTest {
     verify(pushProvider).send(eq(userId), eq("NEW_OFFER"), eq(Map.of()));
   }
 
+  @Test
+  void doesNothingAtAllWhenThereAreNoPendingNotifications() {
+    // Locks in the new early-return added alongside the
+    // NOTIFICATION_DISPATCH_RUN summary log: with zero pending rows
+    // (the overwhelmingly common case, polling every 3s), neither the
+    // push provider nor the notifications table should be touched at
+    // all.
+    when(db.queryForList(contains("from notifications"))).thenReturn(List.of());
+
+    dispatcher().dispatch();
+
+    verifyNoInteractions(pushProvider);
+    verify(db, never()).update(anyString(), any(), any(), any());
+  }
+
   private static Map<String, Object> rowOf(UUID id, UUID userId, String templateCode, String dataJson) {
     Map<String, Object> row = new HashMap<>();
     row.put("id", id);

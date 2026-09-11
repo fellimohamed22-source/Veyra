@@ -47,6 +47,19 @@ public class NotificationDispatcher {
         "and (scheduled_for is null or scheduled_for<=now()) " +
         "order by created_at asc limit 100");
 
+    // Real gap fixed here: this method previously logged nothing at all
+    // on the happy path -- no trace when it found zero pending rows
+    // (the overwhelmingly common case, polling every 3s), and no trace
+    // even when it found rows and every single send succeeded. This
+    // made "grep the logs for NotificationDispatcher" completely
+    // ambiguous: zero results could mean either "running fine, nothing
+    // to send" or "not running at all," with no way to tell which from
+    // the logs alone. Deliberately NOT logging on every empty poll
+    // (would spam the logs every 3 seconds forever) -- only logs a
+    // summary when there was actually something to do.
+    if(rows.isEmpty())return;
+
+    int sentCount=0,failedCount=0;
     for(Map<String,Object> row:rows){
       UUID id=(UUID)row.get("id");
       UUID userId=(UUID)row.get("user_id");
@@ -61,10 +74,12 @@ public class NotificationDispatcher {
         // this batch from being attempted.
         log.warn("NOTIFICATION_DISPATCH_FAILED id={} templateCode={} error={}",id,templateCode,e.toString());
       }
+      if(sent)sentCount++;else failedCount++;
       db.update(
           "update notifications set status=?,sent_at=case when ? then now() else sent_at end where id=?",
           sent?"SENT":"FAILED",sent,id);
     }
+    log.info("NOTIFICATION_DISPATCH_RUN found={} sent={} failed={}",rows.size(),sentCount,failedCount);
   }
 
   /**
