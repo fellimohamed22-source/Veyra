@@ -1998,7 +1998,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
         :t('Votre chauffeur arrive');
 
     return Scaffold(
-      appBar:AppBar(title:Text(t('Suivi en direct'))),
       body:Stack(children:[
         Positioned.fill(
           child:VeyraMap(
@@ -2010,86 +2009,181 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
             userAgentPackageName:'com.veyra.client',
           ),
         ),
+        SafeArea(
+          child:Padding(
+            padding:const EdgeInsets.fromLTRB(12,8,12,0),
+            child:Row(
+              crossAxisAlignment:CrossAxisAlignment.start,
+              children:[
+                Material(
+                  color:Colors.white,
+                  elevation:4,
+                  shadowColor:Colors.black26,
+                  shape:const CircleBorder(),
+                  child:IconButton(
+                    tooltip:MaterialLocalizations.of(context).backButtonTooltip,
+                    onPressed:()=>Navigator.maybePop(context),
+                    icon:const Icon(Icons.arrow_back,color:Color(0xFF171717)),
+                  ),
+                ),
+                const SizedBox(width:10),
+                Expanded(
+                  child:Material(
+                    color:Colors.white,
+                    elevation:4,
+                    shadowColor:Colors.black26,
+                    borderRadius:BorderRadius.circular(22),
+                    child:Padding(
+                      padding:const EdgeInsets.symmetric(horizontal:16,vertical:11),
+                      child:Row(children:[
+                        Container(
+                          width:9,height:9,
+                          decoration:BoxDecoration(
+                            shape:BoxShape.circle,
+                            color:available&&!_isStale
+                              ?const Color(0xFF16A34A)
+                              :const Color(0xFFF59E0B),
+                          ),
+                        ),
+                        const SizedBox(width:9),
+                        Expanded(child:Text(
+                          title,
+                          maxLines:1,
+                          overflow:TextOverflow.ellipsis,
+                          style:const TextStyle(fontWeight:FontWeight.w700,fontSize:15),
+                        )),
+                      ]),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         if(error!=null)
           Positioned(
-            top:12,left:16,right:16,
-            child:Material(
-              elevation:2,
-              borderRadius:BorderRadius.circular(12),
-              color:const Color(0xFFFFF7ED),
-              child:Padding(
-                padding:const EdgeInsets.all(12),
-                child:Row(children:[
-                  const Icon(Icons.wifi_off,color:Color(0xFFD97706)),
-                  const SizedBox(width:10),
-                  Expanded(child:Text(error!,style:const TextStyle(fontSize:12))),
-                  TextButton(onPressed:_refreshSnapshot,child:Text(t('Réessayer'))),
-                ]),
+            top:76,left:16,right:16,
+            child:SafeArea(
+              child:Material(
+                elevation:3,
+                borderRadius:BorderRadius.circular(14),
+                color:const Color(0xFFFFF7ED),
+                child:Padding(
+                  padding:const EdgeInsets.all(12),
+                  child:Row(children:[
+                    const Icon(Icons.wifi_off,color:Color(0xFFD97706)),
+                    const SizedBox(width:10),
+                    Expanded(child:Text(error!,style:const TextStyle(fontSize:12))),
+                    TextButton(onPressed:_refreshSnapshot,child:Text(t('Réessayer'))),
+                  ]),
+                ),
               ),
             ),
           ),
         DraggableScrollableSheet(
-          initialChildSize:.30,
-          minChildSize:.24,
-          maxChildSize:.58,
+          initialChildSize:.31,
+          minChildSize:.25,
+          maxChildSize:.62,
+          snap:true,
+          snapSizes:const [.31,.62],
           builder:(context,scrollController)=>Material(
-            elevation:8,
-            color:Theme.of(context).scaffoldBackgroundColor,
-            borderRadius:const BorderRadius.vertical(top:Radius.circular(24)),
+            elevation:12,
+            shadowColor:Colors.black38,
+            color:Colors.white,
+            borderRadius:const BorderRadius.vertical(top:Radius.circular(28)),
             child:ListView(
               controller:scrollController,
-              padding:const EdgeInsets.fromLTRB(20,12,20,24),
+              padding:const EdgeInsets.fromLTRB(20,10,20,30),
               children:[
-                Center(child:Container(width:44,height:4,decoration:BoxDecoration(color:Colors.black12,borderRadius:BorderRadius.circular(3)))),
+                Center(child:Container(
+                  width:42,height:5,
+                  decoration:BoxDecoration(
+                    color:const Color(0xFFD1D5DB),
+                    borderRadius:BorderRadius.circular(3),
+                  ),
+                )),
                 const SizedBox(height:16),
-                Text(title,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-                const SizedBox(height:6),
-                Text(
-                  approaching
-                    ?(booking['pickup_address']??'').toString()
-                    :(booking['dropoff_address']??'').toString(),
-                  maxLines:2,
-                  overflow:TextOverflow.ellipsis,
-                  style:const TextStyle(color:Colors.black54),
+                Row(
+                  crossAxisAlignment:CrossAxisAlignment.start,
+                  children:[
+                    Expanded(child:Column(
+                      crossAxisAlignment:CrossAxisAlignment.start,
+                      children:[
+                        Text(title,style:const TextStyle(fontSize:22,fontWeight:FontWeight.w800,letterSpacing:-.3)),
+                        const SizedBox(height:5),
+                        Text(
+                          approaching
+                            ?(booking['pickup_address']??'').toString()
+                            :(booking['dropoff_address']??'').toString(),
+                          maxLines:2,
+                          overflow:TextOverflow.ellipsis,
+                          style:const TextStyle(color:Color(0xFF6B7280),fontSize:14,height:1.3),
+                        ),
+                      ],
+                    )),
+                    if(route.durationSeconds!=null)
+                      Container(
+                        margin:const EdgeInsets.only(left:12),
+                        padding:const EdgeInsets.symmetric(horizontal:14,vertical:9),
+                        decoration:BoxDecoration(
+                          color:const Color(0xFF171717),
+                          borderRadius:BorderRadius.circular(18),
+                        ),
+                        child:Text(
+                          VeyraMoneyFormatter.duration(route.durationSeconds),
+                          style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800),
+                        ),
+                      ),
+                  ],
                 ),
-                if(route.durationSeconds!=null||route.distanceMeters!=null)...[
-                  const SizedBox(height:14),
+                if(route.distanceMeters!=null)...[
+                  const SizedBox(height:12),
                   Row(children:[
-                    if(route.durationSeconds!=null)...[
-                      const Icon(Icons.schedule,size:18),
-                      const SizedBox(width:6),
-                      Text(VeyraMoneyFormatter.duration(route.durationSeconds)),
-                    ],
-                    if(route.distanceMeters!=null)...[
-                      const SizedBox(width:18),
-                      const Icon(Icons.route,size:18),
-                      const SizedBox(width:6),
-                      Text(VeyraMoneyFormatter.distance(route.distanceMeters)),
-                    ],
+                    const Icon(Icons.route_rounded,size:18,color:Color(0xFF4B5563)),
+                    const SizedBox(width:7),
+                    Text(
+                      VeyraMoneyFormatter.distance(route.distanceMeters),
+                      style:const TextStyle(color:Color(0xFF4B5563),fontWeight:FontWeight.w600),
+                    ),
                   ]),
                 ],
-                const SizedBox(height:12),
+                const SizedBox(height:14),
                 if(!available)
-                  Text(t('En attente de la première position GPS.'),style:const TextStyle(color:Colors.black54)),
-                if(available&&_recordedAt!=null)
-                  Text(
-                    t('Dernière position : ')+VeyraDateFormatter.dateTime(_recordedAt!.toIso8601String()),
-                    style:TextStyle(
-                      color:_isStale?const Color(0xFFDC2626):Colors.black54,
-                      fontSize:12,
+                  const LinearProgressIndicator(minHeight:3)
+                else
+                  Row(children:[
+                    Icon(
+                      _isStale?Icons.sync_problem_rounded:Icons.gps_fixed_rounded,
+                      size:18,
+                      color:_isStale?const Color(0xFFDC2626):const Color(0xFF16A34A),
                     ),
-                  ),
-                if(available&&_isStale)
-                  Padding(
-                    padding:const EdgeInsets.only(top:6),
-                    child:Text(
-                      t('Position possiblement obsolète — aucun ETA n’est affiché tant qu’une position récente n’est pas reçue.'),
-                      style:const TextStyle(color:Color(0xFFDC2626),fontSize:12,fontWeight:FontWeight.w600),
-                    ),
-                  ),
+                    const SizedBox(width:8),
+                    Expanded(child:Text(
+                      _isStale
+                        ?t('Position possiblement obsolète — aucun ETA n’est affiché tant qu’une position récente n’est pas reçue.')
+                        :t('Position en cours de mise à jour.'),
+                      style:TextStyle(
+                        color:_isStale?const Color(0xFFDC2626):const Color(0xFF4B5563),
+                        fontSize:12,
+                        fontWeight:FontWeight.w600,
+                      ),
+                    )),
+                  ]),
+                if(!available)...[
+                  const SizedBox(height:9),
+                  Text(t('En attente de la première position GPS.'),style:const TextStyle(color:Color(0xFF6B7280),fontSize:12)),
+                ],
+                const SizedBox(height:18),
+                const Divider(height:1),
                 const SizedBox(height:16),
                 Row(children:[
                   Expanded(child:OutlinedButton.icon(
+                    style:OutlinedButton.styleFrom(
+                      foregroundColor:const Color(0xFF171717),
+                      side:const BorderSide(color:Color(0xFFD1D5DB)),
+                      padding:const EdgeInsets.symmetric(vertical:14),
+                      shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(18)),
+                    ),
                     onPressed:driverPhone==null||driverPhone.isEmpty
                       ?null
                       :()=>launchUrl(Uri(scheme:'tel',path:driverPhone)),
@@ -2097,12 +2191,25 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
                     label:Text(t('Appeler')),
                   )),
                   const SizedBox(width:12),
-                  Expanded(child:OutlinedButton.icon(
+                  Expanded(child:FilledButton.icon(
+                    style:FilledButton.styleFrom(
+                      backgroundColor:const Color(0xFF171717),
+                      foregroundColor:Colors.white,
+                      padding:const EdgeInsets.symmetric(vertical:14),
+                      shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(18)),
+                    ),
                     onPressed:()=>context.push('/chat/'+widget.bookingId),
                     icon:const Icon(Icons.chat_bubble_outline),
                     label:Text(t('Message')),
                   )),
                 ]),
+                if(available&&_recordedAt!=null)...[
+                  const SizedBox(height:12),
+                  Center(child:Text(
+                    t('Dernière position : ')+VeyraDateFormatter.dateTime(_recordedAt!.toIso8601String()),
+                    style:const TextStyle(color:Color(0xFF9CA3AF),fontSize:11),
+                  )),
+                ],
               ],
             ),
           ),
