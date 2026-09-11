@@ -18,7 +18,7 @@ import java.util.*;
     }
     @PostMapping void update(@RequestBody Pos p){
         UUID d=db.queryForObject("select id from drivers where user_id=?",UUID.class,CurrentUser.id());
-        Integer ok=db.queryForObject("select count(*) from scheduled_bookings where id=? and selected_driver_id=? and status in ('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS') and (scheduled_at at time zone 'Europe/Paris')::date=(now() at time zone 'Europe/Paris')::date",Integer.class,p.bookingId(),d);
+        Integer ok=db.queryForObject("select count(*) from scheduled_bookings where id=? and selected_driver_id=? and status in ('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')",Integer.class,p.bookingId(),d);
         if(ok==0)throw new ApiException(HttpStatus.FORBIDDEN,"LOCATION_NOT_ALLOWED");
         List<Long>x=db.queryForList("select sequence_no from current_driver_locations where driver_id=?",Long.class,d);
         if(!x.isEmpty()&&p.sequenceNo()<=x.getFirst())throw new ApiException(HttpStatus.CONFLICT,"LOCATION_REPLAY");
