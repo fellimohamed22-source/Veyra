@@ -51,7 +51,9 @@ class OutboxPublisherTest {
     UUID bookingId = UUID.randomUUID();
     when(db.queryForList(contains("from outbox_events")))
         .thenReturn(List.of(outboxRow(eventId, "offer.created", bookingId)));
-    when(db.update(contains("select creator_user_id"), eq("offer.created"), eq(eventId), eq(bookingId), eq(bookingId)))
+    when(db.update(
+        contains("select creator_user_id"),
+        eq("offer.created"),eq(eventId),eq(bookingId),eq(eventId),eq(bookingId)))
         .thenReturn(1);
 
     publisher().publish();
@@ -59,8 +61,9 @@ class OutboxPublisherTest {
     verify(db).update(
         argThat(sql -> sql.contains("select creator_user_id") &&
             sql.contains("'PUSH','NEW_OFFER'") &&
+            sql.contains("'offerId'") &&
             sql.contains("from scheduled_bookings where id=?")),
-        eq("offer.created"), eq(eventId), eq(bookingId), eq(bookingId));
+        eq("offer.created"),eq(eventId),eq(bookingId),eq(eventId),eq(bookingId));
   }
 
   @Test
@@ -69,7 +72,7 @@ class OutboxPublisherTest {
     UUID bookingId = UUID.randomUUID();
     when(db.queryForList(contains("from outbox_events")))
         .thenReturn(List.of(outboxRow(eventId, "offer.created", bookingId)));
-    when(db.update(contains("select creator_user_id"), any(), any(), any(), any())).thenReturn(1);
+    when(db.update(contains("select creator_user_id"), any(), any(), any(), any(), any())).thenReturn(1);
 
     publisher().publish();
 
