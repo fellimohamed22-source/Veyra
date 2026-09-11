@@ -2456,54 +2456,253 @@ class NotificationsScreen extends StatefulWidget{
 
 class _NotificationsScreenState extends State<NotificationsScreen>{
   late Future<List<dynamic>> future;
-  @override void initState(){super.initState();future=api.notifications();}
-  void reload()=>setState((){future=api.notifications();});
+
+  @override void initState(){
+    super.initState();
+    future=api.notifications();
+  }
+
+  void reload()=>setState(()=>future=api.notifications());
+
+  IconData _iconFor(String template,String event){
+    if(template=='NEW_OFFER')return Icons.local_offer_rounded;
+    if(event.contains('driver_en_route'))return Icons.directions_car_rounded;
+    if(event.contains('driver_arrived'))return Icons.flag_rounded;
+    if(event.contains('completed'))return Icons.check_circle_rounded;
+    if(event.contains('cancel'))return Icons.cancel_rounded;
+    if(event.contains('no_offer')||event.contains('expired'))return Icons.timer_off_rounded;
+    return Icons.notifications_rounded;
+  }
+
+  Color _accentFor(String template,String event){
+    if(template=='NEW_OFFER')return const Color(0xFF2563EB);
+    if(event.contains('completed')||event.contains('driver_arrived')){
+      return const Color(0xFF16A34A);
+    }
+    if(event.contains('cancel')||event.contains('expired')||event.contains('no_offer')){
+      return const Color(0xFFDC2626);
+    }
+    return const Color(0xFF123A66);
+  }
+
+  String _detailFor(Map<String,dynamic> x,String template,String event){
+    final driver=[
+      x['driver_first_name']?.toString().trim(),
+      x['driver_last_name']?.toString().trim(),
+    ].whereType<String>().where((v)=>v.isNotEmpty).join(' ');
+    final amount=x['offer_amount_minor'];
+
+    if(template=='NEW_OFFER'){
+      if(amount!=null&&driver.isNotEmpty){
+        return t('Offre de ')+driver+' • '+VeyraMoneyFormatter.fromMinor(amount);
+      }
+      if(amount!=null){
+        return t('Nouvelle proposition : ')+VeyraMoneyFormatter.fromMinor(amount);
+      }
+      return t('Un chauffeur a envoyé une nouvelle offre pour cette réservation.');
+    }
+    if(event.contains('driver_en_route'))return t('Votre chauffeur est en route vers le point de prise en charge.');
+    if(event.contains('driver_arrived'))return t('Votre chauffeur est arrivé au point de prise en charge.');
+    if(event.contains('in_progress'))return t('Votre course a démarré.');
+    if(event.contains('completed'))return t('Votre course est terminée.');
+    if(event.contains('driver_cancelled'))return t('Le chauffeur a annulé. Votre réservation a été remise à jour.');
+    if(event.contains('cancel'))return t('Cette réservation a été annulée.');
+    if(event.contains('no_offer'))return t('Aucune offre chauffeur n’a été reçue pour cette demande.');
+    if(event.contains('expired'))return t('La période de recherche de chauffeur est terminée.');
+    return t('Le statut de votre réservation a été mis à jour.');
+  }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Notifications'))),
+    backgroundColor:const Color(0xFFF5F7FA),
+    appBar:AppBar(
+      title:Text(t('Notifications')),
+      backgroundColor:const Color(0xFFF5F7FA),
+      elevation:0,
+    ),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{
+        reload();
+        await future;
+      },
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done){
-            return ListView(children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
+            return ListView(children:const [
+              SizedBox(height:220),
+              Center(child:CircularProgressIndicator()),
+            ]);
           }
           if(s.hasError){
             return ListView(children:[
-              const SizedBox(height:160),
-              const Icon(Icons.cloud_off,size:48),
+              const SizedBox(height:150),
+              const Icon(Icons.cloud_off_rounded,size:54,color:Color(0xFF9CA3AF)),
+              const SizedBox(height:12),
               Center(child:Text(t('Notifications indisponibles.'))),
               Center(child:TextButton(onPressed:reload,child:Text(t('Réessayer')))),
             ]);
           }
+
           final items=s.data??[];
           if(items.isEmpty){
             return ListView(children:[
-              SizedBox(height:160),
-              Icon(Icons.notifications_none,size:56),
-              Center(child:Text(t('Aucune notification pour le moment.'))),
+              const SizedBox(height:150),
+              const Icon(Icons.notifications_none_rounded,size:58,color:Color(0xFF9CA3AF)),
+              const SizedBox(height:12),
+              Center(child:Text(
+                t('Aucune notification pour le moment.'),
+                style:const TextStyle(fontWeight:FontWeight.w600),
+              )),
             ]);
           }
+
           return ListView.separated(
-            padding:const EdgeInsets.all(16),
+            padding:const EdgeInsets.fromLTRB(16,12,16,28),
             itemCount:items.length,
-            separatorBuilder:(_,__)=>const SizedBox(height:8),
+            separatorBuilder:(_,__)=>const SizedBox(height:10),
             itemBuilder:(context,index){
               final x=Map<String,dynamic>.from(items[index] as Map);
-              final data=x['data'] is Map?Map<String,dynamic>.from(x['data'] as Map):<String,dynamic>{};
-              final bookingId=data['bookingId']?.toString();
+              final data=x['data'] is Map
+                ?Map<String,dynamic>.from(x['data'] as Map)
+                :<String,dynamic>{};
+              final bookingId=(x['booking_id']??data['bookingId'])?.toString();
               final template=(x['template_code']??'').toString();
-              return Card(child:ListTile(
-                leading:const Icon(Icons.notifications_active_outlined),
-                title:Text(VeyraStatusLabels.notificationTemplate(template)),
-                subtitle:Text(VeyraDateFormatter.dateTime(x['created_at'])),
-                trailing:bookingId==null?null:const Icon(Icons.chevron_right),
-                onTap:bookingId==null?null:(){
-                  if(template=='NEW_OFFER')context.push('/offers/'+bookingId);
-                  else context.push('/booking/'+bookingId);
-                },
-              ));
+              final event=(x['event_type']??data['event']??'').toString();
+              final pickup=x['pickup_address']?.toString();
+              final dropoff=x['dropoff_address']?.toString();
+              final scheduled=x['scheduled_at'];
+              final bookingStatus=x['booking_status']?.toString();
+              final accent=_accentFor(template,event);
+              final route=(pickup!=null&&dropoff!=null)
+                ?'$pickup → $dropoff'
+                :t('Réservation Veyra');
+
+              return Material(
+                color:Colors.white,
+                elevation:1,
+                shadowColor:Colors.black12,
+                borderRadius:BorderRadius.circular(20),
+                child:InkWell(
+                  borderRadius:BorderRadius.circular(20),
+                  onTap:bookingId==null||bookingId.isEmpty
+                    ?null
+                    :()=>context.push('/booking/'+bookingId),
+                  child:Padding(
+                    padding:const EdgeInsets.all(16),
+                    child:Column(
+                      crossAxisAlignment:CrossAxisAlignment.start,
+                      children:[
+                        Row(
+                          crossAxisAlignment:CrossAxisAlignment.start,
+                          children:[
+                            Container(
+                              width:44,
+                              height:44,
+                              decoration:BoxDecoration(
+                                color:accent.withValues(alpha:.10),
+                                borderRadius:BorderRadius.circular(14),
+                              ),
+                              child:Icon(_iconFor(template,event),color:accent,size:23),
+                            ),
+                            const SizedBox(width:12),
+                            Expanded(child:Column(
+                              crossAxisAlignment:CrossAxisAlignment.start,
+                              children:[
+                                Text(
+                                  VeyraStatusLabels.notificationTemplate(template),
+                                  style:const TextStyle(
+                                    fontWeight:FontWeight.w800,
+                                    fontSize:16,
+                                  ),
+                                ),
+                                const SizedBox(height:3),
+                                Text(
+                                  VeyraDateFormatter.dateTime(x['created_at']),
+                                  style:const TextStyle(
+                                    color:Color(0xFF9CA3AF),
+                                    fontSize:11,
+                                  ),
+                                ),
+                              ],
+                            )),
+                            if(bookingId!=null)
+                              const Icon(Icons.chevron_right_rounded,color:Color(0xFF9CA3AF)),
+                          ],
+                        ),
+                        const SizedBox(height:13),
+                        Text(
+                          _detailFor(x,template,event),
+                          style:const TextStyle(
+                            color:Color(0xFF374151),
+                            fontSize:14,
+                            height:1.35,
+                          ),
+                        ),
+                        const SizedBox(height:12),
+                        Container(
+                          width:double.infinity,
+                          padding:const EdgeInsets.all(12),
+                          decoration:BoxDecoration(
+                            color:const Color(0xFFF8FAFC),
+                            borderRadius:BorderRadius.circular(14),
+                          ),
+                          child:Column(
+                            crossAxisAlignment:CrossAxisAlignment.start,
+                            children:[
+                              Row(
+                                crossAxisAlignment:CrossAxisAlignment.start,
+                                children:[
+                                  const Icon(Icons.route_rounded,size:18,color:Color(0xFF64748B)),
+                                  const SizedBox(width:8),
+                                  Expanded(child:Text(
+                                    route,
+                                    maxLines:2,
+                                    overflow:TextOverflow.ellipsis,
+                                    style:const TextStyle(
+                                      fontWeight:FontWeight.w600,
+                                      fontSize:13,
+                                      height:1.3,
+                                    ),
+                                  )),
+                                ],
+                              ),
+                              if(scheduled!=null)...[
+                                const SizedBox(height:8),
+                                Row(children:[
+                                  const Icon(Icons.schedule_rounded,size:17,color:Color(0xFF64748B)),
+                                  const SizedBox(width:8),
+                                  Text(
+                                    VeyraDateFormatter.dateTime(scheduled),
+                                    style:const TextStyle(color:Color(0xFF64748B),fontSize:12),
+                                  ),
+                                ]),
+                              ],
+                              if(bookingStatus!=null)...[
+                                const SizedBox(height:10),
+                                VeyraStatusBadge(status:bookingStatus),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if(bookingId!=null)...[
+                          const SizedBox(height:10),
+                          Align(
+                            alignment:Alignment.centerRight,
+                            child:Text(
+                              t('Voir la réservation'),
+                              style:TextStyle(
+                                color:accent,
+                                fontSize:12,
+                                fontWeight:FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
             },
           );
         },
