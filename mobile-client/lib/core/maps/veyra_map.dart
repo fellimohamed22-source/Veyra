@@ -91,10 +91,17 @@ class _VeyraMapState extends State<VeyraMap>
         _motionFrom=current;
         _motionTo=next;
         _headingFrom=_displayedHeading;
-        _headingTo=normalizeHeading(widget.driverHeading??_displayedHeading);
+        _headingTo=resolveHeading(
+          from:current,
+          to:next,
+          reportedHeading:widget.driverHeading,
+          fallbackHeading:_displayedHeading,
+        );
         _motion.duration=driverAnimationDuration(current,next);
         _motion.forward(from:0);
       }else if(widget.driverHeading!=null&&
+          widget.driverHeading!.isFinite&&
+          widget.driverHeading!>=0&&
           normalizeHeading(widget.driverHeading!)!=_displayedHeading){
         _headingFrom=_displayedHeading;
         _headingTo=normalizeHeading(widget.driverHeading!);
