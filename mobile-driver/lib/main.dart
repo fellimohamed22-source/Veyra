@@ -1059,6 +1059,7 @@ class _RideScreenState extends State<RideScreen>{
 
   bool busy=false;
   String? error;
+  bool locationSyncError=false;
   Position? position;
   Map<String,dynamic>? etaInfo;
   DateTime? lastEtaRefresh;
@@ -1114,7 +1115,7 @@ class _RideScreenState extends State<RideScreen>{
           if(!mounted)return;
           setState((){
             position=p;
-            error=null;
+            if(!locationSyncError)error=null;
           });
           final now=DateTime.now();
           if(lastEtaRefresh==null||now.difference(lastEtaRefresh!)>=const Duration(seconds:30)){
@@ -1123,14 +1124,20 @@ class _RideScreenState extends State<RideScreen>{
           }
         },
         onError:(e){
-          if(mounted)setState(()=>error=_locationErrorMessage(e));
+          if(mounted)setState((){
+            locationSyncError=false;
+            error=_locationErrorMessage(e);
+          });
         },
         onUploadError:(e){
           if(!mounted)return;
           final message=e is DioException
             ?VeyraErrorMessages.forException(e)
             :t('Position obtenue, mais impossible de la synchroniser avec Veyra.');
-          setState(()=>error=message);
+          setState((){
+            locationSyncError=true;
+            error=message;
+          });
         },
       );
     }catch(e){
@@ -1204,6 +1211,7 @@ class _RideScreenState extends State<RideScreen>{
     setState((){
       busy=true;
       error=null;
+      locationSyncError=false;
     });
     try{
       await fn();
@@ -1385,7 +1393,21 @@ class _RideScreenState extends State<RideScreen>{
                 )),
                 if(error!=null)Padding(
                   padding:const EdgeInsets.symmetric(vertical:10),
-                  child:VeyraErrorView(customMessage:error!,onRetry:active?()=>_startTrackingIfNeeded(status):reload),
+                  child:VeyraErrorView(
+                    customMessage:error!,
+                    onRetry:active
+                      ?(){
+                          if(tracker.running){
+                            setState((){
+                              error=null;
+                              locationSyncError=false;
+                            });
+                          }else{
+                            _startTrackingIfNeeded(status);
+                          }
+                        }
+                      :reload,
+                  ),
                 ),
                 if(status=='CONFIRMED')...[
                   FilledButton.icon(
