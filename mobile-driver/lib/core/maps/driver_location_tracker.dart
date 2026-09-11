@@ -51,29 +51,11 @@ class DriverLocationTracker {
 
     final uploadErrorHandler=onUploadError??onError;
 
-    // Do not gate tracking startup on getCurrentPosition(). On Android a
-    // brand-new high-accuracy fix can legitimately take several seconds,
-    // especially just after enabling GPS. Waiting for it here used to make
-    // RideScreen report "Position GPS momentanément indisponible" even
-    // though permission was granted and the location stream could work.
-    //
-    // A recent cached fix gives the UI an immediate marker while the fresh
-    // stream starts. We intentionally do not upload the cached fix: it may
-    // predate the current ride and live tracking must only publish fresh
-    // stream positions.
-    try{
-      final cached=await Geolocator.getLastKnownPosition();
-      if(cached!=null&&!_disposed){
-        final age=DateTime.now().difference(cached.timestamp);
-        if(!age.isNegative&&age<=const Duration(minutes:2)){
-          onPosition(cached);
-        }
-      }
-    }catch(_){
-      // Cache availability is only an optimisation. A missing/unavailable
-      // cached position must never prevent the real GPS stream from starting.
-    }
-
+    // Start the live stream directly. Do not seed the UI with
+    // getLastKnownPosition(): on real devices that cached fix can belong to
+    // a previous journey and produce a wildly wrong marker/ETA (for example
+    // hundreds of kilometres for a local Marseille pickup). Only a fresh
+    // position emitted by the current stream is trusted for this ride.
     if(_disposed)return;
 
     _subscription=Geolocator.getPositionStream(
