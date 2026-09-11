@@ -1125,6 +1125,13 @@ class _RideScreenState extends State<RideScreen>{
         onError:(e){
           if(mounted)setState(()=>error=_locationErrorMessage(e));
         },
+        onUploadError:(e){
+          if(!mounted)return;
+          final message=e is DioException
+            ?VeyraErrorMessages.forException(e)
+            :t('Position obtenue, mais impossible de la synchroniser avec Veyra.');
+          setState(()=>error=message);
+        },
       );
     }catch(e){
       if(mounted)setState(()=>error=_locationErrorMessage(e));
