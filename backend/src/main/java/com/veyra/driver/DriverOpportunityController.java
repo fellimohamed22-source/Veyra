@@ -33,10 +33,11 @@ public class DriverOpportunityController {
     }
 
     Map<String,Object> result=new LinkedHashMap<>(rows.getFirst());
-    Integer ownOffer=db.queryForObject(
-        "select count(*) from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",
-        Integer.class,bookingId,driverId);
-    result.put("hasActiveOffer",ownOffer!=null&&ownOffer>0);
+    List<Map<String,Object>> ownOffers=db.queryForList(
+        "select proposed_amount_minor from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",
+        bookingId,driverId);
+    result.put("hasActiveOffer",!ownOffers.isEmpty());
+    if(!ownOffers.isEmpty())result.put("ownActiveOfferAmountMinor",ownOffers.getFirst().get("proposed_amount_minor"));
     if("BEST_VISIBLE".equals(result.get("offer_visibility_mode"))){
       // Same rule as at submission time: lowest price among the OTHER
       // drivers' active offers only, never an identity, never blocking.
