@@ -6,6 +6,7 @@ import '../../api.dart';
 
 typedef DriverPositionHandler=void Function(Position position);
 typedef DriverLocationErrorHandler=void Function(Object error);
+typedef DriverLocationUploadErrorHandler=void Function(Object error);
 
 class DriverLocationTracker {
   final Api api;
@@ -30,6 +31,7 @@ class DriverLocationTracker {
     required String bookingId,
     required DriverPositionHandler onPosition,
     required DriverLocationErrorHandler onError,
+    DriverLocationUploadErrorHandler? onUploadError,
   }) async {
     if(_disposed)return;
     await stop();
@@ -51,7 +53,7 @@ class DriverLocationTracker {
       locationSettings:const LocationSettings(accuracy:LocationAccuracy.high),
     );
     onPosition(initial);
-    await _upload(bookingId,initial,onError);
+    await _upload(bookingId,initial,onUploadError??onError);
 
     _subscription=Geolocator.getPositionStream(
       locationSettings:LocationSettings(
@@ -66,7 +68,7 @@ class DriverLocationTracker {
         if(_lastUploadAt!=null&&now.difference(_lastUploadAt!)<minimumUploadInterval){
           return;
         }
-        await _upload(bookingId,position,onError);
+        await _upload(bookingId,position,onUploadError??onError);
       },
       onError:onError,
     );
