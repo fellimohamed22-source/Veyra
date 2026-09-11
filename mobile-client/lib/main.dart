@@ -32,14 +32,9 @@ String t(String french) => AppLocale.t(french);
 bool pushHandlersConfigured=false;
 
 void openPush(RemoteMessage message){
-  final bookingId=message.data['bookingId'];
-  if(bookingId==null)return;
-  final template=message.data['templateCode'];
-  if(template=='NEW_OFFER'){
-    router.go('/offers/'+bookingId);
-  }else{
-    router.go('/booking/'+bookingId);
-  }
+  final bookingId=message.data['bookingId']?.toString();
+  if(bookingId==null||bookingId.isEmpty)return;
+  router.go('/booking/'+bookingId);
 }
 
 /// Section 19 (mission UX/fonctionnelle) : "Do not rely on RouteObserver
@@ -131,8 +126,57 @@ class LanguageSwitch extends StatelessWidget{
   );
 }
 
-class App extends StatelessWidget{
+class App extends StatefulWidget{
   const App({super.key});
+  @override State<App> createState()=>_AppState();
+}
+
+class _AppState extends State<App> with WidgetsBindingObserver{
+  bool _sessionCheckRunning=false;
+
+  @override void initState(){
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override void dispose(){
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override void didChangeAppLifecycleState(AppLifecycleState state){
+    if(state==AppLifecycleState.resumed){
+      _validateSessionAfterResume();
+    }
+  }
+
+  Future<void> _validateSessionAfterResume() async {
+    if(_sessionCheckRunning)return;
+    _sessionCheckRunning=true;
+    try{
+      final valid=await api.validateStoredSession();
+      if(!mounted)return;
+      if(valid==false){
+        final current=router.routerDelegate.currentConfiguration.uri.path;
+        if(current!='/login'){
+          router.go('/login');
+        }
+      }else if(valid==true){
+        // Refresh the FCM registration after a process resume/recreation.
+        // Failures are already non-fatal inside configurePush().
+        unawaited(configurePush());
+        final current=router.routerDelegate.currentConfiguration.uri.path;
+        if(current=='/login'){
+          router.go('/home');
+        }
+      }
+      // null = transient network/server failure. Keep the current session
+      // and screen untouched; never force the user to clear app data.
+    }finally{
+      _sessionCheckRunning=false;
+    }
+  }
+
   @override Widget build(BuildContext context)=>ValueListenableBuilder<String>(
     valueListenable:AppLocale.code,
     builder:(context,localeCode,_)=>MaterialApp.router(
@@ -234,25 +278,19 @@ class _LoginScreenState extends State<LoginScreen>{
 
   @override void initState(){
     super.initState();
-    // Real gap fixed here: tokens were already correctly persisted via
-    // flutter_secure_storage (survives closing the app), but nothing
-    // ever checked for one at startup -- the app always opened on this
-    // screen regardless, forcing a fresh login every time even with a
-    // perfectly valid stored session. Checked after the first frame
-    // (post-frame callback) rather than via GoRouter's own redirect --
-    // an async redirect blocking the very first route resolution
-    // proved genuinely unreliable to settle correctly in widget tests,
-    // and checking here means this screen's own content is always
-    // available synchronously on first render regardless.
-    WidgetsBinding.instance.addPostFrameCallback((_)async{
-      String? token;
-      try{
-        token=await api.storage.read(key:'accessToken');
-      }catch(_){
-        return;
-      }
-      if(token!=null&&mounted)context.go('/home');
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_)=>_restoreSession());
+  }
+
+  Future<void> _restoreSession() async {
+    final valid=await api.validateStoredSession();
+    if(!mounted)return;
+    if(valid==true){
+      unawaited(configurePush());
+      context.go('/home');
+    }
+    // false: credentials were genuinely rejected and have already been
+    // cleared. null: offline/temporary backend failure; keep the login
+    // screen usable without destroying the persisted refresh token.
   }
 
   Future<void> submit()async{
@@ -1570,6 +1608,12 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
           const SizedBox(height:12),
           Card(child:ListTile(title:Text(t('Statut')),trailing:VeyraStatusBadge(status:status))),
+          if({'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status))
+            FilledButton.icon(
+              onPressed:()=>context.push('/offers/'+widget.bookingId),
+              icon:const Icon(Icons.local_offer_outlined),
+              label:Text(t('Voir les offres reçues')),
+            ),
           if(x['selected_driver_id']!=null)Card(child:ListTile(
             leading:const CircleAvatar(child:Icon(Icons.person)),
             title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
