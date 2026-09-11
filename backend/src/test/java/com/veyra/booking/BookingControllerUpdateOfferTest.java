@@ -76,7 +76,7 @@ class BookingControllerUpdateOfferTest {
     stubDriverLookup();
     stubBooking("OFFERS_RECEIVED", OffsetDateTime.now().plusHours(2));
     UUID offerId = UUID.randomUUID();
-    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(bookingId), eq(driverId)))
+    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(UUID.class), eq(bookingId), eq(driverId)))
         .thenReturn(List.of(offerId));
     when(db.queryForObject(contains("offer_visibility_mode"), eq(String.class), eq(bookingId))).thenReturn("PRIVATE");
 
@@ -91,7 +91,7 @@ class BookingControllerUpdateOfferTest {
     asDriver();
     stubDriverLookup();
     stubBooking("OFFERS_RECEIVED", OffsetDateTime.now().plusHours(2));
-    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(bookingId), eq(driverId)))
+    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(UUID.class), eq(bookingId), eq(driverId)))
         .thenReturn(List.of());
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().updateOffer(bookingId, new BookingDtos.Offer(5500, "EUR")));
@@ -128,7 +128,7 @@ class BookingControllerUpdateOfferTest {
     stubDriverLookup();
     stubBooking("OFFERS_RECEIVED", OffsetDateTime.now().plusHours(2));
     UUID offerId = UUID.randomUUID();
-    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(bookingId), eq(driverId)))
+    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(UUID.class), eq(bookingId), eq(driverId)))
         .thenReturn(List.of(offerId));
     when(db.queryForObject(contains("offer_visibility_mode"), eq(String.class), eq(bookingId))).thenReturn("BEST_VISIBLE");
     when(db.queryForObject(contains("min(proposed_amount_minor)"), eq(Long.class), eq(bookingId), eq(driverId))).thenReturn(4200L);
