@@ -68,6 +68,7 @@ class VeyraStatusLabels {
     'REJECTED_BY_SELECTION': 'Non retenue',
     'EXPIRED': 'Expirée',
     'WITHDRAWN': 'Retirée',
+    'SUPERSEDED': 'Remplacée par une offre révisée',
   };
 
   static const Map<String, String> _offerStatusEn = {
@@ -76,6 +77,7 @@ class VeyraStatusLabels {
     'REJECTED_BY_SELECTION': 'Not selected',
     'EXPIRED': 'Expired',
     'WITHDRAWN': 'Withdrawn',
+    'SUPERSEDED': 'Replaced by a revised offer',
   };
 
   static const Map<String, String> _kycStatusFr = {

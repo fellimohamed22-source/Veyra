@@ -181,15 +181,29 @@ import java.util.*;
     // financial commitment on top of what they already had active, just
     // a revision of the same one. Still enforces the offer window still
     // being open, same as a new submission would.
+    //
+    // History explicitly requested: the previous implementation of this
+    // endpoint did an UPDATE in place (proposed_amount_minor overwritten
+    // directly on the same row), silently losing the driver's original
+    // price the moment they revised it -- "Mes offres" could never show
+    // that a revision had even happened. Now marks the existing ACTIVE
+    // row SUPERSEDED (new status, grouped into the existing "closed"
+    // scope in DriverOffersController alongside REJECTED_BY_SELECTION/
+    // EXPIRED/WITHDRAWN -- it genuinely is closed, just for a different
+    // reason than those) and INSERTs a fresh ACTIVE row for the new
+    // amount, reusing the exact same expires_at the original offer had
+    // (the offer window itself doesn't reset just because the price
+    // was revised).
     @PatchMapping("/driver/opportunities/{bookingId}/offers") @Transactional Map<String,Object> updateOffer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
         UUID d=driver();
         Map<String,Object>b=one("select status,offer_window_ends_at from scheduled_bookings where id=? for update",bookingId);
         if(!Set.of("OPEN_FOR_OFFERS","OFFERS_RECEIVED").contains(b.get("status"))||DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         List<UUID> offerIds=db.queryForList("select id from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",UUID.class,bookingId,d);
         if(offerIds.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"NO_ACTIVE_OFFER");
-        UUID offerId=offerIds.getFirst();
-        db.update("update driver_offers set proposed_amount_minor=?,currency=? where id=?",r.amountMinor(),r.currency(),offerId);
-        Map<String,Object>response=new HashMap<>(Map.of("offerId",offerId));
+        db.update("update driver_offers set status='SUPERSEDED' where booking_id=? and driver_id=? and status='ACTIVE'",bookingId,d);
+        UUID newOfferId=UUID.randomUUID();
+        db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,?,?,'ACTIVE',?)",newOfferId,bookingId,d,r.amountMinor(),r.currency(),b.get("offer_window_ends_at"));
+        Map<String,Object>response=new HashMap<>(Map.of("offerId",newOfferId));
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
         if("BEST_VISIBLE".equals(visibilityMode)){
             Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",Long.class,bookingId,d);

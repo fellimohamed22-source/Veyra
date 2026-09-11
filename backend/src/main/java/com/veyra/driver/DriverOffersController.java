@@ -36,7 +36,7 @@ public class DriverOffersController {
     UUID driverId=driverId();
     String statusFilter=switch(scope){
       case "won" -> "o.status='ACCEPTED'";
-      case "closed" -> "o.status in ('REJECTED_BY_SELECTION','EXPIRED','WITHDRAWN')";
+      case "closed" -> "o.status in ('REJECTED_BY_SELECTION','EXPIRED','WITHDRAWN','SUPERSEDED')";
       default -> "o.status='ACTIVE'";
     };
     // Raw snake_case column labels, same convention as
