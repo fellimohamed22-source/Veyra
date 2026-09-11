@@ -117,6 +117,43 @@ class Api {
     await storage.deleteAll();
   }
 
+  /// Validates a persisted session without destroying it on transient
+  /// network/server failures. Returns true for a valid (or successfully
+  /// refreshed) session, false only when the backend genuinely rejects the
+  /// credentials, and null when validation could not complete.
+  Future<bool?> validateStoredSession() async {
+    String? access;
+    String? refresh;
+    try{
+      access=await storage.read(key:'accessToken');
+      refresh=await storage.read(key:'refreshToken');
+    }catch(_){
+      return null;
+    }
+    if((access==null||access.isEmpty)&&(refresh==null||refresh.isEmpty)){
+      _me=null;
+      return false;
+    }
+
+    _me=null;
+    try{
+      final r=await dio.get('/api/v1/me');
+      _me=Map<String,dynamic>.from(r.data);
+      return true;
+    }on DioException catch(e){
+      if(e.response?.statusCode==401||e.response?.statusCode==403){
+        _me=null;
+        try{await storage.deleteAll();}catch(_){}
+        return false;
+      }
+      // Timeout, no network or a temporary 5xx must never erase a valid
+      // refresh token. Keep the current screen/session and retry later.
+      return null;
+    }catch(_){
+      return null;
+    }
+  }
+
   Future<List<dynamic>> bookings() async =>
       List<dynamic>.from((await dio.get('/api/v1/scheduled-bookings')).data);
 
