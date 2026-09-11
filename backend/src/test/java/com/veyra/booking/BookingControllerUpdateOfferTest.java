@@ -39,13 +39,14 @@ class BookingControllerUpdateOfferTest {
   @Mock PasswordEncoder enc;
   @Mock PinCrypto pinCrypto;
   @Mock LedgerService ledger;
+  @Mock BookingStatusHistoryService history;
 
   private final UUID driverUserId = UUID.randomUUID();
   private final UUID driverId = UUID.randomUUID();
   private final UUID bookingId = UUID.randomUUID();
 
   private BookingController controller() {
-    return new BookingController(db, enc, pinCrypto, ledger, 120L, 24L, 60L, 30L);
+    return new BookingController(db, enc, pinCrypto, ledger, 120L, 24L, 60L, 30L, history);
   }
 
   private void asDriver() {
