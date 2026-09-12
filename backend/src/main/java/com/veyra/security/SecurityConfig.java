@@ -98,7 +98,13 @@ public class SecurityConfig {
             .requestMatchers(
                 "/api/v1/auth/**",
                 "/api/v1/payments/stripe/webhook",
-                "/actuator/health")
+                "/actuator/health",
+                // The HTTP WebSocket upgrade itself cannot carry the STOMP
+                // native Authorization header used by the Flutter client.
+                // Authentication is enforced immediately afterwards by
+                // StompAuthConfig on the STOMP CONNECT frame, before any
+                // subscription is accepted.
+                "/ws")
             .permitAll()
             .anyRequest()
             .authenticated())

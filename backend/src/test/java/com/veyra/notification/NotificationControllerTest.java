@@ -48,16 +48,16 @@ class NotificationControllerTest {
 
   @Test
   void onlyReturnsNotificationsBelongingToTheCallingUser() {
-    when(db.queryForList(contains("where user_id=?"), eq(userId)))
+    when(db.queryForList(contains("where n.user_id=?"), eq(userId)))
         .thenReturn(List.of(Map.of("id", UUID.randomUUID(), "template_code", "NEW_OFFER")));
 
     List<Map<String, Object>> result = new NotificationController(db).mine();
 
     assertEquals(1, result.size());
-    verify(db).queryForList(contains("where user_id=?"), eq(userId));
-    // No other user id is ever passed -- the query has exactly one bind
-    // parameter and it is the caller's own id, never anything from a
-    // request body/path.
+    verify(db).queryForList(contains("where n.user_id=?"), eq(userId));
+    // The enriched joins (booking/offer/driver) must not weaken privacy:
+    // the query still has exactly one bind parameter and it is the
+    // caller's own id, never anything from a request body/path.
     verifyNoMoreInteractions(db);
   }
 }

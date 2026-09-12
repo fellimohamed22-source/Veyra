@@ -156,7 +156,7 @@ import java.util.*;
         // transition; every subsequent offer's UPDATE affects 0 rows.
         // Only record history when the transition genuinely happened.
         if(transitioned>0)history.record(bookingId,"OPEN_FOR_OFFERS","OFFERS_RECEIVED","DRIVER",CurrentUser.id(),null);
-        event(bookingId,"offer.created");
+        event(bookingId,"offer.created",id);
         Map<String,Object>response=new HashMap<>(Map.of("offerId",id));
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
         if("BEST_VISIBLE".equals(visibilityMode)){
@@ -398,5 +398,12 @@ import java.util.*;
     }
     private void event(UUID id,String t){
         db.update("insert into outbox_events(aggregate_type,aggregate_id,event_type,payload) values ('BOOKING',?,?,jsonb_build_object('bookingId',?::text))",id,t,id);
+    }
+
+    private void event(UUID id,String t,UUID offerId){
+        db.update(
+            "insert into outbox_events(aggregate_type,aggregate_id,event_type,payload) " +
+            "values ('BOOKING',?,?,jsonb_build_object('bookingId',?::text,'offerId',?::text))",
+            id,t,id,offerId);
     }
 }
