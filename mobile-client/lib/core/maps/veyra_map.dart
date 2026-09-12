@@ -127,9 +127,10 @@ class _VeyraMapState extends State<VeyraMap>
         (widget.secondaryRoute.points.isNotEmpty&&oldWidget.secondaryRoute.points.isNotEmpty&&
          (oldWidget.secondaryRoute.points.first!=widget.secondaryRoute.points.first||
           oldWidget.secondaryRoute.points.last!=widget.secondaryRoute.points.last));
-    if(routeChanged&&!_fitted){
+    if(routeChanged&&_follow){
+      _fitted=false;
       WidgetsBinding.instance.addPostFrameCallback((_){
-        if(mounted)_fitAll();
+        if(mounted&&_follow)_fitAll();
       });
     }
   }
