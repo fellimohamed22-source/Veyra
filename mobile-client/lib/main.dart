@@ -2214,9 +2214,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
                   Expanded(child:_RideEtaCard(
                     icon:Icons.person_pin_circle_rounded,
                     label:t('Chauffeur chez vous'),
-                    value:approaching
-                      ?(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds))
-                      :t('Arrivé'),
+                    value:status=='DRIVER_ARRIVED'||status=='IN_PROGRESS'
+                      ?t('Arrivé')
+                      :(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds)),
                     detail:approaching&&route.distanceMeters!=null
                       ?VeyraMoneyFormatter.distance(route.distanceMeters)
                       :null,
