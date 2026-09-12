@@ -193,6 +193,13 @@ class _VeyraMapState extends State<VeyraMap>
     setState((){});
   }
 
+  void _showOverview(){
+    _follow=false;
+    _fitted=false;
+    _fitAll();
+    if(mounted)setState((){});
+  }
+
   @override
   void dispose(){
     _motion.dispose();
@@ -286,12 +293,22 @@ class _VeyraMapState extends State<VeyraMap>
         ],
       ),
       Positioned(
-        top:12,
+        top:76,
         right:12,
         child:_MapControl(
           icon:_lightMap?Icons.map_outlined:Icons.layers_outlined,
           tooltip:'Changer le fond de carte',
           onPressed:()=>setState(()=>_lightMap=!_lightMap),
+          enabled:true,
+        ),
+      ),
+      Positioned(
+        top:132,
+        right:12,
+        child:_MapControl(
+          icon:Icons.route_rounded,
+          tooltip:'Voir tout le trajet',
+          onPressed:_showOverview,
           enabled:true,
         ),
       ),
