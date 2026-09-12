@@ -23,7 +23,7 @@ public class NotificationController {
       "o.id as offer_id,o.proposed_amount_minor as offer_amount_minor,o.currency as offer_currency," +
       "u.first_name as driver_first_name,u.last_name as driver_last_name " +
       "from notifications n " +
-      "left join scheduled_bookings sb on sb.id=(nullif(n.data->>'bookingId',''))::uuid " +
+      "join scheduled_bookings sb on sb.id=(nullif(n.data->>'bookingId',''))::uuid " +
       "left join driver_offers o on o.id=(nullif(n.data->>'offerId',''))::uuid " +
       "left join drivers d on d.id=o.driver_id " +
       "left join users u on u.id=d.user_id " +
