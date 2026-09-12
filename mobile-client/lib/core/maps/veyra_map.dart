@@ -19,6 +19,7 @@ class VeyraMap extends StatefulWidget {
   final LatLng? driver;
   final double? driverHeading;
   final VeyraRouteGeometry route;
+  final VeyraRouteGeometry secondaryRoute;
   final double initialZoom;
   final bool showRecenter;
   final bool followDriver;
@@ -31,6 +32,7 @@ class VeyraMap extends StatefulWidget {
     this.driver,
     this.driverHeading,
     this.route=const VeyraRouteGeometry(),
+    this.secondaryRoute=const VeyraRouteGeometry(),
     this.initialZoom=13,
     this.showRecenter=true,
     this.followDriver=true,
@@ -55,6 +57,7 @@ class _VeyraMapState extends State<VeyraMap>
   bool _fitted=false;
   bool _follow=true;
   bool _mapReady=false;
+  bool _lightMap=true;
 
   LatLng get _fallback =>
       widget.driver ?? widget.pickup ?? widget.dropoff ?? const LatLng(43.2965,5.3698);
@@ -115,10 +118,15 @@ class _VeyraMapState extends State<VeyraMap>
       setState(()=>_displayedDriver=null);
     }
 
-    final routeChanged=oldWidget.route.points.length!=widget.route.points.length||
+    final routeChanged=
+        oldWidget.route.points.length!=widget.route.points.length||
+        oldWidget.secondaryRoute.points.length!=widget.secondaryRoute.points.length||
         (widget.route.points.isNotEmpty&&oldWidget.route.points.isNotEmpty&&
          (oldWidget.route.points.first!=widget.route.points.first||
-          oldWidget.route.points.last!=widget.route.points.last));
+          oldWidget.route.points.last!=widget.route.points.last))||
+        (widget.secondaryRoute.points.isNotEmpty&&oldWidget.secondaryRoute.points.isNotEmpty&&
+         (oldWidget.secondaryRoute.points.first!=widget.secondaryRoute.points.first||
+          oldWidget.secondaryRoute.points.last!=widget.secondaryRoute.points.last));
     if(routeChanged&&!_fitted){
       WidgetsBinding.instance.addPostFrameCallback((_){
         if(mounted)_fitAll();
@@ -152,6 +160,7 @@ class _VeyraMapState extends State<VeyraMap>
     if(!_mapReady)return;
     final points=<LatLng>[
       ...widget.route.points,
+      ...widget.secondaryRoute.points,
       if(widget.pickup!=null)widget.pickup!,
       if(widget.dropoff!=null)widget.dropoff!,
       if(_displayedDriver!=null)_displayedDriver!,
@@ -214,20 +223,36 @@ class _VeyraMapState extends State<VeyraMap>
         ),
         children:[
           TileLayer(
-            urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            urlTemplate:_lightMap
+              ?'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
+              :'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            subdomains:_lightMap?const ['a','b','c','d']:const [],
             userAgentPackageName:widget.userAgentPackageName,
           ),
+          if(widget.secondaryRoute.points.length>=2)
+            PolylineLayer(polylines:[
+              Polyline(
+                points:widget.secondaryRoute.points,
+                strokeWidth:10,
+                color:Colors.white.withValues(alpha:.96),
+              ),
+              Polyline(
+                points:widget.secondaryRoute.points,
+                strokeWidth:6,
+                color:const Color(0xFF94A3B8),
+              ),
+            ]),
           if(widget.route.points.length>=2)
             PolylineLayer(polylines:[
               Polyline(
                 points:widget.route.points,
-                strokeWidth:9,
-                color:Colors.white.withValues(alpha:.96),
+                strokeWidth:11,
+                color:Colors.white.withValues(alpha:.98),
               ),
               Polyline(
                 points:widget.route.points,
-                strokeWidth:5,
-                color:const Color(0xFF171717),
+                strokeWidth:6,
+                color:const Color(0xFF2563EB),
               ),
             ]),
           MarkerLayer(markers:[
@@ -263,10 +288,10 @@ class _VeyraMapState extends State<VeyraMap>
         top:12,
         right:12,
         child:_MapControl(
-          icon:Icons.layers_outlined,
-          tooltip:'Carte',
-          onPressed:(){},
-          enabled:false,
+          icon:_lightMap?Icons.map_outlined:Icons.layers_outlined,
+          tooltip:'Changer le fond de carte',
+          onPressed:()=>setState(()=>_lightMap=!_lightMap),
+          enabled:true,
         ),
       ),
       if(widget.showRecenter)
@@ -289,9 +314,9 @@ class _VeyraMapState extends State<VeyraMap>
             color:Colors.white.withValues(alpha:.90),
             borderRadius:BorderRadius.circular(4),
           ),
-          child:const Text(
-            '© OpenStreetMap',
-            style:TextStyle(fontSize:8,color:Color(0xFF6B7280)),
+          child:Text(
+            _lightMap?'© OpenStreetMap © CARTO':'© OpenStreetMap',
+            style:const TextStyle(fontSize:8,color:Color(0xFF6B7280)),
           ),
         ),
       ),
