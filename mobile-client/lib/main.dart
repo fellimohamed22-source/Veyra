@@ -1887,6 +1887,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Map<String,dynamic>? location;
   Map<String,dynamic>? bookingMap;
   Map<String,dynamic>? etaInfo;
+  Map<String,dynamic>? tripEtaInfo;
   String? error;
   bool loading=true;
 
@@ -1958,6 +1959,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       };
       error=null;
     });
+    if(etaInfo==null)unawaited(_refreshEta());
   }
 
   DateTime? get _recordedAt {
@@ -1975,32 +1977,59 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Future<void> _refreshEta() async {
     final live=location;
     final booking=bookingMap;
-    if(live?['available']!=true||booking==null||_isStale){
-      if(mounted&&etaInfo!=null)setState(()=>etaInfo=null);
-      return;
+    if(booking==null)return;
+
+    final pickupLat=(booking['pickup_lat'] as num?)?.toDouble();
+    final pickupLng=(booking['pickup_lng'] as num?)?.toDouble();
+    final dropoffLat=(booking['dropoff_lat'] as num?)?.toDouble();
+    final dropoffLng=(booking['dropoff_lng'] as num?)?.toDouble();
+    if(pickupLat==null||pickupLng==null||dropoffLat==null||dropoffLng==null)return;
+
+    // Always keep the complete customer journey available. This gives the
+    // client a stable "pickup -> destination" duration even while the driver
+    // is still approaching the pickup point.
+    Future<Map<String,dynamic>?> loadTrip() async {
+      try{
+        return await api.routeEstimate(
+          fromLat:pickupLat,
+          fromLng:pickupLng,
+          toLat:dropoffLat,
+          toLng:dropoffLng,
+        );
+      }catch(_){
+        return null;
+      }
     }
 
-    final status=(booking['status']??'').toString();
-    final approaching=status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED';
-    final toLat=(booking[approaching?'pickup_lat':'dropoff_lat'] as num?)?.toDouble();
-    final toLng=(booking[approaching?'pickup_lng':'dropoff_lng'] as num?)?.toDouble();
-    final fromLat=(live?['lat'] as num?)?.toDouble();
-    final fromLng=(live?['lng'] as num?)?.toDouble();
-    if(toLat==null||toLng==null||fromLat==null||fromLng==null)return;
+    Future<Map<String,dynamic>?> loadActiveLeg() async {
+      if(live?['available']!=true||_isStale)return null;
+      final fromLat=(live?['lat'] as num?)?.toDouble();
+      final fromLng=(live?['lng'] as num?)?.toDouble();
+      if(fromLat==null||fromLng==null)return null;
 
-    try{
-      final eta=await api.routeEstimate(
-        fromLat:fromLat,
-        fromLng:fromLng,
-        toLat:toLat,
-        toLng:toLng,
-      );
-      if(mounted)setState(()=>etaInfo=eta);
-    }catch(_){
-      // Keep the live position visible even when the routing provider is
-      // temporarily unavailable. ETA/route simply disappear.
-      if(mounted)setState(()=>etaInfo=null);
+      final status=(booking['status']??'').toString();
+      final approaching=status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED';
+      try{
+        return await api.routeEstimate(
+          fromLat:fromLat,
+          fromLng:fromLng,
+          toLat:approaching?pickupLat:dropoffLat,
+          toLng:approaching?pickupLng:dropoffLng,
+        );
+      }catch(_){
+        return null;
+      }
     }
+
+    final results=await Future.wait<Map<String,dynamic>?>([
+      loadActiveLeg(),
+      loadTrip(),
+    ]);
+    if(!mounted)return;
+    setState((){
+      etaInfo=results[0];
+      tripEtaInfo=results[1];
+    });
   }
 
   @override void dispose(){
@@ -2044,6 +2073,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     final dropoff=dropoffLat==null||dropoffLng==null?null:LatLng(dropoffLat,dropoffLng);
     final driver=available&&driverLat!=null&&driverLng!=null?LatLng(driverLat,driverLng):null;
     final route=VeyraRouteGeometry.fromApi(etaInfo);
+    final tripRoute=VeyraRouteGeometry.fromApi(tripEtaInfo);
 
     final approaching=status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED';
     final title=status=='IN_PROGRESS'
@@ -2061,6 +2091,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
             driver:driver,
             driverHeading:driverHeading,
             route:route,
+            secondaryRoute:tripRoute,
             userAgentPackageName:'com.veyra.client',
           ),
         ),
@@ -2176,32 +2207,34 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
                         ),
                       ],
                     )),
-                    if(route.durationSeconds!=null)
-                      Container(
-                        margin:const EdgeInsets.only(left:12),
-                        padding:const EdgeInsets.symmetric(horizontal:14,vertical:9),
-                        decoration:BoxDecoration(
-                          color:const Color(0xFF171717),
-                          borderRadius:BorderRadius.circular(18),
-                        ),
-                        child:Text(
-                          VeyraMoneyFormatter.duration(route.durationSeconds),
-                          style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800),
-                        ),
-                      ),
                   ],
                 ),
-                if(route.distanceMeters!=null)...[
-                  const SizedBox(height:12),
-                  Row(children:[
-                    const Icon(Icons.route_rounded,size:18,color:Color(0xFF4B5563)),
-                    const SizedBox(width:7),
-                    Text(
-                      VeyraMoneyFormatter.distance(route.distanceMeters),
-                      style:const TextStyle(color:Color(0xFF4B5563),fontWeight:FontWeight.w600),
-                    ),
-                  ]),
-                ],
+                const SizedBox(height:16),
+                Row(children:[
+                  Expanded(child:_RideEtaCard(
+                    icon:Icons.person_pin_circle_rounded,
+                    label:t('Chauffeur chez vous'),
+                    value:approaching
+                      ?(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds))
+                      :t('Arrivé'),
+                    detail:approaching&&route.distanceMeters!=null
+                      ?VeyraMoneyFormatter.distance(route.distanceMeters)
+                      :null,
+                    accent:const Color(0xFF2563EB),
+                  )),
+                  const SizedBox(width:10),
+                  Expanded(child:_RideEtaCard(
+                    icon:Icons.flag_rounded,
+                    label:t('Jusqu’à destination'),
+                    value:status=='IN_PROGRESS'
+                      ?(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds))
+                      :(tripRoute.durationSeconds==null?'—':VeyraMoneyFormatter.duration(tripRoute.durationSeconds)),
+                    detail:status=='IN_PROGRESS'
+                      ?(route.distanceMeters==null?null:VeyraMoneyFormatter.distance(route.distanceMeters))
+                      :(tripRoute.distanceMeters==null?null:VeyraMoneyFormatter.distance(tripRoute.distanceMeters)),
+                    accent:const Color(0xFF111827),
+                  )),
+                ]),
                 const SizedBox(height:14),
                 if(!available)
                   const LinearProgressIndicator(minHeight:3)
@@ -2272,6 +2305,66 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       ]),
     );
   }
+}
+
+
+class _RideEtaCard extends StatelessWidget{
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? detail;
+  final Color accent;
+
+  const _RideEtaCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.accent,
+  });
+
+  @override Widget build(BuildContext context)=>Container(
+    padding:const EdgeInsets.fromLTRB(12,12,12,11),
+    decoration:BoxDecoration(
+      color:accent.withValues(alpha:.07),
+      borderRadius:BorderRadius.circular(18),
+      border:Border.all(color:accent.withValues(alpha:.12)),
+    ),
+    child:Column(
+      crossAxisAlignment:CrossAxisAlignment.start,
+      children:[
+        Icon(icon,color:accent,size:20),
+        const SizedBox(height:8),
+        Text(
+          label,
+          maxLines:2,
+          overflow:TextOverflow.ellipsis,
+          style:const TextStyle(
+            color:Color(0xFF6B7280),
+            fontSize:11,
+            fontWeight:FontWeight.w600,
+            height:1.15,
+          ),
+        ),
+        const SizedBox(height:4),
+        Text(
+          value,
+          style:TextStyle(
+            color:accent,
+            fontSize:18,
+            fontWeight:FontWeight.w900,
+          ),
+        ),
+        if(detail!=null)...[
+          const SizedBox(height:2),
+          Text(
+            detail!,
+            style:const TextStyle(color:Color(0xFF6B7280),fontSize:11),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 
