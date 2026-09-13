@@ -29,7 +29,9 @@ public class DriverOffersController {
   private static final Set<String> VALID_SCOPES=Set.of("active","won","closed");
 
   @GetMapping
-  public List<Map<String,Object>> list(@RequestParam(defaultValue="active") String scope){
+  public List<Map<String,Object>> list(
+      @RequestParam(defaultValue="active") String scope,
+      @RequestParam(defaultValue="0") int page){
     if(!VALID_SCOPES.contains(scope)){
       throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_OFFER_SCOPE");
     }
@@ -47,7 +49,7 @@ public class DriverOffersController {
         "sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status as booking_status " +
         "from driver_offers o join scheduled_bookings sb on sb.id=o.booking_id " +
         "where o.driver_id=? and "+statusFilter+" " +
-        "order by o.created_at desc",
+        "order by o.created_at desc limit 10 offset "+(Math.max(0,page)*10),
         driverId);
   }
 
