@@ -7,6 +7,7 @@ import '../../api.dart';
 typedef DriverPositionHandler=void Function(Position position);
 typedef DriverLocationErrorHandler=void Function(Object error);
 typedef DriverLocationUploadErrorHandler=void Function(Object error);
+typedef DriverLocationUploadSuccessHandler=void Function();
 
 class DriverLocationTracker {
   final Api api;
@@ -32,6 +33,7 @@ class DriverLocationTracker {
     required DriverPositionHandler onPosition,
     required DriverLocationErrorHandler onError,
     DriverLocationUploadErrorHandler? onUploadError,
+    DriverLocationUploadSuccessHandler? onUploadSuccess,
   }) async {
     if(_disposed)return;
     await stop();
@@ -71,7 +73,7 @@ class DriverLocationTracker {
         if(_lastUploadAt!=null&&now.difference(_lastUploadAt!)<minimumUploadInterval){
           return;
         }
-        await _upload(bookingId,position,uploadErrorHandler);
+        await _upload(bookingId,position,uploadErrorHandler,onUploadSuccess);
       },
       onError:onError,
     );
@@ -81,6 +83,7 @@ class DriverLocationTracker {
     String bookingId,
     Position position,
     DriverLocationErrorHandler onError,
+    DriverLocationUploadSuccessHandler? onSuccess,
   ) async {
     if(_uploading||_disposed)return;
     _uploading=true;
@@ -98,6 +101,7 @@ class DriverLocationTracker {
         speedMps:position.speed,
       );
       _lastUploadAt=DateTime.now();
+      onSuccess?.call();
     }catch(error){
       onError(error);
     }finally{
