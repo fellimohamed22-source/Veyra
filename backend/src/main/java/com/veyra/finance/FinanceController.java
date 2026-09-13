@@ -80,7 +80,7 @@ public class FinanceController {
   // (PLATFORM_REVENUE, PAYMENT_PROCESSOR_CLEARING, PARTNER_RECEIVABLE),
   // which is none of this driver's business to see.
   @GetMapping("/driver/wallet/transactions")
-  public List<Map<String,Object>> transactions() {
+  public List<Map<String,Object>> transactions(@RequestParam(defaultValue="0") int page) {
     UUID driverId = db.queryForObject(
         "select id from drivers where user_id=?",
         UUID.class,
@@ -94,7 +94,7 @@ public class FinanceController {
         "join ledger_accounts a on a.id=le.account_id " +
         "join scheduled_bookings sb on sb.id=lt.booking_id " +
         "where sb.selected_driver_id=? and a.code in ('DRIVER_PAYABLE','DRIVER_PLATFORM_DEBT') " +
-        "order by lt.created_at desc limit 200",
+        "order by lt.created_at desc limit 10 offset "+(Math.max(0,page)*10),
         driverId);
   }
 }
