@@ -51,7 +51,7 @@ class NotificationControllerTest {
     when(db.queryForList(contains("where n.user_id=?"), eq(userId)))
         .thenReturn(List.of(Map.of("id", UUID.randomUUID(), "template_code", "NEW_OFFER")));
 
-    List<Map<String, Object>> result = new NotificationController(db).mine();
+    List<Map<String, Object>> result = new NotificationController(db).mine(0);
 
     assertEquals(1, result.size());
     verify(db).queryForList(contains("where n.user_id=?"), eq(userId));
