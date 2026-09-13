@@ -1279,6 +1279,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
   }
 
   Future<List<dynamic>> _load()=>api.bookings(
+    scope:'all',
     page:page,
     status:status=='ALL'?null:status,
     sort:sort,
@@ -1290,7 +1291,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
   void _refresh()=>setState((){future=_load();});
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Mes courses à venir'))),
+    appBar:AppBar(title:Text(t('Mes courses'))),
     body:RefreshIndicator(
       onRefresh:()async{_refresh();await future;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
@@ -1304,6 +1305,11 @@ class _AgendaScreenState extends State<AgendaScreen>{
               DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('En route'))),
               DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Arrivé'))),
               DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
+              DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
+              DropdownMenuItem(value:'CLOSED',child:Text(t('Clôturée'))),
+              DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
+              DropdownMenuItem(value:'DRIVER_CANCELLED',child:Text(t('Annulée par le chauffeur'))),
+              DropdownMenuItem(value:'CUSTOMER_NO_SHOW',child:Text(t('Client absent'))),
             ],
             onChanged:(v){
               if(v==null)return;
