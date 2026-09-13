@@ -1062,6 +1062,7 @@ class _RideScreenState extends State<RideScreen>{
   bool locationSyncError=false;
   Position? position;
   Map<String,dynamic>? etaInfo;
+  Map<String,dynamic>? tripEtaInfo;
   DateTime? lastEtaRefresh;
   int ratingScore=0;
   bool ratingSubmitting=false;
@@ -1139,6 +1140,15 @@ class _RideScreenState extends State<RideScreen>{
             error=message;
           });
         },
+        onUploadSuccess:(){
+          if(!mounted)return;
+          if(locationSyncError||error!=null){
+            setState((){
+              locationSyncError=false;
+              error=null;
+            });
+          }
+        },
       );
     }catch(e){
       if(mounted)setState(()=>error=_locationErrorMessage(e));
@@ -1162,26 +1172,58 @@ class _RideScreenState extends State<RideScreen>{
     try{
       final booking=await api.bookingDetail(widget.bookingId);
       final status=(booking['status']??'').toString();
-      double? toLat;
-      double? toLng;
-      if(status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED'){
-        toLat=(booking['pickup_lat'] as num?)?.toDouble();
-        toLng=(booking['pickup_lng'] as num?)?.toDouble();
-      }else if(status=='IN_PROGRESS'){
-        toLat=(booking['dropoff_lat'] as num?)?.toDouble();
-        toLng=(booking['dropoff_lng'] as num?)?.toDouble();
-      }
-      if(toLat==null||toLng==null)return;
+      final pickupLat=(booking['pickup_lat'] as num?)?.toDouble();
+      final pickupLng=(booking['pickup_lng'] as num?)?.toDouble();
+      final dropoffLat=(booking['dropoff_lat'] as num?)?.toDouble();
+      final dropoffLng=(booking['dropoff_lng'] as num?)?.toDouble();
+      if(pickupLat==null||pickupLng==null||dropoffLat==null||dropoffLng==null)return;
 
-      final eta=await api.routeEstimate(
-        fromLat:p.latitude,
-        fromLng:p.longitude,
-        toLat:toLat,
-        toLng:toLng,
-      );
-      if(mounted)setState(()=>etaInfo=eta);
+      Future<Map<String,dynamic>?> activeLeg() async {
+        final toPickup=status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED';
+        try{
+          return await api.routeEstimate(
+            fromLat:p.latitude,
+            fromLng:p.longitude,
+            toLat:toPickup?pickupLat:dropoffLat,
+            toLng:toPickup?pickupLng:dropoffLng,
+          );
+        }catch(_){
+          return null;
+        }
+      }
+
+      Future<Map<String,dynamic>?> customerTrip() async {
+        try{
+          return await api.routeEstimate(
+            fromLat:pickupLat,
+            fromLng:pickupLng,
+            toLat:dropoffLat,
+            toLng:dropoffLng,
+          );
+        }catch(_){
+          return null;
+        }
+      }
+
+      final results=await Future.wait<Map<String,dynamic>?>([
+        activeLeg(),
+        customerTrip(),
+      ]);
+      if(mounted){
+        setState((){
+          etaInfo=results[0];
+          tripEtaInfo=results[1];
+        });
+      }
     }catch(_){
-      if(mounted)setState(()=>etaInfo=null);
+      // Route provider failures must not turn into a persistent generic
+      // course error. GPS sync and course data remain usable independently.
+      if(mounted){
+        setState((){
+          etaInfo=null;
+          tripEtaInfo=null;
+        });
+      }
     }
   }
 
@@ -1199,7 +1241,10 @@ class _RideScreenState extends State<RideScreen>{
         toLat:dropoffLat,
         toLng:dropoffLng,
       );
-      if(mounted&&position==null)setState(()=>etaInfo=route);
+      if(mounted)setState((){
+        tripEtaInfo=route;
+        if(position==null)etaInfo=route;
+      });
     }catch(_){}
   }
 
@@ -1300,6 +1345,7 @@ class _RideScreenState extends State<RideScreen>{
         final dropoff=dropoffLat==null||dropoffLng==null?null:LatLng(dropoffLat,dropoffLng);
         final driver=position==null?null:LatLng(position!.latitude,position!.longitude);
         final route=VeyraRouteGeometry.fromApi(etaInfo);
+        final tripRoute=VeyraRouteGeometry.fromApi(tripEtaInfo);
         final active={'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status);
 
         if(active&&!tracker.running&&!trackingStarting){
@@ -1312,7 +1358,7 @@ class _RideScreenState extends State<RideScreen>{
           });
         }
 
-        if(status=='CONFIRMED'&&etaInfo==null){
+        if(tripEtaInfo==null){
           WidgetsBinding.instance.addPostFrameCallback((_){
             _routePreview(pickupLat,pickupLng,dropoffLat,dropoffLng);
           });
@@ -1335,6 +1381,7 @@ class _RideScreenState extends State<RideScreen>{
                 driver:driver,
                 driverHeading:position?.heading,
                 route:route,
+                secondaryRoute:tripRoute,
                 userAgentPackageName:'com.veyra.driver',
               ),
             ),
@@ -1355,18 +1402,32 @@ class _RideScreenState extends State<RideScreen>{
                     (x['dropoff_address']??'Destination').toString(),
                   style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600),
                 ),
-                if(route.durationSeconds!=null||route.distanceMeters!=null)...[
-                  const SizedBox(height:12),
-                  Card(child:ListTile(
-                    leading:const Icon(Icons.route),
-                    title:Text(route.durationSeconds==null
-                      ?t('Itinéraire')
-                      :t('ETA : ')+VeyraMoneyFormatter.duration(route.durationSeconds)),
-                    subtitle:route.distanceMeters==null
-                      ?null
-                      :Text(VeyraMoneyFormatter.distance(route.distanceMeters)),
+                const SizedBox(height:12),
+                Row(children:[
+                  Expanded(child:_DriverEtaCard(
+                    icon:Icons.person_pin_circle_rounded,
+                    label:status=='IN_PROGRESS'?t('Client pris en charge'):t('Vers le client'),
+                    value:status=='DRIVER_ARRIVED'||status=='IN_PROGRESS'
+                      ?t('Arrivé')
+                      :(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds)),
+                    detail:status=='DRIVER_EN_ROUTE'&&route.distanceMeters!=null
+                      ?VeyraMoneyFormatter.distance(route.distanceMeters)
+                      :null,
+                    accent:const Color(0xFF2563EB),
                   )),
-                ],
+                  const SizedBox(width:10),
+                  Expanded(child:_DriverEtaCard(
+                    icon:Icons.flag_rounded,
+                    label:t('Client → destination'),
+                    value:status=='IN_PROGRESS'
+                      ?(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds))
+                      :(tripRoute.durationSeconds==null?'—':VeyraMoneyFormatter.duration(tripRoute.durationSeconds)),
+                    detail:status=='IN_PROGRESS'
+                      ?(route.distanceMeters==null?null:VeyraMoneyFormatter.distance(route.distanceMeters))
+                      :(tripRoute.distanceMeters==null?null:VeyraMoneyFormatter.distance(tripRoute.distanceMeters)),
+                    accent:const Color(0xFF111827),
+                  )),
+                ]),
                 if(x['customer_name']!=null)
                   Padding(
                     padding:const EdgeInsets.only(top:8),
@@ -1787,6 +1848,45 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
       const SizedBox(height:16),
       FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Continuer vers mon dossier VTC'))),
     ])),
+  );
+}
+
+
+class _DriverEtaCard extends StatelessWidget{
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? detail;
+  final Color accent;
+
+  const _DriverEtaCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.accent,
+  });
+
+  @override Widget build(BuildContext context)=>Container(
+    padding:const EdgeInsets.fromLTRB(12,12,12,11),
+    decoration:BoxDecoration(
+      color:accent.withValues(alpha:.07),
+      borderRadius:BorderRadius.circular(18),
+      border:Border.all(color:accent.withValues(alpha:.12)),
+    ),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Icon(icon,color:accent,size:20),
+      const SizedBox(height:8),
+      Text(label,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(
+        color:Color(0xFF6B7280),fontSize:11,fontWeight:FontWeight.w600,height:1.15,
+      )),
+      const SizedBox(height:4),
+      Text(value,style:TextStyle(color:accent,fontSize:18,fontWeight:FontWeight.w900)),
+      if(detail!=null)...[
+        const SizedBox(height:2),
+        Text(detail!,style:const TextStyle(color:Color(0xFF6B7280),fontSize:11)),
+      ],
+    ]),
   );
 }
 
