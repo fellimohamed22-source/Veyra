@@ -7,7 +7,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
 import 'app_locale.dart';
@@ -154,6 +156,45 @@ final router=GoRouter(
   ),
 );
 
+
+class VeyraPaginationBar extends StatelessWidget{
+  final int page;
+  final bool hasNext;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  const VeyraPaginationBar({
+    super.key,
+    required this.page,
+    required this.hasNext,
+    this.onPrevious,
+    this.onNext,
+  });
+
+  @override Widget build(BuildContext context)=>Padding(
+    padding:const EdgeInsets.only(top:14,bottom:4),
+    child:Row(children:[
+      Expanded(child:OutlinedButton.icon(
+        onPressed:page>0?onPrevious:null,
+        icon:const Icon(Icons.chevron_left),
+        label:Text(t('Précédent')),
+      )),
+      Padding(
+        padding:const EdgeInsets.symmetric(horizontal:14),
+        child:Text(
+          t('Page')+' '+(page+1).toString(),
+          style:const TextStyle(fontWeight:FontWeight.w700,color:Color(0xFF4B5563)),
+        ),
+      ),
+      Expanded(child:FilledButton.icon(
+        onPressed:hasNext?onNext:null,
+        icon:const Icon(Icons.chevron_right),
+        label:Text(t('Suivant')),
+      )),
+    ]),
+  );
+}
+
 class LoginScreen extends StatefulWidget{
   const LoginScreen({super.key});
   @override State<LoginScreen> createState()=>_LoginScreenState();
@@ -261,6 +302,152 @@ class _LoginScreenState extends State<LoginScreen>{
     }
   }
 
+  Future<void> _finishFirebase(UserCredential credential) async {
+    final token=await credential.user?.getIdToken();
+    if(token==null||token.isEmpty)throw StateError('FIREBASE_ID_TOKEN_MISSING');
+    await api.loginWithFirebase(token);
+    await configureDriverPush();
+    // Firebase login on the driver app provisions a minimal driver row in
+    // the backend. The onboarding flow then remains the single source of
+    // truth for KYC/vehicle eligibility.
+    final status=await api.onboardingStatus();
+    if(!mounted)return;
+    final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+    context.go(approved?'/home':'/kyc');
+  }
+
+  Future<void> _googleLogin() async {
+    setState((){loading=true;error=null;offline=false;});
+    try{
+      if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+      final account=await GoogleSignIn().signIn();
+      if(account==null)return;
+      final auth=await account.authentication;
+      final credential=GoogleAuthProvider.credential(
+        accessToken:auth.accessToken,
+        idToken:auth.idToken,
+      );
+      await _finishFirebase(
+        await FirebaseAuth.instance.signInWithCredential(credential),
+      );
+    }catch(e){
+      if(mounted)setState(()=>error=t('Connexion Google impossible. Vérifiez la configuration Firebase et réessayez.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  Future<String?> _askPhone() async {
+    final controller=TextEditingController(text:'+33');
+    final result=await showDialog<String>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Connexion par téléphone')),
+        content:TextField(
+          controller:controller,
+          keyboardType:TextInputType.phone,
+          autofocus:true,
+          decoration:InputDecoration(
+            labelText:t('Numéro de téléphone'),
+            hintText:'+33 6 12 34 56 78',
+          ),
+        ),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Annuler'))),
+          FilledButton(
+            onPressed:()=>Navigator.pop(dialogContext,controller.text.trim()),
+            child:Text(t('Envoyer le code')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<String?> _askSmsCode() async {
+    final controller=TextEditingController();
+    final result=await showDialog<String>(
+      context:context,
+      barrierDismissible:false,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Code SMS')),
+        content:TextField(
+          controller:controller,
+          keyboardType:TextInputType.number,
+          autofocus:true,
+          maxLength:6,
+          decoration:InputDecoration(labelText:t('Code à 6 chiffres')),
+        ),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Annuler'))),
+          FilledButton(
+            onPressed:()=>Navigator.pop(dialogContext,controller.text.trim()),
+            child:Text(t('Valider')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _phoneLogin() async {
+    final phone=await _askPhone();
+    if(phone==null||phone.isEmpty)return;
+    setState((){loading=true;error=null;offline=false;});
+    try{
+      if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+      final completer=Completer<void>();
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber:phone,
+        verificationCompleted:(credential)async{
+          if(completer.isCompleted)return;
+          try{
+            await _finishFirebase(
+              await FirebaseAuth.instance.signInWithCredential(credential),
+            );
+            completer.complete();
+          }catch(e){
+            completer.completeError(e);
+          }
+        },
+        verificationFailed:(e){
+          if(!completer.isCompleted)completer.completeError(e);
+        },
+        codeSent:(verificationId,_)async{
+          if(completer.isCompleted)return;
+          final code=await _askSmsCode();
+          if(code==null||code.isEmpty){
+            completer.complete();
+            return;
+          }
+          try{
+            final credential=PhoneAuthProvider.credential(
+              verificationId:verificationId,
+              smsCode:code,
+            );
+            await _finishFirebase(
+              await FirebaseAuth.instance.signInWithCredential(credential),
+            );
+            if(!completer.isCompleted)completer.complete();
+          }catch(e){
+            if(!completer.isCompleted)completer.completeError(e);
+          }
+        },
+        codeAutoRetrievalTimeout:(_){
+          if(!completer.isCompleted)completer.complete();
+        },
+      );
+      await completer.future;
+    }catch(e){
+      if(mounted)setState(()=>error=t('Connexion par téléphone impossible. Vérifiez le numéro ou le code SMS.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
     body:SafeArea(child:Column(children:[
@@ -308,6 +495,29 @@ class _LoginScreenState extends State<LoginScreen>{
         if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
         const SizedBox(height:20),
         VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
+        const SizedBox(height:14),
+        Row(children:[
+          const Expanded(child:Divider()),
+          Padding(
+            padding:const EdgeInsets.symmetric(horizontal:12),
+            child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
+          ),
+          const Expanded(child:Divider()),
+        ]),
+        const SizedBox(height:14),
+        OutlinedButton.icon(
+          onPressed:loading?null:_googleLogin,
+          icon:const Icon(Icons.g_mobiledata_rounded,size:28),
+          label:Text(t('Continuer avec Google')),
+          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
+        ),
+        const SizedBox(height:10),
+        OutlinedButton.icon(
+          onPressed:loading?null:_phoneLogin,
+          icon:const Icon(Icons.phone_android_rounded),
+          label:Text(t('Continuer avec le téléphone')),
+          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
+        ),
         TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte Chauffeur'))),
         TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
       ]))),
@@ -1734,9 +1944,43 @@ class _AccountScreenState extends State<AccountScreen>{
     setState(()=>loggingOut=true);
     try{
       await api.logout();
+      try{await FirebaseAuth.instance.signOut();}catch(_){}
+      try{await GoogleSignIn().signOut();}catch(_){}
     }finally{
       if(mounted)context.go('/login');
     }
+  }
+
+  Future<void> editProfile(Map<String,dynamic> me) async {
+    final first=TextEditingController(text:(me['first_name']??'').toString());
+    final last=TextEditingController(text:(me['last_name']??'').toString());
+    final phone=TextEditingController(text:(me['phone']??'').toString());
+    final save=await showDialog<bool>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Modifier mes informations')),
+        content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+          TextField(controller:first,decoration:InputDecoration(labelText:t('Prénom'))),
+          const SizedBox(height:10),
+          TextField(controller:last,decoration:InputDecoration(labelText:t('Nom'))),
+          const SizedBox(height:10),
+          TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
+        ])),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Annuler'))),
+          FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Enregistrer'))),
+        ],
+      ),
+    );
+    if(save==true&&first.text.trim().isNotEmpty){
+      final updated=await api.updateProfile(
+        firstName:first.text,
+        lastName:last.text,
+        phone:phone.text,
+      );
+      if(mounted)setState(()=>future=Future.value(updated));
+    }
+    first.dispose();last.dispose();phone.dispose();
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
@@ -1760,7 +2004,16 @@ class _AccountScreenState extends State<AccountScreen>{
           Card(child:ListTile(
             leading:const CircleAvatar(child:Icon(Icons.person)),
             title:Text('$firstName $lastName'.trim().isEmpty?t('Chauffeur Veyra'):'$firstName $lastName'.trim()),
-            subtitle:Text(email),
+            subtitle:Text([
+              email,
+              if((me['phone']??'').toString().isNotEmpty)(me['phone']??'').toString(),
+            ].join('\n')),
+            isThreeLine:(me['phone']??'').toString().isNotEmpty,
+            trailing:IconButton(
+              tooltip:t('Modifier'),
+              icon:const Icon(Icons.edit_outlined),
+              onPressed:()=>editProfile(me),
+            ),
           )),
           const SizedBox(height:16),
           const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
