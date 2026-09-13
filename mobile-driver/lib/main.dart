@@ -1068,6 +1068,7 @@ class _RideScreenState extends State<RideScreen>{
   bool ratingSubmitting=false;
   bool ratingSubmitted=false;
   bool trackingStarting=false;
+  bool routePreviewLoading=false;
 
   @override void initState(){
     super.initState();
@@ -1233,7 +1234,9 @@ class _RideScreenState extends State<RideScreen>{
     double? dropoffLat,
     double? dropoffLng,
   ) async {
-    if(pickupLat==null||pickupLng==null||dropoffLat==null||dropoffLng==null)return;
+    if(routePreviewLoading||
+       pickupLat==null||pickupLng==null||dropoffLat==null||dropoffLng==null)return;
+    routePreviewLoading=true;
     try{
       final route=await api.routeEstimate(
         fromLat:pickupLat,
@@ -1242,7 +1245,11 @@ class _RideScreenState extends State<RideScreen>{
         toLng:dropoffLng,
       );
       if(mounted)setState(()=>tripEtaInfo=route);
-    }catch(_){}
+    }catch(_){
+      // Keep the course usable if routing is temporarily unavailable.
+    }finally{
+      routePreviewLoading=false;
+    }
   }
 
   Future<void> action(
