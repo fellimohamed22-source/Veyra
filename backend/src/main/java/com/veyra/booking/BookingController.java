@@ -83,10 +83,28 @@ import java.util.*;
             "offerWindowEndsAt",
         close));
     }
-    @GetMapping("/scheduled-bookings") List<Map<String,Object>> mine(){
-        return db.queryForList("select id,creator_type,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id from scheduled_bookings where creator_user_id=? order by scheduled_at desc",CurrentUser.id());
+    @GetMapping("/scheduled-bookings") List<Map<String,Object>> mine(
+        @RequestParam(defaultValue="0") int page,
+        @RequestParam(required=false) String status,
+        @RequestParam(defaultValue="desc") String sort){
+        int safePage=Math.max(0,page);
+        String direction="asc".equalsIgnoreCase(sort)?"asc":"desc";
+        StringBuilder sql=new StringBuilder(
+            "select id,creator_type,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id " +
+            "from scheduled_bookings where creator_user_id=?");
+        List<Object> params=new ArrayList<>();
+        params.add(CurrentUser.id());
+        if(status!=null&&!status.isBlank()&&!"ALL".equalsIgnoreCase(status)){
+            sql.append(" and status=?");
+            params.add(status.trim().toUpperCase(Locale.ROOT));
+        }
+        sql.append(" order by scheduled_at ").append(direction)
+           .append(" limit 10 offset ").append(safePage*10);
+        return db.queryForList(sql.toString(),params.toArray());
     }
-    @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(    @RequestParam(defaultValue="date")String sort,    @RequestParam(required=false)UUID categoryId,    @RequestParam(required=false)OffsetDateTime from,    @RequestParam(required=false)OffsetDateTime to,    @RequestParam(required=false)Integer minPassengers,    @RequestParam(required=false)String pickupQuery,    @RequestParam(required=false)String destinationQuery){
+    @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(
+        @RequestParam(defaultValue="0") int page,
+        @RequestParam(defaultValue="date")String sort,    @RequestParam(required=false)UUID categoryId,    @RequestParam(required=false)OffsetDateTime from,    @RequestParam(required=false)OffsetDateTime to,    @RequestParam(required=false)Integer minPassengers,    @RequestParam(required=false)String pickupQuery,    @RequestParam(required=false)String destinationQuery){
         UUID d=driver();
         eligible(d);
         String order=switch(sort){
@@ -127,7 +145,8 @@ import java.util.*;
             sql.append(" and dropoff_address ilike ?");
             params.add("%"+destinationQuery.trim()+"%");
         }
-        sql.append(" order by ").append(order).append(" limit 100");
+        sql.append(" order by ").append(order)
+           .append(" limit 10 offset ").append(Math.max(0,page)*10);
         return db.queryForList(sql.toString(),params.toArray());
     }
     @PostMapping("/driver/opportunities/{bookingId}/offers") @Transactional ResponseEntity<Map<String,Object>> offer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
@@ -211,11 +230,13 @@ import java.util.*;
         }
         return response;
     }
-    @GetMapping("/scheduled-bookings/{bookingId}/offers") List<Map<String,Object>> ownerOffers(@PathVariable UUID bookingId){
+    @GetMapping("/scheduled-bookings/{bookingId}/offers") List<Map<String,Object>> ownerOffers(
+        @PathVariable UUID bookingId,
+        @RequestParam(defaultValue="0") int page){
         Map<String,Object>b=one("select creator_user_id,partner_id from scheduled_bookings where id=?",bookingId);
         owner(b);
         int rate=rate((UUID)b.get("partner_id"));
-            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id left join vehicles v on v.driver_id=d.id and v.status='APPROVED' left join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' order by o.proposed_amount_minor",(rs,
+            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id left join vehicles v on v.driver_id=d.id and v.status='APPROVED' left join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' order by o.proposed_amount_minor limit 10 offset "+(Math.max(0,page)*10),(rs,
             n)->{
                 long p=rs.getLong("proposed_amount_minor"),commissionAmount=commission(p,
                 rate);
