@@ -1,6 +1,7 @@
 package com.veyra.location;
 import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
+import com.veyra.shared.DbTime;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -27,7 +28,7 @@ import java.util.*;
             Map<String,Object> old=previous.getFirst();
             UUID oldBooking=(UUID)old.get("booking_id");
             long oldSequence=((Number)old.get("sequence_no")).longValue();
-            OffsetDateTime oldRecorded=(OffsetDateTime)old.get("recorded_at");
+            OffsetDateTime oldRecorded=DbTime.toOffsetDateTime(old.get("recorded_at"));
             // sequence_no belongs to one app tracking stream. Reinstalling or
             // restarting the app must not permanently brick live tracking:
             // a genuinely newer GPS fix for the same booking is accepted even
