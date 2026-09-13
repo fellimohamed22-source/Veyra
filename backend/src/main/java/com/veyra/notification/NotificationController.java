@@ -16,7 +16,7 @@ public class NotificationController {
   }
 
   @GetMapping
-  public List<Map<String,Object>> mine(){
+  public List<Map<String,Object>> mine(@RequestParam(defaultValue="0") int page){
     return db.queryForList(
       "select n.id,n.event_type,n.channel,n.template_code,n.status,n.data,n.sent_at,n.created_at," +
       "sb.id as booking_id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status as booking_status," +
@@ -27,7 +27,7 @@ public class NotificationController {
       "left join driver_offers o on o.id=(nullif(n.data->>'offerId',''))::uuid " +
       "left join drivers d on d.id=o.driver_id " +
       "left join users u on u.id=d.user_id " +
-      "where n.user_id=? order by n.created_at desc limit 100",
+      "where n.user_id=? order by n.created_at desc limit 10 offset "+(Math.max(0,page)*10),
       CurrentUser.id());
   }
 }
