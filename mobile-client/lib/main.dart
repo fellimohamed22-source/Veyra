@@ -1937,12 +1937,14 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       final booking=await api.bookingDetail(widget.bookingId);
       final live=await api.currentLocation(widget.bookingId);
       if(!mounted)return;
+      final hadLiveLocation=location?['available']==true;
+      final hasLiveLocation=live['available']==true;
       setState((){
         bookingMap=booking;
         location=live;
         error=null;
       });
-      await _refreshEta();
+      await _refreshEta(force:!hadLiveLocation&&hasLiveLocation);
     }catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }
@@ -1963,7 +1965,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       };
       error=null;
     });
-    if(etaInfo==null)unawaited(_refreshEta());
+    if(etaInfo==null)unawaited(_refreshEta(force:true));
   }
 
   DateTime? get _recordedAt {
@@ -1983,7 +1985,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     final booking=bookingMap;
     if(booking==null)return;
     final now=DateTime.now();
-    if(!force&&etaInfo!=null&&lastEtaRefresh!=null&&
+    if(!force&&lastEtaRefresh!=null&&
        now.difference(lastEtaRefresh!)<const Duration(seconds:30)){
       return;
     }
