@@ -118,7 +118,8 @@ public class AuthController {
       throw new ApiException(HttpStatus.UNAUTHORIZED,"INVALID_FIREBASE_TOKEN");
     }
 
-    String phone=decoded.getPhoneNumber();
+    Object phoneClaim=decoded.getClaims().get("phone_number");
+    String phone=phoneClaim==null?null:phoneClaim.toString();
     String email=decoded.getEmail();
     if((email==null||email.isBlank())&&phone!=null&&!phone.isBlank()){
       List<String> existing=db.queryForList(
