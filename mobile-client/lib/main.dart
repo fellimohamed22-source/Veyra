@@ -1888,6 +1888,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Map<String,dynamic>? bookingMap;
   Map<String,dynamic>? etaInfo;
   Map<String,dynamic>? tripEtaInfo;
+  DateTime? lastEtaRefresh;
   String? error;
   bool loading=true;
 
@@ -1921,7 +1922,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
         error=null;
         loading=false;
       });
-      await _refreshEta();
+      await _refreshEta(force:true);
     }catch(e){
       if(!mounted)return;
       setState((){
@@ -1977,10 +1978,16 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     return DateTime.now().toUtc().difference(dt.toUtc())>_staleThreshold;
   }
 
-  Future<void> _refreshEta() async {
+  Future<void> _refreshEta({bool force=false}) async {
     final live=location;
     final booking=bookingMap;
     if(booking==null)return;
+    final now=DateTime.now();
+    if(!force&&etaInfo!=null&&lastEtaRefresh!=null&&
+       now.difference(lastEtaRefresh!)<const Duration(seconds:30)){
+      return;
+    }
+    lastEtaRefresh=now;
 
     final pickupLat=(booking['pickup_lat'] as num?)?.toDouble();
     final pickupLng=(booking['pickup_lng'] as num?)?.toDouble();
