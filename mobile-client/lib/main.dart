@@ -1902,7 +1902,10 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
 
     // WebSocket is primary; HTTP polling remains a resilient fallback
     // for captive portals, proxies or short-lived socket interruptions.
-    fallbackTimer=Timer.periodic(const Duration(seconds:15),(_)=>_refreshSnapshot());
+    // Fast fallback until/while WebSocket delivery is unavailable. The route
+    // itself is still throttled separately, but the first GPS fix should not
+    // leave the customer staring at "waiting for GPS" for 15 seconds.
+    fallbackTimer=Timer.periodic(const Duration(seconds:5),(_)=>_refreshSnapshot());
     etaTimer=Timer.periodic(const Duration(seconds:30),(_)=>_refreshEta());
   }
 
