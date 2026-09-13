@@ -1241,10 +1241,7 @@ class _RideScreenState extends State<RideScreen>{
         toLat:dropoffLat,
         toLng:dropoffLng,
       );
-      if(mounted)setState((){
-        tripEtaInfo=route;
-        if(position==null)etaInfo=route;
-      });
+      if(mounted)setState(()=>tripEtaInfo=route);
     }catch(_){}
   }
 
