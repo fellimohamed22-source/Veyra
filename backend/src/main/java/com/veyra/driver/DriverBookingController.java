@@ -18,17 +18,25 @@ public class DriverBookingController {
   }
 
   @GetMapping
-  public List<Map<String, Object>> mine(@RequestParam(defaultValue="upcoming") String scope) {
+  public List<Map<String, Object>> mine(
+      @RequestParam(defaultValue="upcoming") String scope,
+      @RequestParam(defaultValue="0") int page,
+      @RequestParam(required=false) String status,
+      @RequestParam(defaultValue="asc") String sort) {
     UUID driverId = driverId();
     String states = "('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')";
     if ("history".equals(scope)) {
       states = "('COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW')";
     }
+    String statusClause=(status!=null&&!status.isBlank()&&!"ALL".equalsIgnoreCase(status))
+        ?" and sb.status='"+status.replace("'","").toUpperCase(Locale.ROOT)+"'":"";
+    String direction="desc".equalsIgnoreCase(sort)?"desc":"asc";
     return db.queryForList(
         "select sb.id,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,sb.scheduled_at,sb.status," +
         "sb.payment_method,sb.passenger_count,sb.baggage_count,bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency " +
         "from scheduled_bookings sb left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
-        "where sb.selected_driver_id=? and sb.status in " + states + " order by sb.scheduled_at asc",
+        "where sb.selected_driver_id=? and sb.status in " + states + statusClause +
+        " order by sb.scheduled_at "+direction+" limit 10 offset "+(Math.max(0,page)*10),
         driverId);
   }
 
