@@ -27,6 +27,8 @@ public class DriverBookingController {
     String states = "('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')";
     if ("history".equals(scope)) {
       states = "('COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW')";
+    } else if ("all".equals(scope)) {
+      states = "('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW')";
     }
     String statusClause=(status!=null&&!status.isBlank()&&!"ALL".equalsIgnoreCase(status))
         ?" and sb.status='"+status.replace("'","").toUpperCase(Locale.ROOT)+"'":"";
