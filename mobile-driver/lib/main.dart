@@ -981,9 +981,9 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
 
   void _changePage(String scope,int delta){
     setState((){
-      if(scope=='active')activePage=Math.max(0,activePage+delta);
-      if(scope=='won')wonPage=Math.max(0,wonPage+delta);
-      if(scope=='closed')closedPage=Math.max(0,closedPage+delta);
+      if(scope=='active')activePage=(activePage+delta).clamp(0,1<<30);
+      if(scope=='won')wonPage=(wonPage+delta).clamp(0,1<<30);
+      if(scope=='closed')closedPage=(closedPage+delta).clamp(0,1<<30);
       _load();
     });
   }
