@@ -53,7 +53,7 @@ class DriverOffersControllerTest {
     when(db.queryForList(contains("o.status='ACTIVE'"), eq(driverId)))
         .thenReturn(List.of(Map.of("offer_id", UUID.randomUUID(), "status", "ACTIVE")));
 
-    List<Map<String, Object>> result = controller().list("active");
+    List<Map<String, Object>> result = controller().list("active",0);
 
     assertEquals(1, result.size());
     verify(db).queryForList(contains("where o.driver_id=? and o.status='ACTIVE'"), eq(driverId));
@@ -63,7 +63,7 @@ class DriverOffersControllerTest {
   void wonScopeFiltersByAcceptedStatus() {
     when(db.queryForList(contains("o.status='ACCEPTED'"), eq(driverId))).thenReturn(List.of());
 
-    controller().list("won");
+    controller().list("won",0);
 
     verify(db).queryForList(contains("o.status='ACCEPTED'"), eq(driverId));
   }
@@ -72,15 +72,15 @@ class DriverOffersControllerTest {
   void closedScopeCoversRejectedExpiredAndWithdrawn() {
     when(db.queryForList(contains("REJECTED_BY_SELECTION"), eq(driverId))).thenReturn(List.of());
 
-    controller().list("closed");
+    controller().list("closed",0);
 
     verify(db).queryForList(
-        contains("o.status in ('REJECTED_BY_SELECTION','EXPIRED','WITHDRAWN')"), eq(driverId));
+        contains("o.status in ('REJECTED_BY_SELECTION','EXPIRED','WITHDRAWN','SUPERSEDED')"), eq(driverId));
   }
 
   @Test
   void rejectsAnyScopeOutsideTheAllowedThree() {
-    assertThrows(ApiException.class, () -> controller().list("everything"));
+    assertThrows(ApiException.class, () -> controller().list("everything",0));
   }
 
   @Test
