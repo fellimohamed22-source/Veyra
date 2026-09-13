@@ -577,12 +577,23 @@ class HomeScreen extends StatefulWidget{
 }
 class _HomeScreenState extends State<HomeScreen> with RouteAware{
   late Future<List<dynamic>> future;
+  int page=0;
+  String status='ALL';
+  String sort='desc';
+
   @override void initState(){
     super.initState();
-    future=api.bookings();
+    future=_load();
     RefreshBus.tick.addListener(retry);
   }
-  void retry()=>setState((){future=api.bookings();});
+
+  Future<List<dynamic>> _load()=>api.bookings(
+    page:page,
+    status:status=='ALL'?null:status,
+    sort:sort,
+  );
+
+  void retry()=>setState((){future=_load();});
 
   @override void didChangeDependencies(){
     super.didChangeDependencies();
@@ -616,6 +627,49 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
     body:RefreshIndicator(
       onRefresh:()async{retry();await future;},
       child:ListView(padding:const EdgeInsets.all(20),children:[
+        Row(children:[
+          Expanded(child:DropdownButtonFormField<String>(
+            initialValue:status,
+            decoration:InputDecoration(labelText:t('État')),
+            items:[
+              DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
+              DropdownMenuItem(value:'OPEN_FOR_OFFERS',child:Text(t('En attente d’offres'))),
+              DropdownMenuItem(value:'OFFERS_RECEIVED',child:Text(t('Offres reçues'))),
+              DropdownMenuItem(value:'CONFIRMED',child:Text(t('Confirmée'))),
+              DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('Chauffeur en route'))),
+              DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Chauffeur arrivé'))),
+              DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
+              DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
+              DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
+            ],
+            onChanged:(v){
+              if(v==null)return;
+              setState((){
+                status=v;
+                page=0;
+                future=_load();
+              });
+            },
+          )),
+          const SizedBox(width:10),
+          Expanded(child:DropdownButtonFormField<String>(
+            initialValue:sort,
+            decoration:InputDecoration(labelText:t('Date')),
+            items:[
+              DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
+              DropdownMenuItem(value:'asc',child:Text(t('Plus anciennes'))),
+            ],
+            onChanged:(v){
+              if(v==null)return;
+              setState((){
+                sort=v;
+                page=0;
+                future=_load();
+              });
+            },
+          )),
+        ]),
+        const SizedBox(height:14),
         FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
@@ -636,7 +690,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
                 subtitle:Text(t('Votre prochain trajet apparaîtra ici.')),
               ));
             }
-            return Column(children:items.map((raw){
+            return Column(children:[
+              ...items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               final scheduled=VeyraDateFormatter.relativeDay(x['scheduled_at']);
@@ -664,7 +719,24 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
                   },
                 ),
               );
-            }).toList());
+            }).toList(),
+              VeyraPaginationBar(
+                page:page,
+                hasNext:items.length==10,
+                onPrevious:(){
+                  setState((){
+                    page--;
+                    future=_load();
+                  });
+                },
+                onNext:(){
+                  setState((){
+                    page++;
+                    future=_load();
+                  });
+                },
+              ),
+            ]);
           },
         ),
       ]),
@@ -696,7 +768,7 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
 
   void _load(){
     me=api.me();
-    bookings=api.bookings();
+    bookings=api.bookings(sort:'asc');
   }
 
   // ATTENTION -- non vérifié sur appareil réel (pas de SDK Flutter dans
@@ -1550,9 +1622,11 @@ class _OffersScreenState extends State<OffersScreen>{
   late Future<Map<String,dynamic>> bookingFuture;
   String? error;
   String? acceptingOfferId;
+  int page=0;
+
   @override void initState(){
     super.initState();
-    future=api.offers(widget.bookingId);
+    future=api.offers(widget.bookingId,page:page);
     // Real gap fixed here: this screen only ever fetched the offers
     // list, never the booking's own details -- someone landing here
     // before any offer exists (the normal, expected state right after
@@ -1614,8 +1688,8 @@ class _OffersScreenState extends State<OffersScreen>{
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
           if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-            ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId);}))
-            :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
+            ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId,page:page);}))
+            :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId,page:page);}));
           final items=s.data??[];
           if(items.isEmpty)return Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.')));
           return Column(children:[
@@ -1662,6 +1736,22 @@ class _OffersScreenState extends State<OffersScreen>{
               ])),
             );
           }),
+            VeyraPaginationBar(
+              page:page,
+              hasNext:items.length==10,
+              onPrevious:(){
+                setState((){
+                  page--;
+                  future=api.offers(widget.bookingId,page:page);
+                });
+              },
+              onNext:(){
+                setState((){
+                  page++;
+                  future=api.offers(widget.bookingId,page:page);
+                });
+              },
+            ),
           ]);
         },
       ),
@@ -2818,13 +2908,14 @@ class NotificationsScreen extends StatefulWidget{
 
 class _NotificationsScreenState extends State<NotificationsScreen>{
   late Future<List<dynamic>> future;
+  int page=0;
 
   @override void initState(){
     super.initState();
-    future=api.notifications();
+    future=api.notifications(page:page);
   }
 
-  void reload()=>setState(()=>future=api.notifications());
+  void reload()=>setState(()=>future=api.notifications(page:page));
 
   IconData _iconFor(String template,String event){
     if(template=='NEW_OFFER')return Icons.local_offer_rounded;
@@ -2920,9 +3011,27 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
 
           return ListView.separated(
             padding:const EdgeInsets.fromLTRB(16,12,16,28),
-            itemCount:items.length,
+            itemCount:items.length+1,
             separatorBuilder:(_,__)=>const SizedBox(height:10),
             itemBuilder:(context,index){
+              if(index==items.length){
+                return VeyraPaginationBar(
+                  page:page,
+                  hasNext:items.length==10,
+                  onPrevious:(){
+                    setState((){
+                      page--;
+                      future=api.notifications(page:page);
+                    });
+                  },
+                  onNext:(){
+                    setState((){
+                      page++;
+                      future=api.notifications(page:page);
+                    });
+                  },
+                );
+              }
               final x=Map<String,dynamic>.from(items[index] as Map);
               final data=x['data'] is Map
                 ?Map<String,dynamic>.from(x['data'] as Map)
