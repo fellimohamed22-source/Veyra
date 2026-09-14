@@ -78,7 +78,7 @@ class FinanceControllerTransactionsTest {
   void neverExposesThePlatformsOwnCounterAccounts() {
     when(db.queryForList(anyString(), eq(driverId))).thenReturn(List.of());
 
-    controller().transactions();
+    controller().transactions(0);
 
     verify(db).queryForList(
         argThat(sql -> sql.contains("'DRIVER_PAYABLE','DRIVER_PLATFORM_DEBT'") &&
