@@ -88,6 +88,6 @@ class DriverOffersControllerTest {
     when(db.queryForList(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
         .thenReturn(List.of());
 
-    assertThrows(ApiException.class, () -> controller().list("active"));
+    assertThrows(ApiException.class, () -> controller().list("active",0));
   }
 }
