@@ -70,7 +70,11 @@ jobs:
 
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
 
+      # Artifact upload is intentionally non-blocking: GitHub can reject
+      # uploads when the repository Actions storage quota is full even
+      # though the APK itself compiled successfully.
       - name: Upload Client APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: veyra-client-apk
@@ -127,7 +131,10 @@ jobs:
 
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
 
+      # Artifact upload is intentionally non-blocking for the same quota
+      # reason as the client job. Build success remains authoritative.
       - name: Upload Driver APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: veyra-driver-apk
