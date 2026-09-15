@@ -158,6 +158,14 @@ jobs:
           name: veyra-client-apk
           path: veyra-client-debug.apk
           if-no-files-found: error
+          # Cause réelle du quota de stockage dépassé : aucune rétention
+          # n'était définie ici, donc valeur par défaut du dépôt
+          # (généralement 90 jours) -- 244 artefacts APK de debug
+          # (~80-99 Mo chacun, ~9+ Go) s'étaient accumulés en quelques
+          # jours seulement, un build par push sur chaque branche/PR.
+          # Un APK de debug CI n'a de valeur que pour tester le tout
+          # dernier build ; 3 jours suffisent largement.
+          retention-days: 3
 
       - name: Upload Driver APK
         uses: actions/upload-artifact@v4
@@ -165,3 +173,4 @@ jobs:
           name: veyra-driver-apk
           path: veyra-driver-debug.apk
           if-no-files-found: error
+          retention-days: 3
