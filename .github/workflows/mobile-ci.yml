@@ -11,12 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
-        with: {channel: stable}
+        with:
+          channel: stable
+          flutter-version: '3.47.4'
       - run: cd mobile-client && flutter pub get && flutter analyze && flutter test
   driver:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
-        with: {channel: stable}
+        with:
+          channel: stable
+          flutter-version: '3.47.4'
       - run: cd mobile-driver && flutter pub get && flutter analyze && flutter test
