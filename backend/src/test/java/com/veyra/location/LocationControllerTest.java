@@ -34,8 +34,8 @@ class LocationControllerTest {
   private LocationController controller(UUID userId,UUID driverId,UUID bookingId){
     SecurityContextHolder.getContext().setAuthentication(
         new TestingAuthenticationToken(userId,null,"ROLE_DRIVER"));
-    when(db.queryForObject(contains("select id from drivers"),eq(UUID.class),eq(userId)))
-        .thenReturn(driverId);
+    when(db.queryForList(contains("select id from drivers"),eq(UUID.class),eq(userId)))
+        .thenReturn(List.of(driverId));
     when(db.queryForObject(contains("select count(*) from scheduled_bookings"),eq(Integer.class),eq(bookingId),eq(driverId)))
         .thenReturn(1);
     return new LocationController(db,ws);
