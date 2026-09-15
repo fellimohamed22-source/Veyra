@@ -1,6 +1,8 @@
 package com.veyra.finance;
 
 import com.veyra.security.CurrentUser;
+import com.veyra.shared.ApiException;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +19,7 @@ public class FinanceController {
 
   @GetMapping("/driver/wallet")
   public Map<String, Object> wallet() {
-    UUID driverId = db.queryForObject(
-        "select id from drivers where user_id=?",
-        UUID.class,
-        CurrentUser.id());
+    UUID driverId = currentDriverId();
 
     Long debt = db.queryForObject(
         "select coalesce(sum(amount_minor-paid_amount_minor),0) " +
@@ -79,12 +78,17 @@ public class FinanceController {
   // never the platform's own counter-entry on the same transaction
   // (PLATFORM_REVENUE, PAYMENT_PROCESSOR_CLEARING, PARTNER_RECEIVABLE),
   // which is none of this driver's business to see.
+  private UUID currentDriverId() {
+    List<UUID> ids=db.queryForList(
+        "select id from drivers where user_id=?",
+        UUID.class,CurrentUser.id());
+    if(ids.isEmpty()) throw new ApiException(HttpStatus.CONFLICT,"DRIVER_PROFILE_REQUIRED");
+    return ids.getFirst();
+  }
+
   @GetMapping("/driver/wallet/transactions")
   public List<Map<String,Object>> transactions(@RequestParam(defaultValue="0") int page) {
-    UUID driverId = db.queryForObject(
-        "select id from drivers where user_id=?",
-        UUID.class,
-        CurrentUser.id());
+    UUID driverId = currentDriverId();
 
     return db.queryForList(
         "select lt.id,lt.event_type,lt.description,lt.booking_id,lt.created_at," +
