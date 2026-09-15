@@ -237,13 +237,20 @@ class _LoginScreenState extends State<LoginScreen>{
   }
 
   Future<void> _restoreSession()async{
-    String? token;
+    String? accessToken;
+    String? refreshToken;
     try{
-      token=await api.storage.read(key:'accessToken');
+      accessToken=await api.storage.read(key:'accessToken');
+      refreshToken=await api.storage.read(key:'refreshToken');
     }catch(_){
       return;
     }
-    if(token==null||!mounted)return;
+    // A refresh token is itself a valid persisted session. Requiring an
+    // access token here stranded users after an interrupted token rotation
+    // even though the Dio interceptor can transparently refresh them.
+    final hasSession=(accessToken!=null&&accessToken.isNotEmpty)||
+        (refreshToken!=null&&refreshToken.isNotEmpty);
+    if(!hasSession||!mounted)return;
     setState((){startupChecking=true;startupRetryAvailable=false;});
     try{
       final status=await api.onboardingStatus();
