@@ -43,8 +43,8 @@ class DriverCancellationControllerTest {
   @BeforeEach
   void setUpSecurityContext() {
     SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(userId, null));
-    lenient().when(db.queryForObject(eq("select id from drivers where user_id=?"), eq(UUID.class), any(Object[].class)))
-        .thenReturn(driverId);
+    lenient().when(db.queryForList(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
+        .thenReturn(List.of(driverId));
     // No captured payment by default -- most scenarios here aren't about
     // the refund path specifically.
     lenient().when(db.queryForList(contains("from payments"), any(Object[].class))).thenReturn(List.of());
