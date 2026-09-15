@@ -30,9 +30,13 @@ public class DriverCancellationController {
       @PathVariable UUID bookingId,
       @RequestBody(required=false) CancelRequest request){
 
-    UUID driverId=db.queryForObject(
+    List<UUID> driverIds=db.queryForList(
         "select id from drivers where user_id=?",
         UUID.class,CurrentUser.id());
+    if(driverIds.isEmpty()){
+      throw new ApiException(HttpStatus.FORBIDDEN,"DRIVER_PROFILE_REQUIRED");
+    }
+    UUID driverId=driverIds.getFirst();
 
     List<Map<String,Object>> rows=db.queryForList(
         "select id,status,scheduled_at,payment_method,selected_driver_id " +
