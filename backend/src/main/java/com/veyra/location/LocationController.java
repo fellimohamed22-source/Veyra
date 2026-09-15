@@ -18,7 +18,9 @@ import java.util.*;
     public record Pos(UUID bookingId,double lat,double lng,Double accuracyM,Double heading,Double speedMps,long sequenceNo,OffsetDateTime recordedAt){
     }
     @PostMapping void update(@RequestBody Pos p){
-        UUID d=db.queryForObject("select id from drivers where user_id=?",UUID.class,CurrentUser.id());
+        List<UUID> drivers=db.queryForList("select id from drivers where user_id=?",UUID.class,CurrentUser.id());
+        if(drivers.isEmpty())throw new ApiException(HttpStatus.FORBIDDEN,"DRIVER_PROFILE_REQUIRED");
+        UUID d=drivers.getFirst();
         Integer ok=db.queryForObject("select count(*) from scheduled_bookings where id=? and selected_driver_id=? and status in ('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')",Integer.class,p.bookingId(),d);
         if(ok==0)throw new ApiException(HttpStatus.FORBIDDEN,"LOCATION_NOT_ALLOWED");
         List<Map<String,Object>> previous=db.queryForList(
