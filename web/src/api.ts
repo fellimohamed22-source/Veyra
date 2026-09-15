@@ -2,7 +2,22 @@ import {Injectable} from '@angular/core';
 
 @Injectable({providedIn:'root'})
 export class Api {
-  base='/api/v1';
+  // Corrigé : un chemin relatif ('/api/v1') supposait que ce front
+  // serait servi depuis la même origine que le backend -- vrai en dev
+  // local (proxy Angular), faux une fois déployé comme site statique
+  // séparé. Confirmé via la documentation officielle Render avant de
+  // corriger : "The static site is a passive bundle of files. It never
+  // proxies traffic." -- un site statique ne peut PAS rediriger /api/*
+  // vers un serveur externe via une règle de réécriture (la destination
+  // doit être un chemin interne, jamais une URL complète). D'où
+  // l'échec silencieux de la tentative précédente (render.yaml avec une
+  // règle de réécriture vers une URL absolue, rejetée par Render même
+  // si le site lui-même s'est déployé avec succès).
+  // URL absolue en dur plutôt qu'un fichier d'environnement Angular :
+  // un seul backend réel existe pour ce projet, l'ajout d'un système de
+  // configuration multi-environnement serait une complexité sans
+  // bénéfice réel ici.
+  base='https://veyra-wr6p.onrender.com/api/v1';
   private refreshPromise:Promise<boolean>|null=null;
 
   async request(path:string,init:RequestInit={},retried=false):Promise<any>{

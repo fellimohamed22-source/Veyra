@@ -14,18 +14,19 @@ services:
     # dist/<project>/browser/, pas dist/<project>/ directement.
     staticPublishPath: web/dist/veyra-web/browser
     routes:
-      # Fait passer chaque requête API par ce même domaine plutôt que par
-      # l'URL directe du backend -- évite tout besoin de configuration
-      # CORS, puisque le code de l'app (api.ts) utilise déjà un chemin
-      # relatif "/api/v1" en dur, pensé pour être servi depuis la même
-      # origine que le backend. Garder ce comportement tel quel plutôt
-      # que de modifier le code pour pointer vers une URL absolue.
-      - type: rewrite
-        source: /api/*
-        destination: https://veyra-wr6p.onrender.com/api/*
-      # Route de secours SPA -- Angular gère son propre routage côté
-      # client (rechargement sur /login, /partner, etc. doit renvoyer
-      # index.html, pas une 404 du serveur statique).
+      # Fallback SPA -- Angular gère son propre routage côté client
+      # (rechargement sur /login, /partner, etc. doit renvoyer
+      # index.html, pas une 404 du serveur statique). Chemin interne,
+      # donc syntaxe valide pour un site statique Render.
+      #
+      # Contrairement à une version précédente de ce fichier : PAS de
+      # règle de réécriture /api/* -> URL externe ici. Confirmé via la
+      # documentation officielle Render qu'un site statique "never
+      # proxies traffic" -- la destination d'une règle doit être un
+      # chemin interne, jamais une URL complète. L'appel API se fait
+      # maintenant directement vers l'URL absolue du backend, configurée
+      # dans web/src/api.ts (avec l'origine de ce site ajoutée à
+      # VEYRA_ALLOWED_ORIGINS côté backend une fois son URL connue).
       - type: rewrite
         source: /*
         destination: /index.html
