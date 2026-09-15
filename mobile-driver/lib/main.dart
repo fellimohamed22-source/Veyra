@@ -286,13 +286,13 @@ class _LoginScreenState extends State<LoginScreen>{
       await configureDriverPush();
       await api.createProfile();
       if(!mounted)return;
-      try{
-        final status=await api.onboardingStatus();
-        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
-        context.go(approved?'/home':'/kyc');
-      }catch(_){
-        context.go('/kyc');
-      }
+      // Do not reinterpret a timeout/5xx while loading onboarding status as
+      // "the driver needs KYC". Let the outer error handling preserve the
+      // authenticated session and present the technical failure instead.
+      final status=await api.onboardingStatus();
+      if(!mounted)return;
+      final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+      context.go(approved?'/home':'/kyc');
     }catch(e){
       if(!mounted)return;
       final isOffline=e is DioException&&(
