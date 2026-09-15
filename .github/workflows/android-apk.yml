@@ -12,6 +12,11 @@ on:
 jobs:
   build-apks:
     runs-on: ubuntu-latest
+    # Nécessaire pour créer/mettre à jour une Release via gh -- le
+    # GITHUB_TOKEN par défaut n'a que l'accès lecture au contenu du
+    # dépôt sauf déclaration explicite.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -152,25 +157,29 @@ jobs:
           flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
 
-      - name: Upload Client APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: veyra-client-apk
-          path: veyra-client-debug.apk
-          if-no-files-found: error
-          # Cause réelle du quota de stockage dépassé : aucune rétention
-          # n'était définie ici, donc valeur par défaut du dépôt
-          # (généralement 90 jours) -- 244 artefacts APK de debug
-          # (~80-99 Mo chacun, ~9+ Go) s'étaient accumulés en quelques
-          # jours seulement, un build par push sur chaque branche/PR.
-          # Un APK de debug CI n'a de valeur que pour tester le tout
-          # dernier build ; 3 jours suffisent largement.
-          retention-days: 3
-
-      - name: Upload Driver APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: veyra-driver-apk
-          path: veyra-driver-debug.apk
-          if-no-files-found: error
-          retention-days: 3
+      - name: Publish APKs as a GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Real fix for the persistent "Artifact storage quota has
+          # been hit" failure (actions/upload-artifact): GitHub Release
+          # assets are a completely separate storage mechanism from
+          # Actions artifact storage -- a different quota entirely, not
+          # subject to the same 0.5 GB free-tier limit or its slow
+          # (6-12h, per GitHub's own error message) usage recalculation.
+          # Confirmed this is the actual, distinct mechanism before
+          # relying on it, not assumed.
+          #
+          # Single fixed tag, recreated on every run, rather than a new
+          # release per build: this is a debug/dev build, not a real
+          # versioned release -- a stable, bookmarkable URL for "the
+          # latest debug build" is more useful here than accumulating
+          # one release per push. --prerelease marks it clearly as such
+          # rather than a real release.
+          gh release delete latest-debug-build --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-debug-build \
+            veyra-client-debug.apk veyra-driver-debug.apk \
+            --title "Derniers APK de debug (mis à jour automatiquement)" \
+            --notes "Générés automatiquement à chaque push. Non signés pour la Play Store -- build de debug uniquement." \
+            --prerelease \
+            --target "${{ github.sha }}"
