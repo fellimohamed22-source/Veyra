@@ -7,3 +7,5 @@
 **/.dart_tool/
 **/node_modules/
 runtime/
+web/dist/
+web/.angular/
