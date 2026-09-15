@@ -89,10 +89,12 @@ public class OutboxPublisher {
           "insert into notifications(user_id,event_type,channel,template_code,dedupe_key,data) " +
           "select creator_user_id,?,'PUSH','NEW_OFFER'," +
           "'event-'||cast(? as text)||'-offer-owner'," +
-          "jsonb_build_object('bookingId',cast(? as text)) " +
+          "jsonb_build_object(" +
+          "'bookingId',cast(? as text)," +
+          "'offerId',(select payload->>'offerId' from outbox_events where id=?)) " +
           "from scheduled_bookings where id=? " +
           "on conflict(dedupe_key) do nothing",
-          type,eventId,bookingId,bookingId);
+          type,eventId,bookingId,eventId,bookingId);
     }
 
     if("booking.confirmed".equals(type)){

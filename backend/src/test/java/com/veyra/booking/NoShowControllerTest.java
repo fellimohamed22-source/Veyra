@@ -44,8 +44,8 @@ class NoShowControllerTest {
   @BeforeEach
   void setUpSecurityContext() {
     SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(userId, null));
-    lenient().when(db.queryForObject(eq("select id from drivers where user_id=?"), eq(UUID.class), any(Object[].class)))
-        .thenReturn(driverId);
+    lenient().when(db.queryForList(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
+        .thenReturn(java.util.List.of(driverId));
   }
 
   @AfterEach

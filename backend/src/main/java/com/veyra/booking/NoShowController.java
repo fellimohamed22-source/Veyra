@@ -31,9 +31,13 @@ public class NoShowController {
   @PostMapping("/{id}/no-show")
   @Transactional
   public Map<String,Object> noShow(@PathVariable UUID id){
-    UUID driverId=db.queryForObject(
+    List<UUID> driverIds=db.queryForList(
         "select id from drivers where user_id=?",
         UUID.class,CurrentUser.id());
+    if(driverIds.isEmpty()){
+      throw new ApiException(HttpStatus.FORBIDDEN,"DRIVER_PROFILE_REQUIRED");
+    }
+    UUID driverId=driverIds.getFirst();
 
     Map<String,Object> booking=db.queryForMap(
         "select selected_driver_id,status,scheduled_at from scheduled_bookings where id=? for update",

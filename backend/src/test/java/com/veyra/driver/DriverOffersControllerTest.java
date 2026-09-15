@@ -53,7 +53,7 @@ class DriverOffersControllerTest {
     when(db.queryForList(contains("o.status='ACTIVE'"), eq(driverId)))
         .thenReturn(List.of(Map.of("offer_id", UUID.randomUUID(), "status", "ACTIVE")));
 
-    List<Map<String, Object>> result = controller().list("active");
+    List<Map<String, Object>> result = controller().list("active",0);
 
     assertEquals(1, result.size());
     verify(db).queryForList(contains("where o.driver_id=? and o.status='ACTIVE'"), eq(driverId));
@@ -63,7 +63,7 @@ class DriverOffersControllerTest {
   void wonScopeFiltersByAcceptedStatus() {
     when(db.queryForList(contains("o.status='ACCEPTED'"), eq(driverId))).thenReturn(List.of());
 
-    controller().list("won");
+    controller().list("won",0);
 
     verify(db).queryForList(contains("o.status='ACCEPTED'"), eq(driverId));
   }
@@ -72,7 +72,7 @@ class DriverOffersControllerTest {
   void closedScopeCoversRejectedExpiredAndWithdrawn() {
     when(db.queryForList(contains("REJECTED_BY_SELECTION"), eq(driverId))).thenReturn(List.of());
 
-    controller().list("closed");
+    controller().list("closed",0);
 
     // SUPERSEDED added alongside the offer-price-adjustment history fix
     // earlier this session: an offer replaced by a driver's own revised
@@ -87,7 +87,7 @@ class DriverOffersControllerTest {
 
   @Test
   void rejectsAnyScopeOutsideTheAllowedThree() {
-    assertThrows(ApiException.class, () -> controller().list("everything"));
+    assertThrows(ApiException.class, () -> controller().list("everything",0));
   }
 
   @Test
@@ -95,6 +95,6 @@ class DriverOffersControllerTest {
     when(db.queryForList(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
         .thenReturn(List.of());
 
-    assertThrows(ApiException.class, () -> controller().list("active"));
+    assertThrows(ApiException.class, () -> controller().list("active",0));
   }
 }

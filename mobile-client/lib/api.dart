@@ -108,6 +108,31 @@ class Api {
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);
   }
 
+  Future<void> loginWithFirebase(String idToken) async {
+    _me=null;
+    final r=await dio.post('/api/v1/auth/firebase',data:{
+      'idToken':idToken,
+      'role':'CLIENT',
+      'deviceName':'client-mobile',
+    });
+    await storage.write(key:'accessToken',value:r.data['accessToken']);
+    await storage.write(key:'refreshToken',value:r.data['refreshToken']);
+  }
+
+  Future<Map<String,dynamic>> updateProfile({
+    required String firstName,
+    String? lastName,
+    String? phone,
+  }) async {
+    final r=await dio.patch('/api/v1/me',data:{
+      'firstName':firstName.trim(),
+      'lastName':lastName?.trim(),
+      'phone':phone?.trim(),
+    });
+    _me=Map<String,dynamic>.from(r.data);
+    return _me!;
+  }
+
   Future<void> logout() async {
     final refresh=await storage.read(key:'refreshToken');
     if(refresh!=null){
@@ -117,8 +142,65 @@ class Api {
     await storage.deleteAll();
   }
 
-  Future<List<dynamic>> bookings() async =>
-      List<dynamic>.from((await dio.get('/api/v1/scheduled-bookings')).data);
+  Future<bool> hasStoredSession() async {
+    try{
+      final access=await storage.read(key:'accessToken');
+      final refresh=await storage.read(key:'refreshToken');
+      return (access!=null&&access.isNotEmpty)||(refresh!=null&&refresh.isNotEmpty);
+    }catch(_){
+      return false;
+    }
+  }
+
+  /// Validates a persisted session without destroying it on transient
+  /// network/server failures. Returns true for a valid (or successfully
+  /// refreshed) session, false only when the backend genuinely rejects the
+  /// credentials, and null when validation could not complete.
+  Future<bool?> validateStoredSession() async {
+    String? access;
+    String? refresh;
+    try{
+      access=await storage.read(key:'accessToken');
+      refresh=await storage.read(key:'refreshToken');
+    }catch(_){
+      return null;
+    }
+    if((access==null||access.isEmpty)&&(refresh==null||refresh.isEmpty)){
+      _me=null;
+      return false;
+    }
+
+    _me=null;
+    try{
+      final r=await dio.get('/api/v1/me');
+      _me=Map<String,dynamic>.from(r.data);
+      return true;
+    }on DioException catch(e){
+      if(e.response?.statusCode==401||e.response?.statusCode==403){
+        _me=null;
+        try{await storage.deleteAll();}catch(_){}
+        return false;
+      }
+      // Timeout, no network or a temporary 5xx must never erase a valid
+      // refresh token. Keep the current screen/session and retry later.
+      return null;
+    }catch(_){
+      return null;
+    }
+  }
+
+  Future<List<dynamic>> bookings({
+    int page=0,
+    String? status,
+    String sort='desc',
+  }) async => List<dynamic>.from((await dio.get(
+    '/api/v1/scheduled-bookings',
+    queryParameters:{
+      'page':page,
+      'sort':sort,
+      if(status!=null&&status.isNotEmpty)'status':status,
+    },
+  )).data);
 
   Future<Map<String,dynamic>> bookingDetail(String id) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/scheduled-bookings/$id')).data);
@@ -129,8 +211,11 @@ class Api {
   Future<Map<String,dynamic>> updateBooking(String id,Map<String,dynamic> body) async =>
       Map<String,dynamic>.from((await dio.patch('/api/v1/scheduled-bookings/$id',data:body)).data);
 
-  Future<List<dynamic>> offers(String id) async =>
-      List<dynamic>.from((await dio.get('/api/v1/scheduled-bookings/$id/offers')).data);
+  Future<List<dynamic>> offers(String id,{int page=0}) async =>
+      List<dynamic>.from((await dio.get(
+        '/api/v1/scheduled-bookings/$id/offers',
+        queryParameters:{'page':page},
+      )).data);
 
   Future<Map<String,dynamic>> accept(String bookingId,String offerId) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings/$bookingId/offers/$offerId/accept')).data);
@@ -166,8 +251,8 @@ class Api {
   Future<Map<String,dynamic>> createPaymentIntent(String bookingId,String idempotencyKey) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/payments/bookings/$bookingId/intent',options:Options(headers:{'Idempotency-Key':idempotencyKey}))).data);
 
-  Future<List<dynamic>> notifications() async =>
-      List<dynamic>.from((await dio.get('/api/v1/notifications')).data);
+  Future<List<dynamic>> notifications({int page=0}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/notifications',queryParameters:{'page':page})).data);
 
   Future<Map<String,dynamic>> routeEstimate({
     required double fromLat,

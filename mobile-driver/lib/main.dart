@@ -1,14 +1,15 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
 import 'app_locale.dart';
@@ -21,6 +22,9 @@ import 'core/formatters/money_formatter.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/status_badge.dart';
+import 'core/maps/route_geometry.dart';
+import 'core/maps/veyra_map.dart';
+import 'core/maps/driver_location_tracker.dart';
 
 /// Short alias used throughout this file.
 String t(String french) => AppLocale.t(french);
@@ -152,6 +156,45 @@ final router=GoRouter(
   ),
 );
 
+
+class VeyraPaginationBar extends StatelessWidget{
+  final int page;
+  final bool hasNext;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  const VeyraPaginationBar({
+    super.key,
+    required this.page,
+    required this.hasNext,
+    this.onPrevious,
+    this.onNext,
+  });
+
+  @override Widget build(BuildContext context)=>Padding(
+    padding:const EdgeInsets.only(top:14,bottom:4),
+    child:Row(children:[
+      Expanded(child:OutlinedButton.icon(
+        onPressed:page>0?onPrevious:null,
+        icon:const Icon(Icons.chevron_left),
+        label:Text(t('Précédent')),
+      )),
+      Padding(
+        padding:const EdgeInsets.symmetric(horizontal:14),
+        child:Text(
+          t('Page')+' '+(page+1).toString(),
+          style:const TextStyle(fontWeight:FontWeight.w700,color:Color(0xFF4B5563)),
+        ),
+      ),
+      Expanded(child:FilledButton.icon(
+        onPressed:hasNext?onNext:null,
+        icon:const Icon(Icons.chevron_right),
+        label:Text(t('Suivant')),
+      )),
+    ]),
+  );
+}
+
 class LoginScreen extends StatefulWidget{
   const LoginScreen({super.key});
   @override State<LoginScreen> createState()=>_LoginScreenState();
@@ -178,29 +221,28 @@ class _LoginScreenState extends State<LoginScreen>{
     // being sent straight to the onboarding screen, looking exactly like
     // they needed to register again.
     //
-    // Real backend limitation found while diagnosing this (not fixed
-    // here -- out of this mission's scope, no backend change without a
-    // demonstrated need beyond this): DriverOnboardingController's own
-    // driver() helper uses a raw queryForObject() with no empty-result
-    // handling, so "no driver profile exists yet" and "genuine
-    // unexpected server error" are BOTH indistinguishable 500 responses
-    // from this client's perspective. Given that, only a clean 401/403
-    // (the token itself was actually rejected, confirmed after this
-    // app's own interceptor already attempted a silent refresh) is
-    // treated as a real logout -- anything else (timeout, connection
-    // error, 5xx) preserves the session and offers a retry instead of
-    // ever silently routing to onboarding on a technical failure alone.
+    // Startup must preserve a valid persisted session across transient
+    // network/backend failures. The backend now reports a missing driver
+    // profile explicitly instead of collapsing that onboarding state into
+    // an INTERNAL_ERROR, so technical failures remain retryable here.
     WidgetsBinding.instance.addPostFrameCallback((_)=>_restoreSession());
   }
 
   Future<void> _restoreSession()async{
-    String? token;
+    String? accessToken;
+    String? refreshToken;
     try{
-      token=await api.storage.read(key:'accessToken');
+      accessToken=await api.storage.read(key:'accessToken');
+      refreshToken=await api.storage.read(key:'refreshToken');
     }catch(_){
       return;
     }
-    if(token==null||!mounted)return;
+    // A refresh token is itself a valid persisted session. Requiring an
+    // access token here stranded users after an interrupted token rotation
+    // even though the Dio interceptor can transparently refresh them.
+    final hasSession=(accessToken!=null&&accessToken.isNotEmpty)||
+        (refreshToken!=null&&refreshToken.isNotEmpty);
+    if(!hasSession||!mounted)return;
     setState((){startupChecking=true;startupRetryAvailable=false;});
     try{
       final status=await api.onboardingStatus();
@@ -236,13 +278,13 @@ class _LoginScreenState extends State<LoginScreen>{
       await configureDriverPush();
       await api.createProfile();
       if(!mounted)return;
-      try{
-        final status=await api.onboardingStatus();
-        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
-        context.go(approved?'/home':'/kyc');
-      }catch(_){
-        context.go('/kyc');
-      }
+      // Do not reinterpret a timeout/5xx while loading onboarding status as
+      // "the driver needs KYC". Let the outer error handling preserve the
+      // authenticated session and present the technical failure instead.
+      final status=await api.onboardingStatus();
+      if(!mounted)return;
+      final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+      context.go(approved?'/home':'/kyc');
     }catch(e){
       if(!mounted)return;
       final isOffline=e is DioException&&(
@@ -258,6 +300,152 @@ class _LoginScreenState extends State<LoginScreen>{
       if(mounted)setState(()=>loading=false);
     }
   }
+
+  Future<void> _finishFirebase(UserCredential credential) async {
+    final token=await credential.user?.getIdToken();
+    if(token==null||token.isEmpty)throw StateError('FIREBASE_ID_TOKEN_MISSING');
+    await api.loginWithFirebase(token);
+    await configureDriverPush();
+    // Firebase login on the driver app provisions a minimal driver row in
+    // the backend. The onboarding flow then remains the single source of
+    // truth for KYC/vehicle eligibility.
+    final status=await api.onboardingStatus();
+    if(!mounted)return;
+    final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+    context.go(approved?'/home':'/kyc');
+  }
+
+  Future<void> _googleLogin() async {
+    setState((){loading=true;error=null;offline=false;});
+    try{
+      if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+      final account=await GoogleSignIn().signIn();
+      if(account==null)return;
+      final auth=await account.authentication;
+      final credential=GoogleAuthProvider.credential(
+        accessToken:auth.accessToken,
+        idToken:auth.idToken,
+      );
+      await _finishFirebase(
+        await FirebaseAuth.instance.signInWithCredential(credential),
+      );
+    }catch(e){
+      if(mounted)setState(()=>error=t('Connexion Google impossible. Vérifiez la configuration Firebase et réessayez.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  Future<String?> _askPhone() async {
+    final controller=TextEditingController(text:'+33');
+    final result=await showDialog<String>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Connexion par téléphone')),
+        content:TextField(
+          controller:controller,
+          keyboardType:TextInputType.phone,
+          autofocus:true,
+          decoration:InputDecoration(
+            labelText:t('Numéro de téléphone'),
+            hintText:'+33 6 12 34 56 78',
+          ),
+        ),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Annuler'))),
+          FilledButton(
+            onPressed:()=>Navigator.pop(dialogContext,controller.text.trim()),
+            child:Text(t('Envoyer le code')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<String?> _askSmsCode() async {
+    final controller=TextEditingController();
+    final result=await showDialog<String>(
+      context:context,
+      barrierDismissible:false,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Code SMS')),
+        content:TextField(
+          controller:controller,
+          keyboardType:TextInputType.number,
+          autofocus:true,
+          maxLength:6,
+          decoration:InputDecoration(labelText:t('Code à 6 chiffres')),
+        ),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Annuler'))),
+          FilledButton(
+            onPressed:()=>Navigator.pop(dialogContext,controller.text.trim()),
+            child:Text(t('Valider')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _phoneLogin() async {
+    final phone=await _askPhone();
+    if(phone==null||phone.isEmpty)return;
+    setState((){loading=true;error=null;offline=false;});
+    try{
+      if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+      final completer=Completer<void>();
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber:phone,
+        verificationCompleted:(credential)async{
+          if(completer.isCompleted)return;
+          try{
+            await _finishFirebase(
+              await FirebaseAuth.instance.signInWithCredential(credential),
+            );
+            completer.complete();
+          }catch(e){
+            completer.completeError(e);
+          }
+        },
+        verificationFailed:(e){
+          if(!completer.isCompleted)completer.completeError(e);
+        },
+        codeSent:(verificationId,_)async{
+          if(completer.isCompleted)return;
+          final code=await _askSmsCode();
+          if(code==null||code.isEmpty){
+            completer.complete();
+            return;
+          }
+          try{
+            final credential=PhoneAuthProvider.credential(
+              verificationId:verificationId,
+              smsCode:code,
+            );
+            await _finishFirebase(
+              await FirebaseAuth.instance.signInWithCredential(credential),
+            );
+            if(!completer.isCompleted)completer.complete();
+          }catch(e){
+            if(!completer.isCompleted)completer.completeError(e);
+          }
+        },
+        codeAutoRetrievalTimeout:(_){
+          if(!completer.isCompleted)completer.complete();
+        },
+      );
+      await completer.future;
+    }catch(e){
+      if(mounted)setState(()=>error=t('Connexion par téléphone impossible. Vérifiez le numéro ou le code SMS.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
@@ -306,6 +494,29 @@ class _LoginScreenState extends State<LoginScreen>{
         if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
         const SizedBox(height:20),
         VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
+        const SizedBox(height:14),
+        Row(children:[
+          const Expanded(child:Divider()),
+          Padding(
+            padding:const EdgeInsets.symmetric(horizontal:12),
+            child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
+          ),
+          const Expanded(child:Divider()),
+        ]),
+        const SizedBox(height:14),
+        OutlinedButton.icon(
+          onPressed:loading?null:_googleLogin,
+          icon:const Icon(Icons.g_mobiledata_rounded,size:28),
+          label:Text(t('Continuer avec Google')),
+          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
+        ),
+        const SizedBox(height:10),
+        OutlinedButton.icon(
+          onPressed:loading?null:_phoneLogin,
+          icon:const Icon(Icons.phone_android_rounded),
+          label:Text(t('Continuer avec le téléphone')),
+          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
+        ),
         TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte Chauffeur'))),
         TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
       ]))),
@@ -592,6 +803,7 @@ class OpportunitiesScreen extends StatefulWidget{
 }
 class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAware{
   String sort='date';
+  int page=0;
   final pickupFilter=TextEditingController();
   final destinationFilter=TextEditingController();
   int? minPassengers;
@@ -622,6 +834,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   // restent le filet de sécurité si ce callback ne se déclenche plus.
   @override void didPopNext(){setState((){future=load();});}
   Future<List<dynamic>> load()=>api.opportunities(
+    page:page,
     sort:sort,
     pickupQuery:pickupFilter.text,
     destinationQuery:destinationFilter.text,
@@ -646,7 +859,11 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             DropdownMenuItem(value:'pickup',child:Text(t('Lieu de départ (A → Z)'))),
             DropdownMenuItem(value:'destination',child:Text(t('Destination (A → Z)'))),
           ],
-          onChanged:(v){if(v!=null){sort=v;reload();}},
+          onChanged:(v){if(v!=null){setState((){
+            sort=v;
+            page=0;
+            future=load();
+          });}},
         ),
         const SizedBox(height:10),
         ExpansionTile(
@@ -665,9 +882,22 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             ),
             const SizedBox(height:10),
             Row(children:[
-              Expanded(child:OutlinedButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState(()=>minPassengers=null);reload();},child:Text(t('Réinitialiser')))),
+              Expanded(child:OutlinedButton(onPressed:(){
+                pickupFilter.clear();
+                destinationFilter.clear();
+                setState((){
+                  minPassengers=null;
+                  page=0;
+                  future=load();
+                });
+              },child:Text(t('Réinitialiser')))),
               const SizedBox(width:8),
-              Expanded(child:FilledButton(onPressed:reload,child:Text(t('Appliquer')))),
+              Expanded(child:FilledButton(onPressed:(){
+                setState((){
+                  page=0;
+                  future=load();
+                });
+              },child:Text(t('Appliquer')))),
             ]),
           ],
         ),
@@ -685,7 +915,8 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               leading:Icon(Icons.inbox_outlined),title:Text(t('Aucune demande ouverte')),
               subtitle:Text(t('Les nouvelles demandes apparaîtront ici.')),
             ));
-            return Column(children:items.map((raw){
+            return Column(children:[
+              ...items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
               final id=x['id'].toString();
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
@@ -693,7 +924,24 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
                 title:Text(title),subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
                 trailing:const Icon(Icons.chevron_right),onTap:()=>context.push('/request/'+id),
               ));
-            }).toList());
+            }).toList(),
+              VeyraPaginationBar(
+                page:page,
+                hasNext:items.length==10,
+                onPrevious:(){
+                  setState((){
+                    page--;
+                    future=load();
+                  });
+                },
+                onNext:(){
+                  setState((){
+                    page++;
+                    future=load();
+                  });
+                },
+              ),
+            ]);
           },
         ),
       ]),
@@ -714,6 +962,9 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
   late Future<List<dynamic>> active;
   late Future<List<dynamic>> won;
   late Future<List<dynamic>> closed;
+  int activePage=0;
+  int wonPage=0;
+  int closedPage=0;
 
   @override void initState(){
     super.initState();
@@ -722,9 +973,18 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
   }
 
   void _load(){
-    active=api.driverOffers(scope:'active');
-    won=api.driverOffers(scope:'won');
-    closed=api.driverOffers(scope:'closed');
+    active=api.driverOffers(scope:'active',page:activePage);
+    won=api.driverOffers(scope:'won',page:wonPage);
+    closed=api.driverOffers(scope:'closed',page:closedPage);
+  }
+
+  void _changePage(String scope,int delta){
+    setState((){
+      if(scope=='active')activePage=(activePage+delta).clamp(0,1<<30).toInt();
+      if(scope=='won')wonPage=(wonPage+delta).clamp(0,1<<30).toInt();
+      if(scope=='closed')closedPage=(closedPage+delta).clamp(0,1<<30).toInt();
+      _load();
+    });
   }
 
   @override void dispose(){
@@ -732,7 +992,12 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
     super.dispose();
   }
 
-  Widget _list(Future<List<dynamic>> future,{required bool isWon}){
+  Widget _list(
+    Future<List<dynamic>> future,{
+    required bool isWon,
+    required String scope,
+    required int page,
+  }){
     return RefreshIndicator(
       onRefresh:()async{setState(_load);await future;},
       child:FutureBuilder<List<dynamic>>(
@@ -755,8 +1020,16 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
           }
           return ListView.builder(
             padding:const EdgeInsets.all(16),
-            itemCount:items.length,
+            itemCount:items.length+1,
             itemBuilder:(context,i){
+              if(i==items.length){
+                return VeyraPaginationBar(
+                  page:page,
+                  hasNext:items.length==10,
+                  onPrevious:()=>_changePage(scope,-1),
+                  onNext:()=>_changePage(scope,1),
+                );
+              }
               final x=Map<String,dynamic>.from(items[i] as Map);
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               final bookingId=x['booking_id']?.toString();
@@ -803,9 +1076,9 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
       ]),
     ),
     body:TabBarView(controller:tabController,children:[
-      _list(active,isWon:false),
-      _list(won,isWon:true),
-      _list(closed,isWon:false),
+      _list(active,isWon:false,scope:'active',page:activePage),
+      _list(won,isWon:true,scope:'won',page:wonPage),
+      _list(closed,isWon:false,scope:'closed',page:closedPage),
     ]),
   );
 }
@@ -994,52 +1267,139 @@ class AgendaScreen extends StatefulWidget{
 }
 class _AgendaScreenState extends State<AgendaScreen>{
   late Future<List<dynamic>> future;
+  int page=0;
+  String status='ALL';
+  String sort='asc';
+
   @override void initState(){
     super.initState();
-    future=api.bookings();
+    future=_load();
     RefreshBus.tick.addListener(_refresh);
   }
+
+  Future<List<dynamic>> _load()=>api.bookings(
+    scope:'all',
+    page:page,
+    status:status=='ALL'?null:status,
+    sort:sort,
+  );
   @override void dispose(){
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
   }
-  void _refresh()=>setState((){future=api.bookings();});
+  void _refresh()=>setState((){future=_load();});
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Mes courses à venir'))),
-    body:FutureBuilder<List<dynamic>>(
-      future:future,
-      builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.bookings();}))
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.bookings();}));
-        final items=s.data??[];
-        if(items.isEmpty)return Center(child:Text(t('Aucune course confirmée.')));
-        return ListView(padding:const EdgeInsets.all(16),children:items.map((raw){
-          final x=Map<String,dynamic>.from(raw as Map);
-          return Card(child:Padding(
-            padding:const EdgeInsets.all(12),
-            child:InkWell(
-              onTap:()=>context.push('/ride/'+x['id'].toString()),
-              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                Text(
-                  (x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
-                  style:const TextStyle(fontWeight:FontWeight.w600),
-                ),
-                const SizedBox(height:4),
-                Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
-                const SizedBox(height:8),
-                Row(children:[
-                  VeyraStatusBadge(status:(x['status']??'').toString()),
-                  const Spacer(),
-                  const Icon(Icons.chevron_right,color:Colors.black38),
-                ]),
-              ]),
-            ),
-          ));
-        }).toList());
-      },
+    appBar:AppBar(title:Text(t('Mes courses'))),
+    body:RefreshIndicator(
+      onRefresh:()async{_refresh();await future;},
+      child:ListView(padding:const EdgeInsets.all(16),children:[
+        Row(children:[
+          Expanded(child:DropdownButtonFormField<String>(
+            initialValue:status,
+            decoration:InputDecoration(labelText:t('État')),
+            items:[
+              DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
+              DropdownMenuItem(value:'CONFIRMED',child:Text(t('Confirmée'))),
+              DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('En route'))),
+              DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Arrivé'))),
+              DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
+              DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
+              DropdownMenuItem(value:'CLOSED',child:Text(t('Clôturée'))),
+              DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
+              DropdownMenuItem(value:'DRIVER_CANCELLED',child:Text(t('Annulée par le chauffeur'))),
+              DropdownMenuItem(value:'CUSTOMER_NO_SHOW',child:Text(t('Client absent'))),
+            ],
+            onChanged:(v){
+              if(v==null)return;
+              setState((){
+                status=v;
+                page=0;
+                future=_load();
+              });
+            },
+          )),
+          const SizedBox(width:10),
+          Expanded(child:DropdownButtonFormField<String>(
+            initialValue:sort,
+            decoration:InputDecoration(labelText:t('Date')),
+            items:[
+              DropdownMenuItem(value:'asc',child:Text(t('Plus proches'))),
+              DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
+            ],
+            onChanged:(v){
+              if(v==null)return;
+              setState((){
+                sort=v;
+                page=0;
+                future=_load();
+              });
+            },
+          )),
+        ]),
+        const SizedBox(height:14),
+        FutureBuilder<List<dynamic>>(
+          future:future,
+          builder:(context,s){
+            if(s.connectionState!=ConnectionState.done){
+              return const Padding(padding:EdgeInsets.all(32),child:Center(child:CircularProgressIndicator()));
+            }
+            if(s.hasError){
+              return VeyraErrorMessages.isOffline(s.error!)
+                ?VeyraOfflineBanner(onRetry:_refresh)
+                :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:_refresh);
+            }
+            final items=s.data??[];
+            if(items.isEmpty){
+              return Center(child:Padding(
+                padding:const EdgeInsets.all(32),
+                child:Text(t('Aucune course confirmée.')),
+              ));
+            }
+            return Column(children:[
+              ...items.map((raw){
+                final x=Map<String,dynamic>.from(raw as Map);
+                return Card(child:Padding(
+                  padding:const EdgeInsets.all(12),
+                  child:InkWell(
+                    onTap:()=>context.push('/ride/'+x['id'].toString()),
+                    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Text(
+                        (x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
+                        style:const TextStyle(fontWeight:FontWeight.w600),
+                      ),
+                      const SizedBox(height:4),
+                      Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
+                      const SizedBox(height:8),
+                      Row(children:[
+                        VeyraStatusBadge(status:(x['status']??'').toString()),
+                        const Spacer(),
+                        const Icon(Icons.chevron_right,color:Colors.black38),
+                      ]),
+                    ]),
+                  ),
+                ));
+              }),
+              VeyraPaginationBar(
+                page:page,
+                hasNext:items.length==10,
+                onPrevious:(){
+                  setState((){
+                    page--;
+                    future=_load();
+                  });
+                },
+                onNext:(){
+                  setState((){
+                    page++;
+                    future=_load();
+                  });
+                },
+              ),
+            ]);
+          },
+        ),
+      ]),
     ),
   );
 }
@@ -1049,38 +1409,48 @@ class RideScreen extends StatefulWidget{
   const RideScreen({required this.bookingId,super.key});
   @override State<RideScreen> createState()=>_RideScreenState();
 }
+
 class _RideScreenState extends State<RideScreen>{
   late Future<Map<String,dynamic>> future;
+  late final DriverLocationTracker tracker;
   final pin=TextEditingController();
+
   bool busy=false;
   String? error;
-  Timer? gpsTimer;
+  bool locationSyncError=false;
   Position? position;
   Map<String,dynamic>? etaInfo;
-  int sequence=0;
+  Map<String,dynamic>? tripEtaInfo;
   DateTime? lastEtaRefresh;
   int ratingScore=0;
   bool ratingSubmitting=false;
   bool ratingSubmitted=false;
+  bool trackingStarting=false;
+  bool routePreviewLoading=false;
 
   @override void initState(){
     super.initState();
     future=api.bookingDetail(widget.bookingId);
+    tracker=DriverLocationTracker(api:api);
   }
 
   @override void dispose(){
-    gpsTimer?.cancel();
+    tracker.dispose();
+    pin.dispose();
     super.dispose();
   }
 
-  void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
+  void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
 
-  Future<void> submitRating()async{
+  Future<void> submitRating() async {
     if(ratingScore<1)return;
     setState(()=>ratingSubmitting=true);
     try{
       await api.rate(widget.bookingId,ratingScore);
-      if(mounted)setState((){ratingSubmitted=true;ratingSubmitting=false;});
+      if(mounted)setState((){
+        ratingSubmitted=true;
+        ratingSubmitting=false;
+      });
     }on DioException catch(e){
       final alreadyRated=(e.response?.data is Map)&&((e.response?.data as Map)['code']=='ALREADY_RATED');
       if(mounted)setState((){
@@ -1091,88 +1461,217 @@ class _RideScreenState extends State<RideScreen>{
     }
   }
 
-  Future<bool> ensureLocationPermission()async{
-    if(!await Geolocator.isLocationServiceEnabled()){
-      if(mounted)setState(()=>error=t('Activez la localisation du téléphone.'));
-      return false;
+  Future<void> _startTrackingIfNeeded(String status) async {
+    if(!{'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status)||
+       tracker.running||
+       trackingStarting){
+      return;
     }
-    var permission=await Geolocator.checkPermission();
-    if(permission==LocationPermission.denied){
-      permission=await Geolocator.requestPermission();
+    trackingStarting=true;
+    try{
+      await tracker.start(
+        bookingId:widget.bookingId,
+        onPosition:(p){
+          if(!mounted)return;
+          setState((){
+            position=p;
+            if(!locationSyncError)error=null;
+          });
+          final now=DateTime.now();
+          if(lastEtaRefresh==null||now.difference(lastEtaRefresh!)>=const Duration(seconds:30)){
+            lastEtaRefresh=now;
+            _refreshEta(p);
+          }
+        },
+        onError:(e){
+          if(mounted)setState((){
+            locationSyncError=false;
+            error=_locationErrorMessage(e);
+          });
+        },
+        onUploadError:(e){
+          if(!mounted)return;
+          final message=e is DioException
+            ?VeyraErrorMessages.forException(e)
+            :t('Position obtenue, mais impossible de la synchroniser avec Veyra.');
+          setState((){
+            locationSyncError=true;
+            error=message;
+          });
+        },
+        onUploadSuccess:(){
+          if(!mounted)return;
+          if(locationSyncError||error!=null){
+            setState((){
+              locationSyncError=false;
+              error=null;
+            });
+          }
+        },
+      );
+    }catch(e){
+      if(mounted)setState(()=>error=_locationErrorMessage(e));
+    }finally{
+      trackingStarting=false;
     }
-    if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
-      if(mounted)setState(()=>error=t('La localisation est obligatoire pendant la prise en charge et la course.'));
-      return false;
-    }
-    return true;
   }
 
-  Future<void> sendLocation()async{
-    if(!await ensureLocationPermission())return;
+  String _locationErrorMessage(Object error){
+    final raw=error.toString();
+    if(raw.contains('LOCATION_SERVICE_DISABLED')){
+      return t('Activez la localisation du téléphone.');
+    }
+    if(raw.contains('LOCATION_PERMISSION_DENIED')){
+      return t('La localisation est obligatoire pendant la prise en charge et la course.');
+    }
+    return t('Position GPS momentanément indisponible.');
+  }
+
+  Future<void> _refreshEta(Position p) async {
     try{
-      final p=await Geolocator.getCurrentPosition(
-        locationSettings:const LocationSettings(accuracy:LocationAccuracy.high),
-      );
-      sequence++;
-      await api.updateLocation(
-        bookingId:widget.bookingId,
-        lat:p.latitude,
-        lng:p.longitude,
-        sequenceNo:sequence,
-        accuracyM:p.accuracy,
-        heading:p.heading,
-        speedMps:p.speed,
-      );
-      if(mounted)setState(()=>position=p);
-      final now=DateTime.now();
-      if(lastEtaRefresh==null||now.difference(lastEtaRefresh!)>=const Duration(seconds:30)){
-        lastEtaRefresh=now;
-        await refreshEta(p);
+      final booking=await api.bookingDetail(widget.bookingId);
+      final status=(booking['status']??'').toString();
+      final pickupLat=(booking['pickup_lat'] as num?)?.toDouble();
+      final pickupLng=(booking['pickup_lng'] as num?)?.toDouble();
+      final dropoffLat=(booking['dropoff_lat'] as num?)?.toDouble();
+      final dropoffLng=(booking['dropoff_lng'] as num?)?.toDouble();
+      if(pickupLat==null||pickupLng==null||dropoffLat==null||dropoffLng==null)return;
+
+      Future<Map<String,dynamic>?> activeLeg() async {
+        final toPickup=status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED';
+        try{
+          return await api.routeEstimate(
+            fromLat:p.latitude,
+            fromLng:p.longitude,
+            toLat:toPickup?pickupLat:dropoffLat,
+            toLng:toPickup?pickupLng:dropoffLng,
+          );
+        }catch(_){
+          return null;
+        }
+      }
+
+      Future<Map<String,dynamic>?> customerTrip() async {
+        try{
+          return await api.routeEstimate(
+            fromLat:pickupLat,
+            fromLng:pickupLng,
+            toLat:dropoffLat,
+            toLng:dropoffLng,
+          );
+        }catch(_){
+          return null;
+        }
+      }
+
+      final results=await Future.wait<Map<String,dynamic>?>([
+        activeLeg(),
+        customerTrip(),
+      ]);
+      if(mounted){
+        setState((){
+          etaInfo=results[0];
+          tripEtaInfo=results[1];
+        });
       }
     }catch(_){
-      if(mounted)setState(()=>error=t('Position GPS momentanément indisponible.'));
+      // Route provider failures must not turn into a persistent generic
+      // course error. GPS sync and course data remain usable independently.
+      if(mounted){
+        setState((){
+          etaInfo=null;
+          tripEtaInfo=null;
+        });
+      }
     }
   }
 
-  Future<void> refreshEta(Position p)async{
+  Future<void> _routePreview(
+    double? pickupLat,
+    double? pickupLng,
+    double? dropoffLat,
+    double? dropoffLng,
+  ) async {
+    if(routePreviewLoading||
+       pickupLat==null||pickupLng==null||dropoffLat==null||dropoffLng==null)return;
+    routePreviewLoading=true;
     try{
-      final x=await api.bookingDetail(widget.bookingId);
-      final status=(x['status']??'').toString();
-      double? toLat;
-      double? toLng;
-      if(status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED'){
-        toLat=(x['pickup_lat'] as num?)?.toDouble();
-        toLng=(x['pickup_lng'] as num?)?.toDouble();
-      }else if(status=='IN_PROGRESS'){
-        toLat=(x['dropoff_lat'] as num?)?.toDouble();
-        toLng=(x['dropoff_lng'] as num?)?.toDouble();
-      }
-      if(toLat==null||toLng==null)return;
-      final eta=await api.routeEstimate(
-        fromLat:p.latitude,fromLng:p.longitude,toLat:toLat,toLng:toLng);
-      if(mounted)setState(()=>etaInfo=eta);
-    }catch(_){}
+      final route=await api.routeEstimate(
+        fromLat:pickupLat,
+        fromLng:pickupLng,
+        toLat:dropoffLat,
+        toLng:dropoffLng,
+      );
+      if(mounted)setState(()=>tripEtaInfo=route);
+    }catch(_){
+      // Keep the course usable if routing is temporarily unavailable.
+    }finally{
+      routePreviewLoading=false;
+    }
   }
 
-  void startTracking(){
-    gpsTimer?.cancel();
-    sendLocation();
-    gpsTimer=Timer.periodic(const Duration(seconds:10),(_)=>sendLocation());
-  }
-
-  void stopTracking(){
-    gpsTimer?.cancel();
-    gpsTimer=null;
-  }
-
-  Future<void> action(Future<void> Function() fn,{bool startGps=false,bool stopGps=false})async{
-    setState((){busy=true;error=null;});
+  Future<void> action(
+    Future<void> Function() fn,{
+    bool startGps=false,
+    bool stopGps=false,
+  }) async {
+    setState((){
+      busy=true;
+      error=null;
+      locationSyncError=false;
+    });
     try{
       await fn();
-      if(startGps)startTracking();
-      if(stopGps)stopTracking();
+      if(stopGps)await tracker.stop();
       RefreshBus.bump();
-      reload();
+      final updated=await api.bookingDetail(widget.bookingId);
+      if(!mounted)return;
+      setState(()=>future=Future.value(updated));
+      if(startGps){
+        await _startTrackingIfNeeded((updated['status']??'').toString());
+      }
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }finally{
+      if(mounted)setState(()=>busy=false);
+    }
+  }
+
+  Future<void> _cancelAssigned() async {
+    final confirm=await showDialog<bool>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Annuler cette course ?')),
+        content:Text(t('La réservation sera republiée en priorité si le délai le permet. Cette annulation impactera votre qualité chauffeur.')),
+        actions:[
+          TextButton(
+            onPressed:()=>Navigator.pop(dialogContext,false),
+            child:Text(t('Garder la course')),
+          ),
+          FilledButton(
+            onPressed:()=>Navigator.pop(dialogContext,true),
+            child:Text(t('Confirmer l’annulation')),
+          ),
+        ],
+      ),
+    );
+    if(confirm!=true)return;
+
+    setState(()=>busy=true);
+    try{
+      final result=await api.cancelAssignedBooking(widget.bookingId);
+      await tracker.stop();
+      RefreshBus.bump();
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content:Text(
+            result['republished']==true
+              ?t('Course annulée et demande republiée.')
+              :t('Course annulée. Le support Veyra a été alerté.'),
+          )),
+        );
+        context.go('/agenda');
+      }
     }catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }finally{
@@ -1185,10 +1684,16 @@ class _RideScreenState extends State<RideScreen>{
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:reload)
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
+        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
+        if(s.hasError){
+          return VeyraErrorMessages.isOffline(s.error!)
+            ?VeyraOfflineBanner(onRetry:reload)
+            :VeyraErrorView(
+                customMessage:VeyraErrorMessages.forException(s.error!),
+                onRetry:reload,
+              );
+        }
+
         final x=s.data??{};
         final status=(x['status']??'').toString();
         final phone=x['customer_phone']?.toString();
@@ -1197,175 +1702,275 @@ class _RideScreenState extends State<RideScreen>{
         final pickupLng=(x['pickup_lng'] as num?)?.toDouble();
         final dropoffLat=(x['dropoff_lat'] as num?)?.toDouble();
         final dropoffLng=(x['dropoff_lng'] as num?)?.toDouble();
-        final lat=position?.latitude??pickupLat??43.2965;
-        final lng=position?.longitude??pickupLng??5.3698;
 
-        if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status)&&gpsTimer==null){
-          WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)startTracking();});
+        final pickup=pickupLat==null||pickupLng==null?null:LatLng(pickupLat,pickupLng);
+        final dropoff=dropoffLat==null||dropoffLng==null?null:LatLng(dropoffLat,dropoffLng);
+        final driver=position==null?null:LatLng(position!.latitude,position!.longitude);
+        final route=VeyraRouteGeometry.fromApi(etaInfo);
+        final tripRoute=VeyraRouteGeometry.fromApi(tripEtaInfo);
+        final active={'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status);
+
+        if(active&&!tracker.running&&!trackingStarting){
+          WidgetsBinding.instance.addPostFrameCallback((_){
+            if(mounted)_startTrackingIfNeeded(status);
+          });
+        }else if(!active&&tracker.running){
+          WidgetsBinding.instance.addPostFrameCallback((_){
+            tracker.stop();
+          });
         }
 
-        // Section 13 : "map becomes dominant" spécifiquement pendant
-        // DRIVER_EN_ROUTE/IN_PROGRESS -- auparavant hauteur fixe à 240
-        // quel que soit le statut. DRIVER_ARRIVED reste volontairement
-        // compact : la spec y demande explicitement que le PIN
-        // "prominently" domine l'écran, pas la carte (le chauffeur est
-        // déjà sur place, le suivi de position perd son intérêt premier
-        // à ce stade précis).
-        final mapHeight={'DRIVER_EN_ROUTE','IN_PROGRESS'}.contains(status)?340.0:180.0;
+        if(tripEtaInfo==null){
+          WidgetsBinding.instance.addPostFrameCallback((_){
+            _routePreview(pickupLat,pickupLng,dropoffLat,dropoffLng);
+          });
+        }
 
-        return ListView(padding:const EdgeInsets.all(20),children:[
-          SizedBox(
-            height:mapHeight,
-            child:ClipRRect(
-              borderRadius:BorderRadius.circular(20),
-              child:FlutterMap(
-                options:MapOptions(initialCenter:LatLng(lat,lng),initialZoom:position==null?9:14),
-                children:[
-                  TileLayer(
-                    urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName:'com.veyra.driver',
-                  ),
-                  MarkerLayer(markers:[
-                    if(pickupLat!=null&&pickupLng!=null)Marker(
-                      point:LatLng(pickupLat,pickupLng),width:44,height:44,
-                      child:const Icon(Icons.trip_origin,size:34),
-                    ),
-                    if(dropoffLat!=null&&dropoffLng!=null)Marker(
-                      point:LatLng(dropoffLat,dropoffLng),width:44,height:44,
-                      child:const Icon(Icons.location_on,size:38),
-                    ),
-                    if(position!=null)Marker(
-                      point:LatLng(lat,lng),width:56,height:56,
-                      child:const Icon(Icons.local_taxi,size:44),
-                    ),
-                  ]),
-                ],
+        final mapHeight={'DRIVER_EN_ROUTE','IN_PROGRESS'}.contains(status)
+          ?420.0
+          :status=='DRIVER_ARRIVED'
+            ?240.0
+            :220.0;
+
+        return ListView(
+          padding:EdgeInsets.zero,
+          children:[
+            SizedBox(
+              height:mapHeight,
+              child:VeyraMap(
+                pickup:pickup,
+                dropoff:dropoff,
+                driver:driver,
+                driverHeading:position?.heading,
+                route:route,
+                secondaryRoute:tripRoute,
+                userAgentPackageName:'com.veyra.driver',
               ),
             ),
-          ),
-          const SizedBox(height:16),
-          Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
-            style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-          Text(t('Statut')+' : '+VeyraStatusLabels.bookingStatus(status)),
-          if(etaInfo!=null)Card(child:ListTile(
-            leading:const Icon(Icons.schedule),
-            title:Text(t('ETA : ')+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])),
-            subtitle:Text(VeyraMoneyFormatter.distance(etaInfo!['distanceMeters'])+' '+t('restant(s)')),
-          )),
-          if(x['customer_name']!=null)Text(t('Client : ')+x['customer_name'].toString()),
-          if(paymentMethod=='CASH')Card(child:ListTile(
-            leading:const Icon(Icons.payments_outlined),
-            title:Text(t('Montant à encaisser au client : ')+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
-            subtitle:Text(t('Votre montant net : ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])+' • '+t('Commission Veyra : ')+VeyraMoneyFormatter.fromMinor(x['platform_commission_amount_minor'])+' '+t('(dette CASH après la course)')),
-          )),
-          if(paymentMethod=='ONLINE')Card(child:ListTile(
-            leading:const Icon(Icons.credit_card),
-            title:Text(t('Paiement en ligne • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
-            subtitle:Text(t('Le paiement doit être capturé avant le démarrage de la course.')),
-          )),
-          if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
-            leading:const Icon(Icons.receipt_long),
-            title:Text(t('Facturation partenaire • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
-            subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
-          )),
-          if(error!=null)Padding(
-            padding:const EdgeInsets.symmetric(vertical:10),
-            child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
-          ),
-          if(status=='CONFIRMED')...[
-            FilledButton(onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),child:Text(t('Je suis en route'))),
-            TextButton(
-              onPressed:busy?null:()async{
-                final confirm=await showDialog<bool>(
-                  context:context,
-                  builder:(dialogContext)=>AlertDialog(
-                    title:Text(t('Annuler cette course ?')),
-                    content:Text(t('La réservation sera republiée en priorité si le délai le permet. Cette annulation impactera votre qualité chauffeur.')),
-                    actions:[
-                      TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Garder la course'))),
-                      FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
-                    ],
+            Padding(
+              padding:const EdgeInsets.fromLTRB(20,18,20,28),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                Row(children:[
+                  Expanded(child:Text(
+                    VeyraStatusLabels.bookingStatus(status),
+                    style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold),
+                  )),
+                  VeyraStatusBadge(status:status),
+                ]),
+                const SizedBox(height:10),
+                Text(
+                  (x['pickup_address']??'Départ').toString()+
+                    ' → '+
+                    (x['dropoff_address']??'Destination').toString(),
+                  style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600),
+                ),
+                const SizedBox(height:12),
+                Row(children:[
+                  Expanded(child:_DriverEtaCard(
+                    icon:Icons.person_pin_circle_rounded,
+                    label:status=='IN_PROGRESS'?t('Client pris en charge'):t('Vers le client'),
+                    value:status=='DRIVER_ARRIVED'||status=='IN_PROGRESS'
+                      ?t('Arrivé')
+                      :(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds)),
+                    detail:status=='DRIVER_EN_ROUTE'&&route.distanceMeters!=null
+                      ?VeyraMoneyFormatter.distance(route.distanceMeters)
+                      :null,
+                    accent:const Color(0xFF2563EB),
+                  )),
+                  const SizedBox(width:10),
+                  Expanded(child:_DriverEtaCard(
+                    icon:Icons.flag_rounded,
+                    label:t('Client → destination'),
+                    value:status=='IN_PROGRESS'
+                      ?(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds))
+                      :(tripRoute.durationSeconds==null?'—':VeyraMoneyFormatter.duration(tripRoute.durationSeconds)),
+                    detail:status=='IN_PROGRESS'
+                      ?(route.distanceMeters==null?null:VeyraMoneyFormatter.distance(route.distanceMeters))
+                      :(tripRoute.distanceMeters==null?null:VeyraMoneyFormatter.distance(tripRoute.distanceMeters)),
+                    accent:const Color(0xFF111827),
+                  )),
+                ]),
+                if(x['customer_name']!=null)
+                  Padding(
+                    padding:const EdgeInsets.only(top:8),
+                    child:Text(t('Client : ')+x['customer_name'].toString()),
                   ),
-                );
-                if(confirm!=true)return;
-                setState(()=>busy=true);
-                try{
-                  final result=await api.cancelAssignedBooking(widget.bookingId);
-                  stopTracking();
-                  RefreshBus.bump();
-                  if(mounted){
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content:Text(result['republished']==true
-                        ?t('Course annulée et demande republiée.')
-                        :t('Course annulée. Le support Veyra a été alerté.'))),
-                    );
-                    context.go('/agenda');
-                  }
-                }catch(e){
-                  if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
-                }finally{
-                  if(mounted)setState(()=>busy=false);
-                }
-              },
-              child:Text(t('Annuler ma prise en charge')),
-            ),
-          ],
-          if(status=='DRIVER_EN_ROUTE')
-            FilledButton(onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),child:Text(t('Je suis arrivé'))),
-          if(status=='DRIVER_ARRIVED')...[
-            TextField(
-              controller:pin,maxLength:4,keyboardType:TextInputType.number,
-              decoration:InputDecoration(labelText:t('PIN client (4 chiffres)')),
-            ),
-            FilledButton(onPressed:busy?null:()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),child:Text(t('Démarrer la course'))),
-            TextButton(onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),child:Text(t('Signaler un no-show'))),
-          ],
-          if(status=='IN_PROGRESS')
-            FilledButton(onPressed:busy?null:()async{
-              final confirmed=await showDialog<bool>(context:context,builder:(dialogContext)=>AlertDialog(
-                title:Text(t('Terminer la course ?')),
-                content:Text(t('Confirmez uniquement lorsque le passager est arrivé à destination.')),
-                actions:[
-                  TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Continuer la course'))),
-                  FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Terminer la course'))),
+                if(paymentMethod=='CASH')Card(child:ListTile(
+                  leading:const Icon(Icons.payments_outlined),
+                  title:Text(t('Montant à encaisser au client : ')+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
+                  subtitle:Text(
+                    t('Votre montant net : ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])+
+                    ' • '+t('Commission Veyra : ')+VeyraMoneyFormatter.fromMinor(x['platform_commission_amount_minor'])+
+                    ' '+t('(dette CASH après la course)'),
+                  ),
+                )),
+                if(paymentMethod=='ONLINE')Card(child:ListTile(
+                  leading:const Icon(Icons.credit_card),
+                  title:Text(t('Paiement en ligne • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
+                  subtitle:Text(t('Le paiement doit être capturé avant le démarrage de la course.')),
+                )),
+                if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
+                  leading:const Icon(Icons.receipt_long),
+                  title:Text(t('Facturation partenaire • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
+                  subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
+                )),
+                if(error!=null)Padding(
+                  padding:const EdgeInsets.symmetric(vertical:10),
+                  child:VeyraErrorView(
+                    customMessage:error!,
+                    onRetry:active
+                      ?(){
+                          if(tracker.running){
+                            setState((){
+                              error=null;
+                              locationSyncError=false;
+                            });
+                          }else{
+                            _startTrackingIfNeeded(status);
+                          }
+                        }
+                      :reload,
+                  ),
+                ),
+                if(status=='CONFIRMED')...[
+                  FilledButton.icon(
+                    onPressed:busy?null:()=>action(()=>api.enRoute(widget.bookingId),startGps:true),
+                    icon:const Icon(Icons.directions_car),
+                    label:Text(t('Je suis en route')),
+                  ),
+                  TextButton(
+                    onPressed:busy?null:_cancelAssigned,
+                    child:Text(t('Annuler ma prise en charge')),
+                  ),
                 ],
-              ));
-              if(confirmed==true)action(()=>api.complete(widget.bookingId),stopGps:true);
-            },child:Text(t('Terminer la course'))),
-          if({'COMPLETED','CLOSED'}.contains(status))
-            Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
-              const SizedBox(height:8),
-              Row(children:[for(int i=1;i<=5;i++)IconButton(
-                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
-                tooltip:AppLocale.code.value=='en'
-                  ?(i==1?'1 star':'$i stars')
-                  :(i==1?'1 étoile':'$i étoiles'),
-                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
-              )]),
-              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
-            ]))),
-          const SizedBox(height:10),
-          if(status=='DRIVER_EN_ROUTE'&&pickupLat!=null&&pickupLng!=null)
-            OutlinedButton.icon(
-              onPressed:()=>launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$pickupLat,$pickupLng&travelmode=driving'),mode:LaunchMode.externalApplication),
-              icon:const Icon(Icons.navigation_outlined),label:Text(t('Naviguer vers le client')),
+                if(status=='DRIVER_EN_ROUTE')
+                  FilledButton.icon(
+                    onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),
+                    icon:const Icon(Icons.flag_outlined),
+                    label:Text(t('Je suis arrivé')),
+                  ),
+                if(status=='DRIVER_ARRIVED')...[
+                  const SizedBox(height:8),
+                  Text(
+                    t('Code PIN du client'),
+                    style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16),
+                  ),
+                  const SizedBox(height:8),
+                  TextField(
+                    controller:pin,
+                    maxLength:4,
+                    keyboardType:TextInputType.number,
+                    onChanged:(_)=>setState((){}),
+                    decoration:InputDecoration(labelText:t('PIN client (4 chiffres)')),
+                  ),
+                  FilledButton(
+                    onPressed:busy||pin.text.length!=4
+                      ?null
+                      :()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),
+                    child:Text(t('Démarrer la course')),
+                  ),
+                  TextButton(
+                    onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),
+                    child:Text(t('Signaler un no-show')),
+                  ),
+                ],
+                if(status=='IN_PROGRESS')
+                  FilledButton(
+                    onPressed:busy?null:()async{
+                      final confirmed=await showDialog<bool>(
+                        context:context,
+                        builder:(dialogContext)=>AlertDialog(
+                          title:Text(t('Terminer la course ?')),
+                          content:Text(t('Confirmez uniquement lorsque le passager est arrivé à destination.')),
+                          actions:[
+                            TextButton(
+                              onPressed:()=>Navigator.pop(dialogContext,false),
+                              child:Text(t('Continuer la course')),
+                            ),
+                            FilledButton(
+                              onPressed:()=>Navigator.pop(dialogContext,true),
+                              child:Text(t('Terminer la course')),
+                            ),
+                          ],
+                        ),
+                      );
+                      if(confirmed==true){
+                        action(()=>api.complete(widget.bookingId),stopGps:true);
+                      }
+                    },
+                    child:Text(t('Terminer la course')),
+                  ),
+                if({'COMPLETED','CLOSED'}.contains(status))
+                  Card(child:Padding(
+                    padding:const EdgeInsets.all(16),
+                    child:ratingSubmitted
+                      ?Row(children:[
+                          const Icon(Icons.check_circle,color:Colors.green),
+                          const SizedBox(width:8),
+                          Text(t('Merci pour votre avis !')),
+                        ])
+                      :Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                          Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
+                          const SizedBox(height:8),
+                          Row(children:[
+                            for(int i=1;i<=5;i++)
+                              IconButton(
+                                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
+                                tooltip:AppLocale.code.value=='en'
+                                  ?(i==1?'1 star':'$i stars')
+                                  :(i==1?'1 étoile':'$i étoiles'),
+                                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
+                              ),
+                          ]),
+                          FilledButton(
+                            onPressed:ratingSubmitting||ratingScore<1?null:submitRating,
+                            child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note')),
+                          ),
+                        ]),
+                  )),
+                const SizedBox(height:12),
+                if(status=='DRIVER_EN_ROUTE'&&pickupLat!=null&&pickupLng!=null)
+                  OutlinedButton.icon(
+                    onPressed:()=>launchUrl(
+                      Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$pickupLat,$pickupLng&travelmode=driving'),
+                      mode:LaunchMode.externalApplication,
+                    ),
+                    icon:const Icon(Icons.navigation_outlined),
+                    label:Text(t('Naviguer vers le client')),
+                  ),
+                if(status=='IN_PROGRESS'&&dropoffLat!=null&&dropoffLng!=null)
+                  OutlinedButton.icon(
+                    onPressed:()=>launchUrl(
+                      Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$dropoffLat,$dropoffLng&travelmode=driving'),
+                      mode:LaunchMode.externalApplication,
+                    ),
+                    icon:const Icon(Icons.navigation_outlined),
+                    label:Text(t('Naviguer vers la destination')),
+                  ),
+                Row(children:[
+                  Expanded(child:OutlinedButton.icon(
+                    onPressed:phone==null||phone.isEmpty
+                      ?null
+                      :()=>launchUrl(Uri(scheme:'tel',path:phone)),
+                    icon:const Icon(Icons.phone_outlined),
+                    label:Text(t('Appeler')),
+                  )),
+                  const SizedBox(width:12),
+                  Expanded(child:OutlinedButton.icon(
+                    onPressed:()=>context.push('/chat/'+widget.bookingId),
+                    icon:const Icon(Icons.chat_bubble_outline),
+                    label:Text(t('Message')),
+                  )),
+                ]),
+              ]),
             ),
-          if(status=='IN_PROGRESS'&&dropoffLat!=null&&dropoffLng!=null)
-            OutlinedButton.icon(
-              onPressed:()=>launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$dropoffLat,$dropoffLng&travelmode=driving'),mode:LaunchMode.externalApplication),
-              icon:const Icon(Icons.navigation_outlined),label:Text(t('Naviguer vers la destination')),
-            ),
-          OutlinedButton.icon(
-            onPressed:phone==null||phone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:phone)),
-            icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler le client')),
-          ),
-          OutlinedButton.icon(onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Chat Veyra'))),
-        ]);
+          ],
+        );
       },
     ),
   );
 }
+
 
 class WalletScreen extends StatefulWidget{
   const WalletScreen({super.key});
@@ -1374,10 +1979,12 @@ class WalletScreen extends StatefulWidget{
 class _WalletScreenState extends State<WalletScreen>{
   late Future<Map<String,dynamic>> future;
   late Future<List<dynamic>> transactionsFuture;
+  int transactionsPage=0;
+
   @override void initState(){
     super.initState();
     future=api.wallet();
-    transactionsFuture=api.walletTransactions();
+    transactionsFuture=api.walletTransactions(page:transactionsPage);
     RefreshBus.tick.addListener(_refresh);
   }
   @override void dispose(){
@@ -1386,7 +1993,7 @@ class _WalletScreenState extends State<WalletScreen>{
   }
   void _refresh()=>setState((){
     future=api.wallet();
-    transactionsFuture=api.walletTransactions();
+    transactionsFuture=api.walletTransactions(page:transactionsPage);
   });
 
   @override Widget build(BuildContext context)=>Scaffold(
@@ -1423,7 +2030,7 @@ class _WalletScreenState extends State<WalletScreen>{
                 return Card(child:ListTile(
                   leading:const Icon(Icons.cloud_off),
                   title:Text(t('Historique indisponible')),
-                  trailing:TextButton(onPressed:()=>setState((){transactionsFuture=api.walletTransactions();}),child:Text(t('Réessayer'))),
+                  trailing:TextButton(onPressed:()=>setState((){transactionsFuture=api.walletTransactions(page:transactionsPage);}),child:Text(t('Réessayer'))),
                 ));
               }
               final items=ts.data??[];
@@ -1433,35 +2040,53 @@ class _WalletScreenState extends State<WalletScreen>{
                   title:Text(t('Aucune transaction pour le moment.')),
                 ));
               }
-              return Column(children:items.map((raw){
-                final tx=Map<String,dynamic>.from(raw as Map);
-                final eventType=tx['event_type']?.toString();
-                // Le sens comptable brut (DEBIT/CREDIT) ne correspond PAS
-                // directement à "bon/mauvais pour le chauffeur" ici : un
-                // DEBIT sur DRIVER_PAYABLE (compte de passif) signifie
-                // qu'il vient d'être payé (bonne nouvelle), alors qu'un
-                // DEBIT sur DRIVER_PLATFORM_DEBT (compte d'actif) signifie
-                // que sa dette augmente (mauvaise nouvelle). On classe donc
-                // explicitement par type d'événement plutôt que par sens
-                // comptable brut.
-                final isPositive={
-                  'BOOKING_COMPLETED_ONLINE',
-                  'BOOKING_COMPLETED_PARTNER_INVOICE',
-                  'DRIVER_PAYABLE_PAID',
-                  'DRIVER_CASH_DEBT_SETTLED',
-                  'CUSTOMER_CASH_DEBT_PAID',
-                }.contains(eventType);
-                final amount=VeyraMoneyFormatter.fromMinor(tx['amount_minor']);
-                return Card(child:ListTile(
-                  leading:Icon(isPositive?Icons.add_circle_outline:Icons.remove_circle_outline,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
-                  title:Text(VeyraStatusLabels.ledgerEvent(eventType)),
-                  subtitle:Text(VeyraDateFormatter.dateTime(tx['created_at'])),
-                  trailing:Text(
-                    (isPositive?'+ ':'- ')+amount,
-                    style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
-                  ),
-                ));
-              }).toList());
+              return Column(children:[
+                ...items.map((raw){
+                  final tx=Map<String,dynamic>.from(raw as Map);
+                  final eventType=tx['event_type']?.toString();
+                  // Le sens comptable brut (DEBIT/CREDIT) ne correspond PAS
+                  // directement à "bon/mauvais pour le chauffeur" ici : un
+                  // DEBIT sur DRIVER_PAYABLE (compte de passif) signifie
+                  // qu'il vient d'être payé (bonne nouvelle), alors qu'un
+                  // DEBIT sur DRIVER_PLATFORM_DEBT (compte d'actif) signifie
+                  // que sa dette augmente (mauvaise nouvelle). On classe donc
+                  // explicitement par type d'événement plutôt que par sens
+                  // comptable brut.
+                  final isPositive={
+                    'BOOKING_COMPLETED_ONLINE',
+                    'BOOKING_COMPLETED_PARTNER_INVOICE',
+                    'DRIVER_PAYABLE_PAID',
+                    'DRIVER_CASH_DEBT_SETTLED',
+                    'CUSTOMER_CASH_DEBT_PAID',
+                  }.contains(eventType);
+                  final amount=VeyraMoneyFormatter.fromMinor(tx['amount_minor']);
+                  return Card(child:ListTile(
+                    leading:Icon(isPositive?Icons.add_circle_outline:Icons.remove_circle_outline,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
+                    title:Text(VeyraStatusLabels.ledgerEvent(eventType)),
+                    subtitle:Text(VeyraDateFormatter.dateTime(tx['created_at'])),
+                    trailing:Text(
+                      (isPositive?'+ ':'- ')+amount,
+                      style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
+                    ),
+                  ));
+                }),
+                VeyraPaginationBar(
+                  page:transactionsPage,
+                  hasNext:items.length==10,
+                  onPrevious:(){
+                    setState((){
+                      transactionsPage--;
+                      transactionsFuture=api.walletTransactions(page:transactionsPage);
+                    });
+                  },
+                  onNext:(){
+                    setState((){
+                      transactionsPage++;
+                      transactionsFuture=api.walletTransactions(page:transactionsPage);
+                    });
+                  },
+                ),
+              ]);
             },
           ),
         ]);
@@ -1487,9 +2112,43 @@ class _AccountScreenState extends State<AccountScreen>{
     setState(()=>loggingOut=true);
     try{
       await api.logout();
+      try{await FirebaseAuth.instance.signOut();}catch(_){}
+      try{await GoogleSignIn().signOut();}catch(_){}
     }finally{
       if(mounted)context.go('/login');
     }
+  }
+
+  Future<void> editProfile(Map<String,dynamic> me) async {
+    final first=TextEditingController(text:(me['first_name']??'').toString());
+    final last=TextEditingController(text:(me['last_name']??'').toString());
+    final phone=TextEditingController(text:(me['phone']??'').toString());
+    final save=await showDialog<bool>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Modifier mes informations')),
+        content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+          TextField(controller:first,decoration:InputDecoration(labelText:t('Prénom'))),
+          const SizedBox(height:10),
+          TextField(controller:last,decoration:InputDecoration(labelText:t('Nom'))),
+          const SizedBox(height:10),
+          TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
+        ])),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Annuler'))),
+          FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Enregistrer'))),
+        ],
+      ),
+    );
+    if(save==true&&first.text.trim().isNotEmpty){
+      final updated=await api.updateProfile(
+        firstName:first.text,
+        lastName:last.text,
+        phone:phone.text,
+      );
+      if(mounted)setState(()=>future=Future.value(updated));
+    }
+    first.dispose();last.dispose();phone.dispose();
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
@@ -1513,7 +2172,16 @@ class _AccountScreenState extends State<AccountScreen>{
           Card(child:ListTile(
             leading:const CircleAvatar(child:Icon(Icons.person)),
             title:Text('$firstName $lastName'.trim().isEmpty?t('Chauffeur Veyra'):'$firstName $lastName'.trim()),
-            subtitle:Text(email),
+            subtitle:Text([
+              email,
+              if((me['phone']??'').toString().isNotEmpty)(me['phone']??'').toString(),
+            ].join('\n')),
+            isThreeLine:(me['phone']??'').toString().isNotEmpty,
+            trailing:IconButton(
+              tooltip:t('Modifier'),
+              icon:const Icon(Icons.edit_outlined),
+              onPressed:()=>editProfile(me),
+            ),
           )),
           const SizedBox(height:16),
           const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
@@ -1605,6 +2273,45 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
       const SizedBox(height:16),
       FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Continuer vers mon dossier VTC'))),
     ])),
+  );
+}
+
+
+class _DriverEtaCard extends StatelessWidget{
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? detail;
+  final Color accent;
+
+  const _DriverEtaCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.accent,
+  });
+
+  @override Widget build(BuildContext context)=>Container(
+    padding:const EdgeInsets.fromLTRB(12,12,12,11),
+    decoration:BoxDecoration(
+      color:accent.withValues(alpha:.07),
+      borderRadius:BorderRadius.circular(18),
+      border:Border.all(color:accent.withValues(alpha:.12)),
+    ),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Icon(icon,color:accent,size:20),
+      const SizedBox(height:8),
+      Text(label,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(
+        color:Color(0xFF6B7280),fontSize:11,fontWeight:FontWeight.w600,height:1.15,
+      )),
+      const SizedBox(height:4),
+      Text(value,style:TextStyle(color:accent,fontSize:18,fontWeight:FontWeight.w900)),
+      if(detail!=null)...[
+        const SizedBox(height:2),
+        Text(detail!,style:const TextStyle(color:Color(0xFF6B7280),fontSize:11)),
+      ],
+    ]),
   );
 }
 
@@ -1808,8 +2515,9 @@ class DriverNotificationsScreen extends StatefulWidget{
 
 class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
   late Future<List<dynamic>> future;
-  @override void initState(){super.initState();future=api.notifications();}
-  void reload()=>setState((){future=api.notifications();});
+  int page=0;
+  @override void initState(){super.initState();future=api.notifications(page:page);}
+  void reload()=>setState((){future=api.notifications(page:page);});
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),
@@ -1839,9 +2547,27 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
           }
           return ListView.separated(
             padding:const EdgeInsets.all(16),
-            itemCount:items.length,
+            itemCount:items.length+1,
             separatorBuilder:(_,__)=>const SizedBox(height:8),
             itemBuilder:(context,index){
+              if(index==items.length){
+                return VeyraPaginationBar(
+                  page:page,
+                  hasNext:items.length==10,
+                  onPrevious:(){
+                    setState((){
+                      page--;
+                      future=api.notifications(page:page);
+                    });
+                  },
+                  onNext:(){
+                    setState((){
+                      page++;
+                      future=api.notifications(page:page);
+                    });
+                  },
+                );
+              }
               final x=Map<String,dynamic>.from(items[index] as Map);
               final data=x['data'] is Map?Map<String,dynamic>.from(x['data'] as Map):<String,dynamic>{};
               final bookingId=data['bookingId']?.toString();

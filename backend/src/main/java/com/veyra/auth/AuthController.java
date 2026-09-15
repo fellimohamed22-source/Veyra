@@ -1,6 +1,8 @@
 package com.veyra.auth;
 
 import com.veyra.shared.ApiException;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseToken;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.http.*;
@@ -51,6 +53,11 @@ public class AuthController {
       String refreshToken,
       UUID userId){}
 
+  public record FirebaseLogin(
+      @NotBlank String idToken,
+      @Pattern(regexp="CLIENT|DRIVER") String role,
+      String deviceName){}
+
   @PostMapping("/register")
   @Transactional
   public ResponseEntity<Tokens> register(@Valid @RequestBody Register request){
@@ -99,6 +106,63 @@ public class AuthController {
     user.success();
     users.save(user);
     return tokens(user,request.deviceName());
+  }
+
+  @PostMapping("/firebase")
+  @Transactional
+  public Tokens firebase(@Valid @RequestBody FirebaseLogin request){
+    final FirebaseToken decoded;
+    try{
+      decoded=FirebaseAuth.getInstance().verifyIdToken(request.idToken());
+    }catch(Exception e){
+      throw new ApiException(HttpStatus.UNAUTHORIZED,"INVALID_FIREBASE_TOKEN");
+    }
+
+    Object phoneClaim=decoded.getClaims().get("phone_number");
+    String phone=phoneClaim==null?null:phoneClaim.toString();
+    String email=decoded.getEmail();
+    if((email==null||email.isBlank())&&phone!=null&&!phone.isBlank()){
+      List<String> existing=db.queryForList(
+          "select email::text from users where phone=? order by created_at asc limit 1",
+          String.class,phone);
+      if(!existing.isEmpty())email=existing.getFirst();
+    }
+    if(email==null||email.isBlank()){
+      email="firebase-"+decoded.getUid()+"@phone.veyra.local";
+    }
+    email=email.trim().toLowerCase(Locale.ROOT);
+
+    User user=users.findByEmailIgnoreCase(email).orElse(null);
+    if(user==null){
+      String name=decoded.getName();
+      String first="Utilisateur";
+      String last=null;
+      if(name!=null&&!name.isBlank()){
+        String[] parts=name.trim().split("\\s+",2);
+        first=parts[0];
+        if(parts.length>1)last=parts[1];
+      }
+      user=users.save(new User(
+          first,last,email,encoder.encode(UUID.randomUUID().toString()+UUID.randomUUID())));
+    }
+    if(phone!=null&&!phone.isBlank()){
+      db.update("update users set phone=?,updated_at=now() where id=?",phone,user.id());
+    }
+
+    String role=request.role()==null?"CLIENT":request.role();
+    db.update(
+        "insert into user_roles(user_id,role_id) select ?,id from roles where code=? on conflict do nothing",
+        user.id(),role);
+    if("DRIVER".equals(role)){
+      db.update(
+          "insert into drivers(id,user_id) select gen_random_uuid(),? where not exists(select 1 from drivers where user_id=?)",
+          user.id(),user.id());
+    }
+
+    if(!"ACTIVE".equals(user.status())){
+      throw new ApiException(HttpStatus.FORBIDDEN,"ACCOUNT_NOT_ACTIVE");
+    }
+    return tokens(user,request.deviceName()==null?"firebase-mobile":request.deviceName());
   }
 
   private Tokens tokens(User user,String deviceName){

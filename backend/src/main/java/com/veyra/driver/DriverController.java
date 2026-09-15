@@ -1,6 +1,7 @@
 package com.veyra.driver;
 import com.veyra.security.CurrentUser;
 import com.veyra.storage.*;
+import com.veyra.shared.ApiException;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -26,7 +27,9 @@ import java.util.*;
         id));
     }
     @PostMapping("/documents")ResponseEntity<Map<String,UUID>>doc(@RequestParam String type,@RequestParam MultipartFile file)throws IOException{
-        UUID d=db.queryForObject("select id from drivers where user_id=?",UUID.class,CurrentUser.id());
+        List<UUID> driverIds=db.queryForList("select id from drivers where user_id=?",UUID.class,CurrentUser.id());
+        if(driverIds.isEmpty())throw new ApiException(HttpStatus.CONFLICT,"DRIVER_PROFILE_REQUIRED");
+        UUID d=driverIds.getFirst();
         StoredFile s=fs.store(file.getInputStream(),file.getOriginalFilename(),file.getContentType(),file.getSize());
         UUID id=UUID.randomUUID();
         db.update("insert into driver_documents(id,driver_id,type,storage_key,original_filename,content_type) values (?,?,?,?,?,?)",id,d,type,s.storageKey(),s.originalFilename(),s.contentType());

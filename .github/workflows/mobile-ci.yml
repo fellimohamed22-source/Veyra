@@ -1,4 +1,9 @@
 name: mobile-ci
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on: [push, pull_request]
 jobs:
   client:
@@ -6,12 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
-        with: {channel: stable}
+        with:
+          channel: stable
+          flutter-version: '3.47.4'
       - run: cd mobile-client && flutter pub get && flutter analyze && flutter test
   driver:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
-        with: {channel: stable}
+        with:
+          channel: stable
+          flutter-version: '3.47.4'
       - run: cd mobile-driver && flutter pub get && flutter analyze && flutter test

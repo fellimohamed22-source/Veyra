@@ -48,6 +48,8 @@ class VeyraErrorMessages {
     'EMAIL_ALREADY_USED': "Un compte existe déjà avec cet email.",
     'CANNOT_CANCEL': "Cette réservation ne peut plus être annulée dans son état actuel.",
     'DRIVER_CANNOT_CANCEL_NOW': "Vous ne pouvez plus annuler cette course à ce stade.",
+    'LOCATION_NOT_ALLOWED': "La position ne peut pas être envoyée pour cette course dans son état actuel.",
+    'LOCATION_REPLAY': "La synchronisation GPS a été réinitialisée. Une nouvelle position va être envoyée.",
   };
 
   static const Map<String, String> _en = {
@@ -78,6 +80,8 @@ class VeyraErrorMessages {
     'EMAIL_ALREADY_USED': 'An account already exists with this email.',
     'CANNOT_CANCEL': 'This booking can no longer be cancelled in its current state.',
     'DRIVER_CANNOT_CANCEL_NOW': "You can't cancel this trip at this stage anymore.",
+    'LOCATION_NOT_ALLOWED': "Location cannot be sent for this ride in its current state.",
+    'LOCATION_REPLAY': "GPS synchronization was reset. A fresh location will be sent.",
   };
 
   static bool get _isEnglish => AppLocale.code.value == 'en';

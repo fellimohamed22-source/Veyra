@@ -64,7 +64,7 @@ class FinanceControllerTransactionsTest {
     when(db.queryForList(anyString(), eq(driverId)))
         .thenReturn(List.of(Map.of("event_type", "BOOKING_COMPLETED_CASH", "amount_minor", 1500L)));
 
-    List<Map<String, Object>> result = controller().transactions();
+    List<Map<String, Object>> result = controller().transactions(0);
 
     assertEquals(1, result.size());
     ArgumentMatcher<String> hasExpectedShape = sql ->
@@ -78,7 +78,7 @@ class FinanceControllerTransactionsTest {
   void neverExposesThePlatformsOwnCounterAccounts() {
     when(db.queryForList(anyString(), eq(driverId))).thenReturn(List.of());
 
-    controller().transactions();
+    controller().transactions(0);
 
     verify(db).queryForList(
         argThat(sql -> sql.contains("'DRIVER_PAYABLE','DRIVER_PLATFORM_DEBT'") &&
