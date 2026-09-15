@@ -221,18 +221,10 @@ class _LoginScreenState extends State<LoginScreen>{
     // being sent straight to the onboarding screen, looking exactly like
     // they needed to register again.
     //
-    // Real backend limitation found while diagnosing this (not fixed
-    // here -- out of this mission's scope, no backend change without a
-    // demonstrated need beyond this): DriverOnboardingController's own
-    // driver() helper uses a raw queryForObject() with no empty-result
-    // handling, so "no driver profile exists yet" and "genuine
-    // unexpected server error" are BOTH indistinguishable 500 responses
-    // from this client's perspective. Given that, only a clean 401/403
-    // (the token itself was actually rejected, confirmed after this
-    // app's own interceptor already attempted a silent refresh) is
-    // treated as a real logout -- anything else (timeout, connection
-    // error, 5xx) preserves the session and offers a retry instead of
-    // ever silently routing to onboarding on a technical failure alone.
+    // Startup must preserve a valid persisted session across transient
+    // network/backend failures. The backend now reports a missing driver
+    // profile explicitly instead of collapsing that onboarding state into
+    // an INTERNAL_ERROR, so technical failures remain retryable here.
     WidgetsBinding.instance.addPostFrameCallback((_)=>_restoreSession());
   }
 
