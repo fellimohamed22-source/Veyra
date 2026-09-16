@@ -50,6 +50,15 @@ class VeyraErrorMessages {
     'DRIVER_CANNOT_CANCEL_NOW': "Vous ne pouvez plus annuler cette course à ce stade.",
     'LOCATION_NOT_ALLOWED': "La position ne peut pas être envoyée pour cette course dans son état actuel.",
     'LOCATION_REPLAY': "La synchronisation GPS a été réinitialisée. Une nouvelle position va être envoyée.",
+    // Real gap found here: these two are thrown by DriverLocationTracker
+    // itself (a plain StateError, not a backend ApiException) when the
+    // device's location service is off or permission was refused --
+    // forException() below only ever recognized DioException, so these
+    // silently fell through to the generic "Une erreur est survenue"
+    // message, giving the driver zero indication of what was actually
+    // wrong or how to fix it.
+    'LOCATION_SERVICE_DISABLED': "Activez la localisation de votre appareil pour partager votre position pendant la course.",
+    'LOCATION_PERMISSION_DENIED': "Autorisez l'accès à la position dans les réglages de l'application pour partager votre position pendant la course.",
   };
 
   static const Map<String, String> _en = {
@@ -82,6 +91,8 @@ class VeyraErrorMessages {
     'DRIVER_CANNOT_CANCEL_NOW': "You can't cancel this trip at this stage anymore.",
     'LOCATION_NOT_ALLOWED': "Location cannot be sent for this ride in its current state.",
     'LOCATION_REPLAY': "GPS synchronization was reset. A fresh location will be sent.",
+    'LOCATION_SERVICE_DISABLED': "Turn on your device's location so you can share your position during the ride.",
+    'LOCATION_PERMISSION_DENIED': "Allow location access in the app's settings so you can share your position during the ride.",
   };
 
   static bool get _isEnglish => AppLocale.code.value == 'en';
@@ -130,6 +141,14 @@ class VeyraErrorMessages {
       final data = error.response?.data;
       final code = (data is Map) ? data['code']?.toString() : null;
       return forCode(code);
+    }
+    // DriverLocationTracker throws a plain StateError with a code-like
+    // message (LOCATION_SERVICE_DISABLED, LOCATION_PERMISSION_DENIED) --
+    // reuse the same code lookup rather than showing the generic
+    // fallback for something that actually has a clear, actionable
+    // message available.
+    if (error is StateError) {
+      return forCode(error.message);
     }
     return _generic;
   }

@@ -50,4 +50,27 @@ void main() {
     AppLocale.code.value = 'en';
     expect(VeyraErrorMessages.forCode('INVALID_PIN'), 'Incorrect code. Check the code with the customer.');
   });
+
+  // Real gap fixed here: DriverLocationTracker throws a plain
+  // StateError (not a DioException) when the device's location service
+  // is off or permission was refused. forException() previously only
+  // recognized DioException, so these silently fell through to the
+  // generic "Une erreur est survenue" message -- giving the driver zero
+  // indication of what was actually wrong or how to fix it.
+  test('a StateError with a known location code gets its real message, not the generic one', () {
+    final message = VeyraErrorMessages.forException(StateError('LOCATION_SERVICE_DISABLED'));
+    expect(message, "Activez la localisation de votre appareil pour partager votre position pendant la course.");
+  });
+
+  test('a StateError for denied permission gets its real message too', () {
+    final message = VeyraErrorMessages.forException(StateError('LOCATION_PERMISSION_DENIED'));
+    expect(message, contains('position'));
+    expect(message, isNot(VeyraErrorMessages.forCode('SOME_FUTURE_BACKEND_CODE_NOT_YET_MAPPED')));
+  });
+
+  test('a StateError with an unrecognized message still falls back safely', () {
+    final message = VeyraErrorMessages.forException(StateError('something totally unexpected'));
+    expect(message, isNotEmpty);
+    expect(message, isNot(contains('something totally unexpected')));
+  });
 }
