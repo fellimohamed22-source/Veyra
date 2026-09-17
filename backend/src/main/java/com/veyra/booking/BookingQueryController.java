@@ -27,32 +27,32 @@ public class BookingQueryController {
         "sb.payment_method,sb.offer_window_ends_at,sb.selected_driver_id," +
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
         "du.first_name as driver_first_name,du.last_name as driver_last_name,du.phone as driver_phone,d.rating as driver_rating,d.kyc_status as driver_kyc_status,d.status as driver_status," +
-        "v.brand as vehicle_brand,v.model as vehicle_model,v.plate_number,v.color as vehicle_color,v.year as vehicle_year,v.status as vehicle_status " +
+        "v.brand as vehicle_brand,v.model as vehicle_model,v.plate_number,v.color as vehicle_color,v.year as vehicle_year,v.status as vehicle_status," +
+        "cdl.lat as driver_lat,cdl.lng as driver_lng,cdl.heading as driver_heading,cdl.speed_mps as driver_speed_mps,cdl.recorded_at as driver_location_recorded_at " +
         "from scheduled_bookings sb " +
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "left join drivers d on d.id=sb.selected_driver_id " +
         "left join users du on du.id=d.user_id " +
         "left join vehicles v on v.driver_id=d.id and v.status='APPROVED' " +
+        "left join current_driver_locations cdl on cdl.driver_id=sb.selected_driver_id and cdl.booking_id=sb.id " +
         "where sb.id=? limit 1",
         bookingId);
 
-    if(rows.isEmpty()){
-      throw new ApiException(HttpStatus.NOT_FOUND,"BOOKING_NOT_FOUND");
-    }
+    if(rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"BOOKING_NOT_FOUND");
 
     Map<String,Object> row=rows.getFirst();
     assertAllowed(row,userId);
     Map<String,Object> result=new LinkedHashMap<>(row);
 
-    // Trust/execution is explicit instead of forcing clients to infer it from
-    // nullable driver fields. Once a driver is selected, expose whether the
-    // assignment still carries the approved driver + approved vehicle proof
-    // expected by the booking UI.
+    String status=String.valueOf(row.get("status"));
     boolean driverSelected=row.get("selected_driver_id")!=null;
     result.put("driverSelected",driverSelected);
     result.put("driverVerified",driverSelected && "APPROVED".equals(row.get("driver_kyc_status")) && "ACTIVE".equals(row.get("driver_status")));
     result.put("vehicleVerified",driverSelected && "APPROVED".equals(row.get("vehicle_status")));
-    result.put("liveTrackingEligible",Set.of("DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(String.valueOf(row.get("status"))));
+    result.put("liveTrackingEligible",Set.of("DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
+    result.put("canContactDriver",driverSelected && Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
+    result.put("rideStarted",Set.of("IN_PROGRESS","COMPLETED").contains(status));
+    result.put("rideCompleted","COMPLETED".equals(status));
 
     return result;
   }
@@ -63,9 +63,7 @@ public class BookingQueryController {
     List<Map<String,Object>> rows=db.queryForList(
         "select creator_user_id,partner_id,selected_driver_id from scheduled_bookings where id=?",
         bookingId);
-    if(rows.isEmpty()){
-      throw new ApiException(HttpStatus.NOT_FOUND,"BOOKING_NOT_FOUND");
-    }
+    if(rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"BOOKING_NOT_FOUND");
     assertAllowed(rows.getFirst(),userId);
     return db.queryForList(
         "select from_status,to_status,actor_type,reason_code,created_at from booking_status_history where booking_id=? order by created_at",
@@ -91,8 +89,6 @@ public class BookingQueryController {
       allowed=driver!=null && driver>0;
     }
 
-    if(!allowed){
-      throw new ApiException(HttpStatus.FORBIDDEN,"FORBIDDEN");
-    }
+    if(!allowed) throw new ApiException(HttpStatus.FORBIDDEN,"FORBIDDEN");
   }
 }
