@@ -37,9 +37,10 @@ public class DriverOpportunityController {
 
     Map<String,Object> result=new LinkedHashMap<>(rows.getFirst());
 
-    // Objective approach information is more useful to a professional driver
-    // than a synthetic profitability score. Distance is exposed only when we
-    // have a recent GPS fix, so the UI never presents stale precision as fact.
+    // Give the professional driver objective economics for this specific job.
+    // This complements (rather than replaces) the marketplace benchmark below:
+    // the driver can see both the work involved and the current lowest competing
+    // offer, then remains fully responsible for choosing their own price.
     List<Map<String,Object>> approach=db.queryForList(
         "select round(ST_Distance(cdl.position,sb.pickup))::bigint as approach_distance_meters,cdl.recorded_at as driver_location_recorded_at " +
         "from current_driver_locations cdl join scheduled_bookings sb on sb.id=? " +
@@ -52,12 +53,16 @@ public class DriverOpportunityController {
         bookingId,driverId);
     result.put("hasActiveOffer",!ownOffers.isEmpty());
     if(!ownOffers.isEmpty())result.put("ownActiveOfferAmountMinor",ownOffers.getFirst().get("proposed_amount_minor"));
-    if("BEST_VISIBLE".equals(result.get("offer_visibility_mode"))){
-      Long bestOthers=db.queryForObject(
-          "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",
-          Long.class,bookingId,driverId);
-      result.put("currentBestOtherOfferMinor",bestOthers);
-    }
+
+    // Marketplace transparency: drivers may benchmark against the current
+    // lowest ACTIVE offer from another driver. Never include their own offer
+    // in this value. A null value simply means there is no competing offer yet.
+    Long bestOthers=db.queryForObject(
+        "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",
+        Long.class,bookingId,driverId);
+    result.put("currentBestOtherOfferMinor",bestOthers);
+    result.put("competitorBenchmarkVisible",true);
+
     return result;
   }
 
