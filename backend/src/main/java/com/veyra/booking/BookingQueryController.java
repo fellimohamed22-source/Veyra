@@ -22,11 +22,12 @@ public class BookingQueryController {
     UUID userId=CurrentUser.id();
     List<Map<String,Object>> rows=db.queryForList(
         "select sb.id,sb.creator_type,sb.creator_user_id,sb.partner_id,sb.beneficiary_name_snapshot," +
-        "sb.beneficiary_phone_snapshot,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,sb.scheduled_at,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.status," +
+        "sb.beneficiary_phone_snapshot,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng," +
+        "round(ST_Distance(sb.pickup,sb.dropoff))::bigint as trip_distance_meters,sb.scheduled_at,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.status," +
         "sb.payment_method,sb.offer_window_ends_at,sb.selected_driver_id," +
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
-        "du.first_name as driver_first_name,du.last_name as driver_last_name,du.phone as driver_phone,d.rating as driver_rating," +
-        "v.brand as vehicle_brand,v.model as vehicle_model,v.plate_number,v.color as vehicle_color " +
+        "du.first_name as driver_first_name,du.last_name as driver_last_name,du.phone as driver_phone,d.rating as driver_rating,d.kyc_status as driver_kyc_status,d.status as driver_status," +
+        "v.brand as vehicle_brand,v.model as vehicle_model,v.plate_number,v.color as vehicle_color,v.year as vehicle_year,v.status as vehicle_status " +
         "from scheduled_bookings sb " +
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "left join drivers d on d.id=sb.selected_driver_id " +
@@ -41,19 +42,21 @@ public class BookingQueryController {
 
     Map<String,Object> row=rows.getFirst();
     assertAllowed(row,userId);
-    return new LinkedHashMap<>(row);
+    Map<String,Object> result=new LinkedHashMap<>(row);
+
+    // Trust/execution is explicit instead of forcing clients to infer it from
+    // nullable driver fields. Once a driver is selected, expose whether the
+    // assignment still carries the approved driver + approved vehicle proof
+    // expected by the booking UI.
+    boolean driverSelected=row.get("selected_driver_id")!=null;
+    result.put("driverSelected",driverSelected);
+    result.put("driverVerified",driverSelected && "APPROVED".equals(row.get("driver_kyc_status")) && "ACTIVE".equals(row.get("driver_status")));
+    result.put("vehicleVerified",driverSelected && "APPROVED".equals(row.get("vehicle_status")));
+    result.put("liveTrackingEligible",Set.of("DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(String.valueOf(row.get("status"))));
+
+    return result;
   }
 
-  // Gap found for P32 (Partner "Suivi reservation"): the fiche lists
-  // "timeline" as a required UI component with booking_status_history
-  // as its DB source, but the only endpoint reading that table
-  // (SupportController.timeline()) is ADMIN/SUPPORT-only and bundles in
-  // full chat messages + payment rows, neither appropriate to hand to a
-  // partner (privacy: a partner has no business reading the customer/
-  // driver chat). A narrower, booking-detail-scoped sibling endpoint,
-  // reusing the exact same ownership check as detail() above (extracted
-  // into assertAllowed() rather than duplicated) instead of the
-  // admin-only one.
   @GetMapping("/{bookingId}/timeline")
   public List<Map<String,Object>> timeline(@PathVariable UUID bookingId){
     UUID userId=CurrentUser.id();
