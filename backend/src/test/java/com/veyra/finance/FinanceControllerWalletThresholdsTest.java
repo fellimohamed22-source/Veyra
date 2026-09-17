@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,8 +39,14 @@ class FinanceControllerWalletThresholdsTest {
   @BeforeEach
   void setUpSecurityContext() {
     SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(userId, null));
-    when(db.queryForObject(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
-        .thenReturn(driverId);
+    // Real fix: currentDriverId() actually calls queryForList (checking
+    // isEmpty(), not queryForObject) -- this stub was written against an
+    // older shape of that method and never updated when it changed,
+    // causing Mockito's strict stubbing to reject the real invocation
+    // entirely and every test relying on this setup to fail with
+    // DRIVER_PROFILE_REQUIRED.
+    when(db.queryForList(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
+        .thenReturn(List.of(driverId));
   }
 
   @AfterEach

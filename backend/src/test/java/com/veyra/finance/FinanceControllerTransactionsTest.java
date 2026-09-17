@@ -46,8 +46,11 @@ class FinanceControllerTransactionsTest {
   @BeforeEach
   void setUpSecurityContext() {
     SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(userId, null));
-    when(db.queryForObject(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
-        .thenReturn(driverId);
+    // Real fix: currentDriverId() actually calls queryForList (checking
+    // isEmpty(), not queryForObject) -- this stub was written against an
+    // older shape of that method and never updated when it changed.
+    when(db.queryForList(eq("select id from drivers where user_id=?"), eq(UUID.class), eq(userId)))
+        .thenReturn(List.of(driverId));
   }
 
   @AfterEach
