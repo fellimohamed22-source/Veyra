@@ -37,14 +37,16 @@ public class DriverOpportunityController {
 
     Map<String,Object> result=new LinkedHashMap<>(rows.getFirst());
 
-    // Give the professional driver objective economics for this specific job.
-    // This complements (rather than replaces) the marketplace benchmark below:
-    // the driver can see both the work involved and the current lowest competing
-    // offer, then remains fully responsible for choosing their own price.
+    // Objective economics for the driver's own job. current_driver_locations
+    // stores latitude/longitude as scalar columns, so build a geography point
+    // from the latest fix instead of assuming a non-existent geometry column.
+    // Only a recent fix is used: stale GPS must not be presented as precise
+    // approach economics.
     List<Map<String,Object>> approach=db.queryForList(
-        "select round(ST_Distance(cdl.position,sb.pickup))::bigint as approach_distance_meters,cdl.recorded_at as driver_location_recorded_at " +
-        "from current_driver_locations cdl join scheduled_bookings sb on sb.id=? " +
-        "where cdl.driver_id=? and cdl.recorded_at>now()-interval '10 minutes'",
+        "select round(ST_Distance(ST_SetSRID(ST_MakePoint(cdl.lng,cdl.lat),4326)::geography,sb.pickup))::bigint as approach_distance_meters," +
+        "cdl.recorded_at as driver_location_recorded_at " +
+        "from current_driver_locations cdl cross join scheduled_bookings sb " +
+        "where sb.id=? and cdl.driver_id=? and cdl.recorded_at>now()-interval '10 minutes'",
         bookingId,driverId);
     if(!approach.isEmpty()) result.putAll(approach.getFirst());
 
@@ -54,9 +56,10 @@ public class DriverOpportunityController {
     result.put("hasActiveOffer",!ownOffers.isEmpty());
     if(!ownOffers.isEmpty())result.put("ownActiveOfferAmountMinor",ownOffers.getFirst().get("proposed_amount_minor"));
 
-    // Marketplace transparency: drivers may benchmark against the current
-    // lowest ACTIVE offer from another driver. Never include their own offer
-    // in this value. A null value simply means there is no competing offer yet.
+    // Marketplace transparency: benchmark the current lowest ACTIVE price
+    // from another driver, never the requesting driver's own offer. The
+    // benchmark complements the job economics above; it never dictates what
+    // this driver must propose. Null means there is no competing offer yet.
     Long bestOthers=db.queryForObject(
         "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",
         Long.class,bookingId,driverId);
