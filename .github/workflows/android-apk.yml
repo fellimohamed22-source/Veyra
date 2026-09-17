@@ -22,6 +22,10 @@ on:
 jobs:
   build-client:
     runs-on: ubuntu-latest
+    # Necessary to create/update a Release via gh -- the default
+    # GITHUB_TOKEN only has read access to repo contents otherwise.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -70,19 +74,32 @@ jobs:
 
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
 
-      # Artifact upload is intentionally non-blocking: GitHub can reject
-      # uploads when the repository Actions storage quota is full even
-      # though the APK itself compiled successfully.
-      - name: Upload Client APK
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: veyra-client-apk
-          path: veyra-client-debug.apk
-          if-no-files-found: error
+      # Real fix for the persistent "Artifact storage quota has been
+      # hit" failure (actions/upload-artifact): GitHub Release assets
+      # are a completely separate storage mechanism from Actions
+      # artifact/cache storage, not subject to the same free-tier
+      # limit that going private just tightened considerably.
+      #
+      # This job and build-driver run in parallel and can both try to
+      # create the release at the same time -- `create` is allowed to
+      # fail if the other job's create already won (|| true swallows
+      # it), then `upload --clobber` adds or replaces this job's own
+      # asset regardless of which job actually created the release.
+      - name: Publish Client APK as a GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest-debug-build \
+            --title "Derniers APK de debug (mis à jour automatiquement)" \
+            --notes "Générés automatiquement à chaque build. Non signés pour la Play Store -- build de debug uniquement." \
+            --prerelease \
+            --target "${{ github.sha }}" 2>/dev/null || true
+          gh release upload latest-debug-build veyra-client-debug.apk --clobber
 
   build-driver:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -131,12 +148,13 @@ jobs:
 
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
 
-      # Artifact upload is intentionally non-blocking for the same quota
-      # reason as the client job. Build success remains authoritative.
-      - name: Upload Driver APK
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: veyra-driver-apk
-          path: veyra-driver-debug.apk
-          if-no-files-found: error
+      - name: Publish Driver APK as a GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest-debug-build \
+            --title "Derniers APK de debug (mis à jour automatiquement)" \
+            --notes "Générés automatiquement à chaque build. Non signés pour la Play Store -- build de debug uniquement." \
+            --prerelease \
+            --target "${{ github.sha }}" 2>/dev/null || true
+          gh release upload latest-debug-build veyra-driver-debug.apk --clobber
