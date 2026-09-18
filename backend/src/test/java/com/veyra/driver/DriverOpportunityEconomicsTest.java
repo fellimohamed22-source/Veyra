@@ -51,6 +51,8 @@ class DriverOpportunityEconomicsTest {
     assertEquals(3200L,result.get("approach_distance_meters"));
     assertEquals(4200L,result.get("currentBestOtherOfferMinor"));
     assertEquals(true,result.get("competitorBenchmarkVisible"));
+    assertEquals("DRIVER",result.get("pricingDecisionOwner"));
+    assertEquals("MARKET_BENCHMARK_AND_JOB_ECONOMICS",result.get("pricingGuidance"));
   }
 
   @Test void noCompetitorIsRepresentedByNullWithoutBlockingEconomics(){
