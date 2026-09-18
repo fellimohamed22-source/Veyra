@@ -1835,6 +1835,30 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   bool ratingSubmitting=false;
   bool cancelling=false;
   bool ratingSubmitted=false;
+  bool loyaltySubmitting=false;
+
+  Future<void> favoriteAndRepeat(bool repeat)async{
+    if(loyaltySubmitting)return;
+    setState(()=>loyaltySubmitting=true);
+    try{
+      if(repeat){
+        final template=await api.repeatDriver(widget.bookingId);
+        if(!mounted)return;
+        await showDialog<void>(context:context,builder:(d)=>AlertDialog(
+          title:Text(t('Chauffeur préféré enregistré')),
+          content:Text(t('Votre prochain trajet pourra être proposé en priorité à ce chauffeur. S’il n’est pas disponible, vous pourrez ouvrir la demande aux autres chauffeurs Veyra.')),
+          actions:[FilledButton(onPressed:()=>Navigator.pop(d),child:Text(t('Compris')))],
+        ));
+      }else{
+        await api.favoriteDriver(widget.bookingId);
+        if(mounted)setState(()=>message=t('Chauffeur ajouté à vos favoris.'));
+      }
+    }catch(e){
+      if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
+    }finally{
+      if(mounted)setState(()=>loyaltySubmitting=false);
+    }
+  }
 
   @override void initState(){
     super.initState();
@@ -1995,6 +2019,25 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
               ),
             ]),
           )),
+          if({'COMPLETED','CLOSED'}.contains(status)&&x['selected_driver_id']!=null)...[
+            FilledButton.icon(
+              onPressed:loyaltySubmitting?null:()=>favoriteAndRepeat(true),
+              icon:const Icon(Icons.replay_rounded),
+              label:Text(t('Réserver à nouveau ce chauffeur')),
+            ),
+            OutlinedButton.icon(
+              onPressed:loyaltySubmitting?null:()=>favoriteAndRepeat(false),
+              icon:const Icon(Icons.favorite_border),
+              label:Text(t('Ajouter à mes chauffeurs favoris')),
+            ),
+            Padding(
+              padding:const EdgeInsets.only(bottom:8),
+              child:Text(
+                t('Veyra garde le paiement, le suivi et un plan B si votre chauffeur préféré n’est pas disponible.'),
+                style:const TextStyle(color:Colors.black54,fontSize:12),
+              ),
+            ),
+          ],
           if(x['customer_total_amount_minor']!=null)Card(child:ListTile(
             title:Text(t('Total client')),
             subtitle:Text(VeyraStatusLabels.paymentMethod(x['payment_method']?.toString())),
