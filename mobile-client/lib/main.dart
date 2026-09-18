@@ -587,11 +587,20 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
     RefreshBus.tick.addListener(retry);
   }
 
-  Future<List<dynamic>> _load()=>api.bookings(
-    page:page,
-    status:status=='ALL'?null:status,
-    sort:sort,
-  );
+  Future<List<dynamic>> _load() async {
+    final rows=await api.bookings(page:page,status:status=='ALL'?null:status,sort:sort);
+    var filtered=rows;
+    if(status!='ALL'){
+      filtered=filtered.where((raw)=>(raw as Map)['status']?.toString().toUpperCase()==status).toList();
+    }
+    filtered.sort((a,b){
+      final ad=DateTime.tryParse(((a as Map)['scheduled_at']??'').toString());
+      final bd=DateTime.tryParse(((b as Map)['scheduled_at']??'').toString());
+      final cmp=(ad==null||bd==null)?0:ad.compareTo(bd);
+      return sort=='desc'?-cmp:cmp;
+    });
+    return filtered;
+  }
 
   void retry()=>setState((){future=_load();});
 
