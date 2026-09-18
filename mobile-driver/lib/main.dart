@@ -1104,6 +1104,12 @@ class _RequestScreenState extends State<RequestScreen>{
 
   void _refreshEconomics(){if(mounted)setState((){});}
 
+  double? _number(dynamic value){
+    if(value is num)return value.toDouble();
+    if(value==null)return null;
+    return double.tryParse(value.toString());
+  }
+
   @override void dispose(){
     amount.removeListener(_refreshEconomics);
     amount.dispose();
@@ -1185,16 +1191,16 @@ class _RequestScreenState extends State<RequestScreen>{
           if(s.hasError)return const SizedBox.shrink();
           final x=s.data??{};
           final bestMinor=x['currentBestOtherOfferMinor'];
-          final apiTripMeters=(x['trip_distance_meters'] as num?)?.toDouble();
-          final pickupLat=(x['pickup_lat'] as num?)?.toDouble();
-          final pickupLng=(x['pickup_lng'] as num?)?.toDouble();
-          final dropoffLat=(x['dropoff_lat'] as num?)?.toDouble();
-          final dropoffLng=(x['dropoff_lng'] as num?)?.toDouble();
+          final apiTripMeters=_number(x['trip_distance_meters']??x['tripDistanceMeters']);
+          final pickupLat=_number(x['pickup_lat']??x['pickupLat']);
+          final pickupLng=_number(x['pickup_lng']??x['pickupLng']);
+          final dropoffLat=_number(x['dropoff_lat']??x['dropoffLat']);
+          final dropoffLng=_number(x['dropoff_lng']??x['dropoffLng']);
           final tripMeters=apiTripMeters??(
             pickupLat!=null&&pickupLng!=null&&dropoffLat!=null&&dropoffLng!=null
               ?const Distance().as(LengthUnit.Meter,LatLng(pickupLat,pickupLng),LatLng(dropoffLat,dropoffLng))
               :null);
-          final approachMeters=(x['approach_distance_meters'] as num?)?.toDouble();
+          final approachMeters=_number(x['approach_distance_meters']??x['approachDistanceMeters']);
           final totalMeters=(tripMeters??0)+(approachMeters??0);
           final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
           final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
