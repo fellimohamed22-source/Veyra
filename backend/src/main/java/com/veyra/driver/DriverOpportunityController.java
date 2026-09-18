@@ -65,6 +65,8 @@ public class DriverOpportunityController {
         Long.class,bookingId,driverId);
     result.put("currentBestOtherOfferMinor",bestOthers);
     result.put("competitorBenchmarkVisible",true);
+    result.put("pricingDecisionOwner","DRIVER");
+    result.put("pricingGuidance","MARKET_BENCHMARK_AND_JOB_ECONOMICS");
 
     return result;
   }
