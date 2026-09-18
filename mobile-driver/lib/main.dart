@@ -1097,11 +1097,14 @@ class _RequestScreenState extends State<RequestScreen>{
   bool _prefilled=false;
   Position? _currentPosition;
   String? _locationEconomicsMessage;
+  Position? _currentPosition;
+  String? _locationEconomicsMessage;
 
   @override void initState(){
     super.initState();
     amount.addListener(_refreshEconomics);
     detail=api.opportunityDetail(widget.bookingId);
+    _loadEconomicsPosition();
     _loadEconomicsPosition();
   }
 
