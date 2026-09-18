@@ -13,7 +13,7 @@ on:
       - 'mobile-driver/**'
       - '.github/workflows/android-apk.yml'
   push:
-    branches: [main]
+    branches: [main, feature/product-marketplace-v3]
     paths:
       - 'mobile-client/**'
       - 'mobile-driver/**'
