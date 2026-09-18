@@ -47,9 +47,11 @@ public class BookingQueryController {
     String status=String.valueOf(row.get("status"));
     boolean driverSelected=row.get("selected_driver_id")!=null;
     result.put("driverSelected",driverSelected);
+    result.put("driverCommitted",driverSelected && Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS","COMPLETED","CLOSED").contains(status));
     result.put("driverVerified",driverSelected && "APPROVED".equals(row.get("driver_kyc_status")) && "ACTIVE".equals(row.get("driver_status")));
     result.put("vehicleVerified",driverSelected && "APPROVED".equals(row.get("vehicle_status")));
     result.put("liveTrackingEligible",Set.of("DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
+    result.put("liveTrackingFresh",row.get("driver_location_recorded_at")!=null);
     result.put("canContactDriver",driverSelected && Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
     result.put("rideStarted",Set.of("IN_PROGRESS","COMPLETED").contains(status));
     result.put("rideCompleted","COMPLETED".equals(status));
