@@ -1175,22 +1175,45 @@ class _RequestScreenState extends State<RequestScreen>{
           if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
           if(s.hasError)return const SizedBox.shrink();
           final x=s.data??{};
-          final mode=(x['offer_visibility_mode']??'PRIVATE').toString();
-          if(mode=='BEST_VISIBLE'){
-            final bestMinor=x['currentBestOtherOfferMinor'];
-            final subtitle=bestMinor==null
-              ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
-              :t('Meilleure offre actuelle des autres chauffeurs')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor);
-            return Card(child:ListTile(
-              leading:const Icon(Icons.visibility_outlined),
-              title:Text(t('Meilleure offre visible')),
-              subtitle:Text(subtitle),
-            ));
-          }
-          return Card(child:ListTile(
-            leading:const Icon(Icons.visibility_off_outlined),title:Text(t('Offre privée')),
-            subtitle:Text(t('Les offres des autres chauffeurs et le meilleur prix ne sont jamais affichés.')),
-          ));
+          final bestMinor=x['currentBestOtherOfferMinor'];
+          final tripMeters=(x['trip_distance_meters'] as num?)?.toDouble();
+          final approachMeters=(x['approach_distance_meters'] as num?)?.toDouble();
+          final totalMeters=(tripMeters??0)+(approachMeters??0);
+          final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
+          final netPerKm=(ownMinor!=null&&totalMeters>0)
+            ?(ownMinor.toDouble()/100)/(totalMeters/1000)
+            :null;
+          return Column(children:[
+            Card(child:ListTile(
+              leading:const Icon(Icons.price_check_outlined),
+              title:Text(t('Repère du marché')),
+              subtitle:Text(bestMinor==null
+                ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
+                :t('Prix le plus bas proposé par un autre chauffeur')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor)),
+            )),
+            Card(child:Padding(
+              padding:const EdgeInsets.all(16),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Row(children:[
+                  const Icon(Icons.analytics_outlined),
+                  const SizedBox(width:8),
+                  Text(t('Économie de votre course'),style:const TextStyle(fontWeight:FontWeight.bold)),
+                ]),
+                const SizedBox(height:10),
+                if(approachMeters!=null)Text(t('Approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
+                if(tripMeters!=null)Text(t('Course')+' : '+VeyraMoneyFormatter.distance(tripMeters)),
+                if(approachMeters!=null&&tripMeters!=null)
+                  Text(t('Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
+                if(netPerKm!=null)
+                  Text(t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
+                const SizedBox(height:6),
+                Text(
+                  t('Ces données et le prix concurrent sont des repères. Vous choisissez librement le montant de votre offre.'),
+                  style:const TextStyle(color:Colors.black54,fontSize:12),
+                ),
+              ]),
+            )),
+          ]);
         },
       ),
       FutureBuilder<Map<String,dynamic>>(
