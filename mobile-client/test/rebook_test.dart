@@ -29,7 +29,19 @@ void main(){
       'category_id':'category','passenger_count':2,'baggage_count':1,
       'scheduled_at':'2020-01-01T10:00:00Z','payment_method':'CASH',
     })));
-    await tester.pumpAndSettle();
+    // Bounded pumps instead of pumpAndSettle: prefilling both places makes
+    // AddressScreen render the real VeyraMap (FlutterMap/TileLayer), which
+    // attempts genuine network tile requests -- unavailable in the widget
+    // test sandbox. pumpAndSettle() waits for every timer/animation to go
+    // fully idle, and a tile layer's retry/backoff behaviour on requests
+    // that can never succeed here can keep that from ever happening,
+    // failing the whole test with a pumpAndSettle timeout rather than any
+    // assertion below actually running. A handful of fixed pumps is enough
+    // for the mocked HTTP responses (which resolve as regular futures, not
+    // real network I/O) and the post-frame callbacks to settle.
+    for(var i=0;i<10;i++){
+      await tester.pump(const Duration(milliseconds:50));
+    }
     expect(find.text('Marseille'),findsWidgets);
     expect(find.text('Aix-en-Provence'),findsWidgets);
     expect(publications,0);
