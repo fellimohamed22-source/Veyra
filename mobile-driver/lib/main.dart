@@ -1472,6 +1472,8 @@ class _AgendaScreenState extends State<AgendaScreen>{
                       Row(children:[
                         VeyraStatusBadge(status:(x['status']??'').toString()),
                         const Spacer(),
+                        Flexible(child:Text((x['status']??'')=='CONFIRMED'?t('Démarrer l’approche'):(x['status']??'')=='DRIVER_EN_ROUTE'?t('Continuer vers le client'):(x['status']??'')=='DRIVER_ARRIVED'?t('Démarrer la course'):(x['status']??'')=='IN_PROGRESS'?t('Continuer la course'):t('Voir le détail'),textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w600,fontSize:12))),
+                        const SizedBox(width:4),
                         const Icon(Icons.chevron_right,color:Colors.black38),
                       ]),
                     ]),
