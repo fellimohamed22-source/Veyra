@@ -2,11 +2,13 @@ package com.veyra.booking;
 
 import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
+import com.veyra.shared.DbTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.time.OffsetDateTime;
 
 @RestController
 @RequestMapping("/api/v1/scheduled-bookings")
@@ -24,12 +26,13 @@ public class BookingQueryController {
         "select sb.id,sb.creator_type,sb.creator_user_id,sb.partner_id,sb.beneficiary_name_snapshot," +
         "sb.beneficiary_phone_snapshot,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng," +
         "round(ST_Distance(sb.pickup,sb.dropoff))::bigint as trip_distance_meters,sb.scheduled_at,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.status," +
-        "sb.payment_method,sb.offer_window_ends_at,sb.selected_driver_id," +
+        "sb.payment_method,sb.offer_window_ends_at,sb.selected_driver_id,sb.category_id,vc.display_name as category_name," +
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
         "du.first_name as driver_first_name,du.last_name as driver_last_name,du.phone as driver_phone,d.rating as driver_rating,d.kyc_status as driver_kyc_status,d.status as driver_status," +
         "v.brand as vehicle_brand,v.model as vehicle_model,v.plate_number,v.color as vehicle_color,v.year as vehicle_year,v.status as vehicle_status," +
         "cdl.lat as driver_lat,cdl.lng as driver_lng,cdl.heading as driver_heading,cdl.speed_mps as driver_speed_mps,cdl.recorded_at as driver_location_recorded_at " +
         "from scheduled_bookings sb " +
+        "left join vehicle_categories vc on vc.id=sb.category_id " +
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "left join drivers d on d.id=sb.selected_driver_id " +
         "left join users du on du.id=d.user_id " +
@@ -51,7 +54,10 @@ public class BookingQueryController {
     result.put("driverVerified",driverSelected && "APPROVED".equals(row.get("driver_kyc_status")) && "ACTIVE".equals(row.get("driver_status")));
     result.put("vehicleVerified",driverSelected && "APPROVED".equals(row.get("vehicle_status")));
     result.put("liveTrackingEligible",Set.of("DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
-    result.put("liveTrackingFresh",row.get("driver_location_recorded_at")!=null);
+    Object recordedAt=row.get("driver_location_recorded_at");
+    OffsetDateTime now=OffsetDateTime.now();
+    OffsetDateTime recorded=recordedAt==null?null:DbTime.toOffsetDateTime(recordedAt);
+    result.put("liveTrackingFresh",recorded!=null && !recorded.isBefore(now.minusSeconds(90)) && !recorded.isAfter(now.plusSeconds(30)));
     result.put("canContactDriver",driverSelected && Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
     result.put("rideStarted",Set.of("IN_PROGRESS","COMPLETED").contains(status));
     result.put("rideCompleted","COMPLETED".equals(status));

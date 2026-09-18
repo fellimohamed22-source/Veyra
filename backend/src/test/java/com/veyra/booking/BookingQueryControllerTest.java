@@ -107,4 +107,28 @@ class BookingQueryControllerTest {
 
     assertEquals("BOOKING_NOT_FOUND", ex.code());
   }
+
+  @Test
+  void oldOrFutureLocationIsNeverAdvertisedAsLive() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(creatorId, null));
+    for (java.time.OffsetDateTime recorded : List.of(
+        java.time.OffsetDateTime.now().minusMinutes(10),
+        java.time.OffsetDateTime.now().plusMinutes(10))) {
+      Map<String,Object> booking = row(null, driverId);
+      booking.put("driver_location_recorded_at", recorded);
+      when(db.queryForList(contains("from scheduled_bookings sb"), eq(bookingId)))
+          .thenReturn(List.of(booking));
+      assertEquals(false, controller().detail(bookingId).get("liveTrackingFresh"));
+    }
+  }
+
+  @Test
+  void recentLocationIsAdvertisedAsLive() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(creatorId, null));
+    Map<String,Object> booking = row(null, driverId);
+    booking.put("driver_location_recorded_at", java.time.OffsetDateTime.now().minusSeconds(10));
+    when(db.queryForList(contains("from scheduled_bookings sb"), eq(bookingId)))
+        .thenReturn(List.of(booking));
+    assertEquals(true, controller().detail(bookingId).get("liveTrackingFresh"));
+  }
 }

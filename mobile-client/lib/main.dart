@@ -12,6 +12,7 @@ import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
+import 'core/notification_route.dart';
 import 'app_locale.dart';
 import 'chat_socket.dart';
 import 'app/theme.dart';
@@ -34,9 +35,8 @@ String t(String french) => AppLocale.t(french);
 bool pushHandlersConfigured=false;
 
 void openPush(RemoteMessage message){
-  final bookingId=message.data['bookingId']?.toString();
-  if(bookingId==null||bookingId.isEmpty)return;
-  router.go('/booking/'+bookingId);
+  final route=notificationRoute(message.data);
+  if(route!=null)router.go(route);
 }
 
 /// Section 19 (mission UX/fonctionnelle) : "Do not rely on RouteObserver
@@ -231,7 +231,7 @@ final router=GoRouter(
       StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
     ],
   ),
-  GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
+  GoRoute(path:'/addresses',builder:(c,s)=>AddressScreen(prefill:s.extra is Map?Map<String,dynamic>.from(s.extra as Map):null)),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/booking/:id',builder:(c,s)=>BookingDetailScreen(bookingId:s.pathParameters['id']!)),
@@ -1154,7 +1154,8 @@ class _CountStepper extends StatelessWidget{
 }
 
 class AddressScreen extends StatefulWidget{
-  const AddressScreen({super.key});
+  final Map<String,dynamic>? prefill;
+  const AddressScreen({super.key,this.prefill});
   @override State<AddressScreen> createState()=>_AddressScreenState();
 }
 class _AddressScreenState extends State<AddressScreen>{
@@ -1184,6 +1185,23 @@ class _AddressScreenState extends State<AddressScreen>{
   @override void initState(){
     super.initState();
     categories=api.vehicleCategories();
+    final seed=widget.prefill;
+    if(seed!=null){
+      pickup.text=seed['pickup_address']?.toString()??'';
+      dropoff.text=seed['dropoff_address']?.toString()??'';
+      if(seed['pickup_lat'] is num&&seed['pickup_lng'] is num){
+        pickupPlace={'label':pickup.text,'lat':seed['pickup_lat'],'lng':seed['pickup_lng']};
+      }
+      if(seed['dropoff_lat'] is num&&seed['dropoff_lng'] is num){
+        dropoffPlace={'label':dropoff.text,'lat':seed['dropoff_lat'],'lng':seed['dropoff_lng']};
+      }
+      categoryId=seed['category_id']?.toString();
+      passengerCount=(seed['passenger_count'] as num?)?.toInt()??1;
+      baggageCount=(seed['baggage_count'] as num?)?.toInt()??0;
+      paymentMethod=seed['payment_method']=='ONLINE'?'ONLINE':'CASH';
+      // A previous departure must never be reused for a new booking.
+      scheduledAt=null;
+    }
     // Real gap fixed here: the client had no way to know whether their
     // booking would show competing prices to drivers or not -- this is
     // a platform-wide policy set by an admin (not a per-booking choice),
@@ -1368,6 +1386,7 @@ class _AddressScreenState extends State<AddressScreen>{
   }
 
   Future<void> publish()async{
+    if(submitting)return;
     if(pickupPlace==null||dropoffPlace==null||scheduledAt==null||categoryId==null){
       setState(()=>error=t('Complétez le trajet, la date et la catégorie.'));
       return;
@@ -1422,7 +1441,7 @@ class _AddressScreenState extends State<AddressScreen>{
             onPressed:(){
               Navigator.pop(sheetContext);
               context.go('/home');
-              context.push('/offers/'+newBookingId);
+              context.push('/booking/'+newBookingId);
             },
             child:Text(t('Voir ma demande')),
           ),
@@ -1859,13 +1878,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     setState(()=>loyaltySubmitting=true);
     try{
       if(repeat){
-        await api.repeatDriver(widget.bookingId);
+        final seed=await api.repeatDriver(widget.bookingId);
         if(!mounted)return;
-        await showDialog<void>(context:context,builder:(d)=>AlertDialog(
-          title:Text(t('Chauffeur préféré enregistré')),
-          content:Text(t('Votre prochain trajet pourra être proposé en priorité à ce chauffeur. S’il n’est pas disponible, vous pourrez ouvrir la demande aux autres chauffeurs Veyra.')),
-          actions:[FilledButton(onPressed:()=>Navigator.pop(d),child:Text(t('Compris')))],
-        ));
+        await context.push('/addresses',extra:seed);
       }else{
         await api.favoriteDriver(widget.bookingId);
         if(mounted)setState(()=>message=t('Chauffeur ajouté à vos favoris.'));
@@ -1995,6 +2010,10 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           const SizedBox(height:8),
           Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
           const SizedBox(height:12),
+          Text('${x['passenger_count']??1} passager(s) • ${x['baggage_count']??0} bagage(s)'),
+          if(x['category_name']!=null)Text(x['category_name'].toString()),
+          if((x['customer_notes']??'').toString().trim().isNotEmpty)
+            Text(x['customer_notes'].toString()),
           Card(child:ListTile(title:Text(t('Statut')),trailing:VeyraStatusBadge(status:status))),
           if({'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status))
             FilledButton.icon(
@@ -2040,7 +2059,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             FilledButton.icon(
               onPressed:loyaltySubmitting?null:()=>favoriteAndRepeat(true),
               icon:const Icon(Icons.replay_rounded),
-              label:Text(t('Réserver à nouveau ce chauffeur')),
+              label:Text(t('Réserver à nouveau ce trajet')),
             ),
             OutlinedButton.icon(
               onPressed:loyaltySubmitting?null:()=>favoriteAndRepeat(false),
@@ -2080,7 +2099,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             if(pin==null)
               OutlinedButton(onPressed:loadPin,child:Text(t('Afficher le PIN')))
             else...[
-              Text(status=='DRIVER_ARRIVED'?t('Donnez ce code à votre chauffeur'):t('Code à transmettre au chauffeur à son arrivée'),style:const TextStyle(fontSize:13,color:Colors.black54)),
+              Text(t('Communiquez ce code au chauffeur uniquement lorsque vous êtes dans le véhicule.'),style:const TextStyle(fontSize:13,color:Colors.black54)),
               const SizedBox(height:8),
               VeyraPinDisplay(pin:pin!),
             ],
@@ -3146,7 +3165,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
                   borderRadius:BorderRadius.circular(20),
                   onTap:bookingId==null||bookingId.isEmpty
                     ?null
-                    :()=>context.push('/booking/'+bookingId),
+                    :()=>context.push(notificationRoute({'bookingId':bookingId,'templateCode':template,'event':event})!),
                   child:Padding(
                     padding:const EdgeInsets.all(16),
                     child:Column(

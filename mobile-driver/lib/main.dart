@@ -12,6 +12,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
+import 'core/notification_route.dart';
 import 'app_locale.dart';
 import 'chat_socket.dart';
 import 'app/theme.dart';
@@ -32,14 +33,8 @@ String t(String french) => AppLocale.t(french);
 bool driverPushHandlersConfigured=false;
 
 void openDriverPush(RemoteMessage message){
-  final bookingId=message.data['bookingId'];
-  if(bookingId==null)return;
-  final template=message.data['templateCode'];
-  if(template=='NEW_BOOKING'){
-    router.go('/request/'+bookingId);
-  }else{
-    router.go('/ride/'+bookingId);
-  }
+  final route=notificationRoute(message.data);
+  if(route!=null)router.go(route);
 }
 
 /// Voir RefreshBus côté client (même fichier main.dart, app soeur) pour
@@ -901,7 +896,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             ]),
           ],
         ),
-        Text(t('Aucun tri par proximité. Les chauffeurs ne voient jamais les prix concurrents.')),
+        Text(t('Consultez le détail pour le repère du marché et l’économie de la course.')),
         const SizedBox(height:16),
         FutureBuilder<List<dynamic>>(
           future:future,
@@ -921,7 +916,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               final id=x['id'].toString();
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               return Card(child:ListTile(
-                title:Text(title),subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                title:Text(title),subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])+'\n${x['passenger_count']??1} passager(s) • ${x['baggage_count']??0} bagage(s)'),
                 trailing:const Icon(Icons.chevron_right),onTap:()=>context.push('/request/'+id),
               ));
             }).toList(),
@@ -1149,8 +1144,9 @@ class _RequestScreenState extends State<RequestScreen>{
   }
 
   Future<void> submit()async{
+    if(sending)return;
     final euros=double.tryParse(amount.text.replaceAll(',','.'));
-    if(euros==null||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
+    if(euros==null||!euros.isFinite||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
     setState((){sending=true;error=null;});
     try{
       final amountMinor=(euros*100).round();
@@ -1253,7 +1249,7 @@ class _RequestScreenState extends State<RequestScreen>{
             Card(child:Padding(
               padding:const EdgeInsets.all(16),
               child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                Row(children:[
+                Wrap(children:[
                   const Icon(Icons.analytics_outlined),
                   const SizedBox(width:8),
                   Text(t('Économie de votre course'),style:const TextStyle(fontWeight:FontWeight.bold)),
@@ -1267,10 +1263,11 @@ class _RequestScreenState extends State<RequestScreen>{
                   :t('Approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
                 if(approachMeters==null)Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:_loadEconomicsPosition,icon:const Icon(Icons.my_location),label:Text(t('Actualiser ma position')))),
                 if(tripMeters!=null)
-                  Text(t('Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
+                  Text(t(approachMeters==null?'Distance hors approche':'Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
                 Text(netPerKm==null
                   ?t('Saisissez votre prix net pour calculer votre net par km.')
-                  :t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
+                  :t(approachMeters==null?'Net par km hors approche':'Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
+                Text(t('Distances à vol d’oiseau : le trajet routier peut être plus long.')),
                 const SizedBox(height:6),
                 Text(
                   t('Ces données et le prix concurrent sont des repères. Vous choisissez librement le montant de votre offre.'),
@@ -1972,8 +1969,18 @@ class _RideScreenState extends State<RideScreen>{
                     child:Text(t('Démarrer la course')),
                   ),
                   TextButton(
-                    onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),
-                    child:Text(t('Signaler un no-show')),
+                    onPressed:busy?null:()async{
+                      final confirmed=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
+                        title:Text(t('Déclarer le client absent ?')),
+                        content:Text(t('Contactez le client avant de continuer. Un délai de 15 minutes après l’heure prévue est obligatoire. Cette déclaration clôture la prise en charge et peut entraîner des frais pour le client.')),
+                        actions:[
+                          TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Retour'))),
+                          FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Client contacté, confirmer son absence'))),
+                        ],
+                      ));
+                      if(confirmed==true&&mounted)await action(()=>api.noShow(widget.bookingId),stopGps:true);
+                    },
+                    child:Text(t('Déclarer le client absent')),
                   ),
                 ],
                 if(status=='IN_PROGRESS')
