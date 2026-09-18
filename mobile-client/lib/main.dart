@@ -1842,7 +1842,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     setState(()=>loyaltySubmitting=true);
     try{
       if(repeat){
-        final template=await api.repeatDriver(widget.bookingId);
+        await api.repeatDriver(widget.bookingId);
         if(!mounted)return;
         await showDialog<void>(context:context,builder:(d)=>AlertDialog(
           title:Text(t('Chauffeur préféré enregistré')),
