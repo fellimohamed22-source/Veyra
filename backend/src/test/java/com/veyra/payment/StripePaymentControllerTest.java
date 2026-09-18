@@ -127,7 +127,7 @@ class StripePaymentControllerTest {
   @Test
   void replayingTheSameIdempotencyKeyNeverCreatesASecondPaymentIntent() throws Exception {
     stubPayableBooking("ONLINE", "CONFIRMED");
-    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-1")))
+    when(db.queryForList(contains("where booking_id=? and payer_user_id=?"), eq(bookingId),eq(userId)))
         .thenReturn(List.of(Map.of(
             "id", UUID.randomUUID(),
             "provider_payment_id", "pi_existing",
@@ -141,6 +141,7 @@ class StripePaymentControllerTest {
     Map<String, Object> result = controller().createIntent(bookingId, "key-1");
 
     assertEquals("pi_existing", result.get("paymentIntentId"));
+    assertEquals("pi_existing",controller().createIntent(bookingId,"new-key-after-restart").get("paymentIntentId"));
     // The real point of this test: no new PaymentIntent, no new payment row.
     verify(stripe, never()).create(anyLong(), anyString(), anyString(), anyString());
     verify(db, never()).update(anyString(), any(Object[].class));
@@ -149,9 +150,9 @@ class StripePaymentControllerTest {
   @Test
   void freshRequestCreatesAPaymentIntentAndPersistsAPendingPayment() throws Exception {
     stubPayableBooking("ONLINE", "CONFIRMED");
-    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-1")))
+    when(db.queryForList(contains("where booking_id=? and payer_user_id=?"), eq(bookingId),eq(userId)))
         .thenReturn(List.of());
-    when(stripe.create(11000L, "EUR", bookingId.toString(), "key-1")).thenReturn(paymentIntent);
+    when(stripe.create(11000L, "EUR", bookingId.toString(), "booking-"+bookingId)).thenReturn(paymentIntent);
     when(paymentIntent.getId()).thenReturn("pi_new");
     when(paymentIntent.getClientSecret()).thenReturn("secret_new");
 
@@ -160,7 +161,7 @@ class StripePaymentControllerTest {
     assertEquals("pi_new", result.get("paymentIntentId"));
     assertEquals("PENDING", result.get("status"));
     assertEquals(11000L, result.get("amountMinor"));
-    verify(db).update(contains("insert into payments"), any(), eq(bookingId), eq(userId), eq(11000L), eq("EUR"), eq("pi_new"), eq("key-1"));
+    verify(db).update(contains("insert into payments"), any(), eq(bookingId), eq(userId), eq(11000L), eq("EUR"), eq("pi_new"), eq("booking-"+bookingId));
   }
 
   @Test

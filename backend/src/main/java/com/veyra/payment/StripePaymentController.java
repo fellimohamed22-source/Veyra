@@ -5,6 +5,7 @@ import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -21,6 +22,7 @@ public class StripePaymentController {
   }
 
   @PostMapping("/bookings/{bookingId}/intent")
+  @Transactional
   public Map<String, Object> createIntent(
       @PathVariable UUID bookingId,
       @RequestHeader("Idempotency-Key") String idempotencyKey) throws Exception {
@@ -31,7 +33,7 @@ public class StripePaymentController {
 
     List<Map<String, Object>> rows = db.queryForList(
         "select sb.creator_user_id,sb.payment_method,sb.status,bfs.customer_total_amount_minor,bfs.currency " +
-        "from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=?",
+        "from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=? for update of sb",
         bookingId);
     if (rows.isEmpty()) {
       throw new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND");
@@ -49,8 +51,8 @@ public class StripePaymentController {
     }
 
     List<Map<String, Object>> existing = db.queryForList(
-        "select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?",
-        idempotencyKey);
+        "select id,provider_payment_id,status,amount_minor,currency from payments where booking_id=? and payer_user_id=? and provider='STRIPE' order by created_at desc limit 1",
+        bookingId,CurrentUser.id());
     if (!existing.isEmpty()) {
       Map<String, Object> p = existing.getFirst();
       PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
@@ -65,13 +67,16 @@ public class StripePaymentController {
 
     long amount = ((Number) booking.get("customer_total_amount_minor")).longValue();
     String currency = (String) booking.get("currency");
-    PaymentIntent pi = stripe.create(amount, currency, bookingId.toString(), idempotencyKey);
+    // Stable across mobile retries and process restarts, including a provider
+    // success followed by a database rollback. Booking lock serializes callers.
+    String providerKey="booking-"+bookingId;
+    PaymentIntent pi = stripe.create(amount, currency, bookingId.toString(), providerKey);
     UUID paymentId = UUID.randomUUID();
 
     db.update(
         "insert into payments(id,booking_id,payer_user_id,amount_minor,currency,method,status,provider,provider_payment_id,idempotency_key) " +
         "values (?,?,?,?,?,'ONLINE','PENDING','STRIPE',?,?)",
-        paymentId, bookingId, CurrentUser.id(), amount, currency, pi.getId(), idempotencyKey);
+        paymentId, bookingId, CurrentUser.id(), amount, currency, pi.getId(), providerKey);
 
     return Map.of(
         "paymentId", paymentId,

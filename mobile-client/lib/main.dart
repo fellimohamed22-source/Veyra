@@ -1161,6 +1161,7 @@ class AddressScreen extends StatefulWidget{
 class _AddressScreenState extends State<AddressScreen>{
   final pickup=TextEditingController();
   final dropoff=TextEditingController();
+  final notes=TextEditingController();
   List<dynamic> pickupResults=[];
   List<dynamic> dropoffResults=[];
   Map<String,dynamic>? pickupPlace;
@@ -1184,7 +1185,12 @@ class _AddressScreenState extends State<AddressScreen>{
 
   @override void initState(){
     super.initState();
-    categories=api.vehicleCategories();
+    categories=api.vehicleCategories().then((items){
+      final matching=items.where((raw)=>(raw as Map)['id'].toString()==categoryId);
+      if(matching.isEmpty){categoryId=null;categoryName=null;}
+      else {final category=matching.first as Map;categoryName=(category['display_name']??category['code'])?.toString();}
+      return items;
+    });
     final seed=widget.prefill;
     if(seed!=null){
       pickup.text=seed['pickup_address']?.toString()??'';
@@ -1196,6 +1202,7 @@ class _AddressScreenState extends State<AddressScreen>{
         dropoffPlace={'label':dropoff.text,'lat':seed['dropoff_lat'],'lng':seed['dropoff_lng']};
       }
       categoryId=seed['category_id']?.toString();
+      notes.text=seed['customer_notes']?.toString()??'';
       passengerCount=(seed['passenger_count'] as num?)?.toInt()??1;
       baggageCount=(seed['baggage_count'] as num?)?.toInt()??0;
       paymentMethod=seed['payment_method']=='ONLINE'?'ONLINE':'CASH';
@@ -1212,6 +1219,9 @@ class _AddressScreenState extends State<AddressScreen>{
 
   @override void dispose(){
     _searchDebounce?.cancel();
+    pickup.dispose();
+    dropoff.dispose();
+    notes.dispose();
     super.dispose();
   }
 
@@ -1414,6 +1424,7 @@ class _AddressScreenState extends State<AddressScreen>{
         'payerType':'CLIENT',
         'passengerCount':passengerCount,
         'baggageCount':baggageCount,
+        'customerNotes':notes.text.trim(),
       });
       if(!mounted)return;
       final newBookingId=created['id']?.toString();
@@ -1543,6 +1554,7 @@ class _AddressScreenState extends State<AddressScreen>{
           final items=s.data??[];
           return DropdownButtonFormField<String>(
             initialValue:categoryId,
+            isExpanded:true,
             decoration:InputDecoration(labelText:t('Catégorie de véhicule')),
             items:items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
@@ -1583,6 +1595,8 @@ class _AddressScreenState extends State<AddressScreen>{
           onChanged:(v)=>setState(()=>baggageCount=v),
         )),
       ]),
+      const SizedBox(height:18),
+      TextField(controller:notes,maxLength:1000,maxLines:3,decoration:InputDecoration(labelText:t('Remarques pour le chauffeur (facultatif)'))),
       const SizedBox(height:18),
       const Text('Paiement',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
       DropdownButtonFormField<String>(
@@ -1812,6 +1826,7 @@ class _PaymentScreenState extends State<PaymentScreen>{
   }
 
   Future<void> pay()async{
+    if(loading||booking==null)return;
     const publishableKey=String.fromEnvironment('STRIPE_PUBLISHABLE_KEY',defaultValue:'');
     if(publishableKey.isEmpty){
       setState(()=>error=t('Paiement en ligne non configuré sur cette version.'));
@@ -1819,7 +1834,7 @@ class _PaymentScreenState extends State<PaymentScreen>{
     }
     setState((){loading=true;error=null;});
     try{
-      final idem='mobile-'+widget.bookingId+'-'+DateTime.now().microsecondsSinceEpoch.toString();
+      final idem='mobile-'+widget.bookingId;
       final intent=await api.createPaymentIntent(widget.bookingId,idem);
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters:SetupPaymentSheetParameters(
@@ -1828,7 +1843,8 @@ class _PaymentScreenState extends State<PaymentScreen>{
         ),
       );
       await Stripe.instance.presentPaymentSheet();
-      if(mounted)context.go('/home');
+      RefreshBus.bump();
+      if(mounted)context.go('/booking/'+widget.bookingId);
     }catch(_){
       if(mounted)setState(()=>error=t('Le paiement n’a pas été finalisé.'));
     }finally{
@@ -1864,6 +1880,10 @@ class BookingDetailScreen extends StatefulWidget{
   @override State<BookingDetailScreen> createState()=>_BookingDetailScreenState();
 }
 class _BookingDetailScreenState extends State<BookingDetailScreen>{
+  Timer? syncTimer;
+  bool syncing=false;
+  int dataVersion=0;
+  String? syncError;
   late Future<Map<String,dynamic>> future;
   String? pin;
   String? message;
@@ -1895,9 +1915,24 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   @override void initState(){
     super.initState();
     future=api.bookingDetail(widget.bookingId);
+    syncTimer=Timer.periodic(const Duration(seconds:10),(_)=>syncBooking());
   }
 
-  void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
+  @override void dispose(){syncTimer?.cancel();super.dispose();}
+
+  Future<void> syncBooking() async {
+    if(syncing||cancelling||ModalRoute.of(context)?.isCurrent!=true||WidgetsBinding.instance.lifecycleState==AppLifecycleState.paused)return;
+    syncing=true;
+    final version=dataVersion;
+    try{
+      final value=await api.bookingDetail(widget.bookingId);
+      if(mounted&&!cancelling&&version==dataVersion)setState((){future=Future.value(value);syncError=null;});
+    }catch(e){
+      if(mounted)setState(()=>syncError=VeyraErrorMessages.forException(e));
+    }finally{syncing=false;}
+  }
+
+  void reload(){if(mounted)setState((){dataVersion++;future=api.bookingDetail(widget.bookingId);});}
 
   Future<void> loadPin()async{
     try{
@@ -1978,6 +2013,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
 
   Future<void> cancel()async{
     if(cancelling)return;
+    dataVersion++;
     setState(()=>cancelling=true);
     try{
       final result=await api.cancel(widget.bookingId);
@@ -1996,7 +2032,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+        if(s.connectionState!=ConnectionState.done&&!s.hasData)return const Center(child:CircularProgressIndicator());
         if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
           ?VeyraOfflineBanner(onRetry:reload)
           :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
@@ -2118,6 +2154,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
               )]),
               FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
             ]))),
+          if(syncError!=null)Text(syncError!),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(message!)),
         ]);
       },

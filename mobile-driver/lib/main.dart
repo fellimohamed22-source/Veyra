@@ -953,6 +953,7 @@ class MesOffresScreen extends StatefulWidget{
   @override State<MesOffresScreen> createState()=>_MesOffresScreenState();
 }
 class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProviderStateMixin{
+  final Set<String> withdrawing={};
   late TabController tabController;
   late Future<List<dynamic>> active;
   late Future<List<dynamic>> won;
@@ -965,6 +966,29 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
     super.initState();
     tabController=TabController(length:3,vsync:this);
     _load();
+    RefreshBus.tick.addListener(_refresh);
+  }
+
+  void _refresh(){if(mounted)setState(_load);}
+
+  Future<void> _withdraw(Map<String,dynamic> x) async {
+    final id=x['offer_id']?.toString();
+    if(id==null||withdrawing.contains(id))return;
+    final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
+      title:Text(t('Retirer cette offre ?')),
+      content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
+      actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
+    ));
+    if(ok!=true||!mounted||withdrawing.contains(id))return;
+    setState(()=>withdrawing.add(id));
+    try{
+      await api.withdrawOffer(id);
+      RefreshBus.bump();
+    }catch(e){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));
+    }finally{
+      if(mounted)setState(()=>withdrawing.remove(id));
+    }
   }
 
   void _load(){
@@ -983,6 +1007,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
   }
 
   @override void dispose(){
+    RefreshBus.tick.removeListener(_refresh);
     tabController.dispose();
     super.dispose();
   }
@@ -1030,31 +1055,25 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
               final bookingId=x['booking_id']?.toString();
               return Card(
                 margin:const EdgeInsets.only(bottom:10),
-                child:ListTile(
+                child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[ListTile(
                   contentPadding:const EdgeInsets.all(14),
                   title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
                   subtitle:Padding(
                     padding:const EdgeInsets.only(top:6),
-                    child:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                    child:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])+'\n'+VeyraStatusLabels.bookingStatus(x['booking_status']?.toString())+(x['expires_at']==null?'':'\n'+t('Expiration')+' : '+VeyraDateFormatter.dateTime(x['expires_at']))),
                   ),
                   trailing:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.end,children:[
                     Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
                     const SizedBox(height:4),
                     Text(VeyraStatusLabels.offerStatus(x['status']?.toString()),style:const TextStyle(fontSize:12,color:Colors.black54)),
                   ]),
-                  onTap:bookingId==null?null:(){if(isWon)context.push('/ride/'+bookingId);else context.push('/request/'+bookingId);},
-                  onLongPress:scope!='active'?null:()async{
-                    final offerId=x['offer_id']?.toString();
-                    if(offerId==null)return;
-                    final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
-                      title:Text(t('Retirer cette offre ?')),
-                      content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
-                      actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
-                    ));
-                    if(ok!=true)return;
-                    try{await api.withdrawOffer(offerId);if(mounted)setState(_load);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
-                  },
+                  onTap:bookingId==null?null:()async{if(isWon)await context.push('/ride/'+bookingId);else await context.push('/request/'+bookingId);_refresh();},
                 ),
+                  if(scope=='active')TextButton.icon(
+                    onPressed:withdrawing.contains(x['offer_id']?.toString())?null:()=>_withdraw(x),
+                    icon:const Icon(Icons.close),label:Text(t('Retirer mon offre')),
+                  ),
+                ]),
               );
             },
           );
@@ -1094,12 +1113,41 @@ class _RequestScreenState extends State<RequestScreen>{
   bool _prefilled=false;
   Position? _currentPosition;
   String? _locationEconomicsMessage;
+  VeyraRouteGeometry _tripEconomics=const VeyraRouteGeometry();
+  VeyraRouteGeometry _approachEconomics=const VeyraRouteGeometry();
 
   @override void initState(){
     super.initState();
     amount.addListener(_refreshEconomics);
-    detail=api.opportunityDetail(widget.bookingId);
+    detail=_loadDetail();
     _loadEconomicsPosition();
+  }
+
+  Future<Map<String,dynamic>> _loadDetail() async {
+    final x=await api.opportunityDetail(widget.bookingId);
+    if(!mounted)return x;
+    isAdjusting=x['hasActiveOffer']==true;
+    if(isAdjusting&&!_prefilled){
+      _prefilled=true;
+      final currentMinor=x['ownActiveOfferAmountMinor'];
+      if(currentMinor is num)amount.text=(currentMinor/100).toStringAsFixed(2).replaceAll('.',',');
+    }
+    unawaited(_loadRoadEconomics(x));
+    return x;
+  }
+
+  Future<void> _loadRoadEconomics(Map<String,dynamic> x,{Position? position}) async {
+    final fromLat=position?.latitude??_number(_field(x,'pickup_lat','pickupLat'));
+    final fromLng=position?.longitude??_number(_field(x,'pickup_lng','pickupLng'));
+    final toLat=_number(_field(x,position==null?'dropoff_lat':'pickup_lat',position==null?'dropoffLat':'pickupLat'));
+    final toLng=_number(_field(x,position==null?'dropoff_lng':'pickup_lng',position==null?'dropoffLng':'pickupLng'));
+    if(fromLat==null||fromLng==null||toLat==null||toLng==null)return;
+    try{
+      final route=VeyraRouteGeometry.fromApi(await api.routeEstimate(fromLat:fromLat,fromLng:fromLng,toLat:toLat,toLng:toLng));
+      if(mounted)setState((){if(position==null)_tripEconomics=route;else _approachEconomics=route;});
+    }catch(_){
+      // The labelled straight-line estimate remains available offline.
+    }
   }
 
   void _refreshEconomics(){if(mounted)setState((){});}
@@ -1118,6 +1166,8 @@ class _RequestScreenState extends State<RequestScreen>{
       }
       final p=await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:10)));
       if(mounted)setState((){_currentPosition=p;_locationEconomicsMessage=null;});
+      final x=await detail;
+      if(mounted)await _loadRoadEconomics(x,position:p);
     }catch(_){
       if(mounted)setState(()=>_locationEconomicsMessage=t('Position actuelle indisponible. Touchez Actualiser pour réessayer.'));
     }
@@ -1194,7 +1244,7 @@ class _RequestScreenState extends State<RequestScreen>{
             leading:const Icon(Icons.error_outline),
             title:Text(t('Demande indisponible')),
             subtitle:Text(t('Elle a peut-être déjà été fermée.')),
-            trailing:TextButton(onPressed:()=>setState((){detail=api.opportunityDetail(widget.bookingId);}),child:Text(t('Réessayer'))),
+            trailing:TextButton(onPressed:()=>setState((){detail=_loadDetail();}),child:Text(t('Réessayer'))),
           ));
           final x=s.data??{};
           return Column(children:[
@@ -1224,7 +1274,7 @@ class _RequestScreenState extends State<RequestScreen>{
           final pickupLng=_number(_field(x,'pickup_lng','pickupLng'));
           final dropoffLat=_number(_field(x,'dropoff_lat','dropoffLat'));
           final dropoffLng=_number(_field(x,'dropoff_lng','dropoffLng'));
-          final tripMeters=apiTripMeters??(
+          final tripMeters=_tripEconomics.distanceMeters?.toDouble()??apiTripMeters??(
             pickupLat!=null&&pickupLng!=null&&dropoffLat!=null&&dropoffLng!=null
               ?const Distance().as(LengthUnit.Meter,LatLng(pickupLat,pickupLng),LatLng(dropoffLat,dropoffLng))
               :null);
@@ -1232,7 +1282,7 @@ class _RequestScreenState extends State<RequestScreen>{
           final localApproachMeters=pickupLat!=null&&pickupLng!=null&&_currentPosition!=null
             ?const Distance().as(LengthUnit.Meter,LatLng(_currentPosition!.latitude,_currentPosition!.longitude),LatLng(pickupLat,pickupLng))
             :null;
-          final approachMeters=backendApproachMeters??localApproachMeters;
+          final approachMeters=_approachEconomics.distanceMeters?.toDouble()??localApproachMeters??backendApproachMeters;
           final totalMeters=(tripMeters??0)+(approachMeters??0);
           final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
           final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
@@ -1267,7 +1317,10 @@ class _RequestScreenState extends State<RequestScreen>{
                 Text(netPerKm==null
                   ?t('Saisissez votre prix net pour calculer votre net par km.')
                   :t(approachMeters==null?'Net par km hors approche':'Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
-                Text(t('Distances à vol d’oiseau : le trajet routier peut être plus long.')),
+                if(_tripEconomics.durationSeconds!=null)
+                  Text(t('Durée estimée de la course')+' : '+VeyraMoneyFormatter.duration(_tripEconomics.durationSeconds)),
+                if(_tripEconomics.distanceMeters==null||_approachEconomics.distanceMeters==null)
+                  Text(t('Sans itinéraire routier disponible, les distances sont estimées à vol d’oiseau. Le trajet réel peut être plus long.')),
                 const SizedBox(height:6),
                 Text(
                   t('Ces données et le prix concurrent sont des repères. Vous choisissez librement le montant de votre offre.'),
@@ -1510,6 +1563,9 @@ class RideScreen extends StatefulWidget{
 }
 
 class _RideScreenState extends State<RideScreen>{
+  Timer? syncTimer;
+  bool syncing=false;
+  int dataVersion=0;
   late Future<Map<String,dynamic>> future;
   late final DriverLocationTracker tracker;
   final pin=TextEditingController();
@@ -1531,15 +1587,29 @@ class _RideScreenState extends State<RideScreen>{
     super.initState();
     future=api.bookingDetail(widget.bookingId);
     tracker=DriverLocationTracker(api:api);
+    syncTimer=Timer.periodic(const Duration(seconds:10),(_)=>syncBooking());
   }
 
   @override void dispose(){
+    syncTimer?.cancel();
     tracker.dispose();
     pin.dispose();
     super.dispose();
   }
 
-  void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
+  void reload(){if(mounted)setState((){dataVersion++;future=api.bookingDetail(widget.bookingId);});}
+
+  Future<void> syncBooking() async {
+    if(syncing||busy||ModalRoute.of(context)?.isCurrent!=true||WidgetsBinding.instance.lifecycleState==AppLifecycleState.paused)return;
+    syncing=true;
+    final version=dataVersion;
+    try{
+      final value=await api.bookingDetail(widget.bookingId);
+      if(mounted&&!busy&&version==dataVersion)setState(()=>future=Future.value(value));
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }finally{syncing=false;}
+  }
 
   Future<void> submitRating() async {
     if(ratingScore<1)return;
@@ -1714,6 +1784,8 @@ class _RideScreenState extends State<RideScreen>{
     bool startGps=false,
     bool stopGps=false,
   }) async {
+    if(busy)return;
+    dataVersion++;
     setState((){
       busy=true;
       error=null;
@@ -1783,7 +1855,7 @@ class _RideScreenState extends State<RideScreen>{
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
+        if(s.connectionState!=ConnectionState.done&&!s.hasData)return const VeyraLoadingView();
         if(s.hasError){
           return VeyraErrorMessages.isOffline(s.error!)
             ?VeyraOfflineBanner(onRetry:reload)
@@ -1864,6 +1936,9 @@ class _RideScreenState extends State<RideScreen>{
                   style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600),
                 ),
                 const SizedBox(height:12),
+                Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                Text('${x['passenger_count']??1} passager(s) • ${x['baggage_count']??0} bagage(s)'),
+                if((x['customer_notes']??'').toString().trim().isNotEmpty)Text(x['customer_notes'].toString()),
                 Row(children:[
                   Expanded(child:_DriverEtaCard(
                     icon:Icons.person_pin_circle_rounded,
