@@ -2162,14 +2162,13 @@ class _WalletScreenState extends State<WalletScreen>{
                     'CUSTOMER_CASH_DEBT_PAID',
                   }.contains(eventType);
                   final amount=VeyraMoneyFormatter.fromMinor(tx['amount_minor']);
+                  final bookingId=tx['booking_id']?.toString();
                   return Card(child:ListTile(
                     leading:Icon(isPositive?Icons.add_circle_outline:Icons.remove_circle_outline,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
                     title:Text(VeyraStatusLabels.ledgerEvent(eventType)),
                     subtitle:Text(VeyraDateFormatter.dateTime(tx['created_at'])),
-                    trailing:Text(
-                      (isPositive?'+ ':'- ')+amount,
-                      style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
-                    ),
+                    trailing:Row(mainAxisSize:MainAxisSize.min,children:[Text((isPositive?'+ ':'- ')+amount,style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626))),if(bookingId!=null)...[const SizedBox(width:4),const Icon(Icons.chevron_right,size:18)]]),
+                    onTap:bookingId==null?null:()=>context.push('/ride/'+bookingId),
                   ));
                 }),
                 VeyraPaginationBar(
