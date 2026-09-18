@@ -1319,7 +1319,8 @@ class _AgendaScreenState extends State<AgendaScreen>{
       child:ListView(padding:const EdgeInsets.all(16),children:[
         Row(children:[
           Expanded(child:DropdownButtonFormField<String>(
-            value:status,
+            key:ValueKey('booking-status-$status'),
+            initialValue:status,
             isExpanded:true,
             decoration:InputDecoration(labelText:t('État')),
             items:[
@@ -1345,7 +1346,8 @@ class _AgendaScreenState extends State<AgendaScreen>{
           )),
           const SizedBox(width:10),
           Expanded(child:DropdownButtonFormField<String>(
-            value:sort,
+            key:ValueKey('booking-sort-$sort'),
+            initialValue:sort,
             isExpanded:true,
             decoration:InputDecoration(labelText:t('Date')),
             items:[
