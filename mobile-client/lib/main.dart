@@ -1961,10 +1961,39 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
               icon:const Icon(Icons.local_offer_outlined),
               label:Text(t('Voir les offres reçues')),
             ),
-          if(x['selected_driver_id']!=null)Card(child:ListTile(
-            leading:const CircleAvatar(child:Icon(Icons.person)),
-            title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
-            subtitle:Text('Note : '+(x['driver_rating']??'-').toString()),
+          if(x['selected_driver_id']!=null)Card(child:Padding(
+            padding:const EdgeInsets.all(16),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Row(children:[
+                const CircleAvatar(child:Icon(Icons.person)),
+                const SizedBox(width:12),
+                Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim(),style:const TextStyle(fontWeight:FontWeight.bold)),
+                  Text(t('Note')+' : '+(x['driver_rating']??'-').toString()),
+                ])),
+                if(x['driverVerified']==true)
+                  const Icon(Icons.verified_rounded,color:Color(0xFF16A34A)),
+              ]),
+              const SizedBox(height:12),
+              Row(children:[
+                Icon(x['vehicleVerified']==true?Icons.verified_user_outlined:Icons.directions_car_outlined,size:20),
+                const SizedBox(width:8),
+                Expanded(child:Text([
+                  x['vehicle_brand'],x['vehicle_model'],x['vehicle_year'],x['vehicle_color']
+                ].where((v)=>v!=null&&v.toString().trim().isNotEmpty).join(' • '))),
+              ]),
+              if(x['plate_number']!=null)...[
+                const SizedBox(height:6),
+                Text(t('Immatriculation')+' : '+x['plate_number'].toString(),style:const TextStyle(fontWeight:FontWeight.w600)),
+              ],
+              const SizedBox(height:10),
+              Text(
+                x['driverVerified']==true&&x['vehicleVerified']==true
+                  ?t('Chauffeur et véhicule vérifiés par Veyra.')
+                  :t('Vérification du chauffeur ou du véhicule en cours.'),
+                style:const TextStyle(color:Colors.black54,fontSize:12),
+              ),
+            ]),
           )),
           if(x['customer_total_amount_minor']!=null)Card(child:ListTile(
             title:Text(t('Total client')),
