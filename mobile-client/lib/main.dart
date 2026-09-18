@@ -1208,6 +1208,20 @@ class _AddressScreenState extends State<AddressScreen>{
       paymentMethod=seed['payment_method']=='ONLINE'?'ONLINE':'CASH';
       // A previous departure must never be reused for a new booking.
       scheduledAt=null;
+      // Real gap found while investigating the failing mobile-ci run on
+      // this branch: _refreshRoutePreview() was only ever wired to the
+      // manual "pick a suggestion from search results" flow -- a
+      // prefilled repeat booking sets pickupPlace/dropoffPlace directly
+      // in initState() without going through that path at all, so the
+      // route distance/duration preview silently never appeared for a
+      // rebook, even though both coordinates were already known.
+      // Deferred to a post-frame callback since _refreshRoutePreview()
+      // calls setState(), which initState() itself cannot do directly.
+      if(pickupPlace!=null&&dropoffPlace!=null){
+        WidgetsBinding.instance.addPostFrameCallback((_){
+          if(mounted)_refreshRoutePreview();
+        });
+      }
     }
     // Real gap fixed here: the client had no way to know whether their
     // booking would show competing prices to drivers or not -- this is
