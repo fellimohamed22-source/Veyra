@@ -1,5 +1,8 @@
 name: android-apk
 
+permissions:
+  contents: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
@@ -73,13 +76,12 @@ jobs:
       # Artifact upload is intentionally non-blocking: GitHub can reject
       # uploads when the repository Actions storage quota is full even
       # though the APK itself compiled successfully.
-      - name: Upload Client APK
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: veyra-client-apk
-          path: veyra-client-debug.apk
-          if-no-files-found: error
+      - name: Publish Client APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest-v3-build >/dev/null 2>&1 || gh release create latest-v3-build --title "Veyra V3 latest build" --notes "Latest successful V3 Android build." --prerelease
+          gh release upload latest-v3-build veyra-client-debug.apk --clobber
 
   build-driver:
     runs-on: ubuntu-latest
@@ -133,10 +135,9 @@ jobs:
 
       # Artifact upload is intentionally non-blocking for the same quota
       # reason as the client job. Build success remains authoritative.
-      - name: Upload Driver APK
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: veyra-driver-apk
-          path: veyra-driver-debug.apk
-          if-no-files-found: error
+      - name: Publish Driver APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest-v3-build >/dev/null 2>&1 || gh release create latest-v3-build --title "Veyra V3 latest build" --notes "Latest successful V3 Android build." --prerelease
+          gh release upload latest-v3-build veyra-driver-debug.apk --clobber
