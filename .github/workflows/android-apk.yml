@@ -1,30 +1,19 @@
 name: android-apk
 
-permissions:
-  contents: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
-
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main, feature/maps-live-tracking-v2]
-    paths:
-      - 'mobile-client/**'
-      - 'mobile-driver/**'
-      - '.github/workflows/android-apk.yml'
   push:
-    branches: [main, feature/product-marketplace-v3]
+    branches: [main]
     paths:
       - 'mobile-client/**'
       - 'mobile-driver/**'
       - '.github/workflows/android-apk.yml'
 
 jobs:
-  build-client:
+  build-apks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +22,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Use fixed debug keystore
+      - name: Use a fixed debug keystore across builds
         run: |
           mkdir -p ~/.android
           cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
@@ -42,102 +31,73 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          set -euxo pipefail
           cd mobile-client
           flutter create . --platforms=android --project-name veyra_client
-
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
-
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
-
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
           sed -i 's/namespace = "com.example.veyra_client"/namespace = "com.veyra.client"/' android/app/build.gradle.kts
           sed -i 's/applicationId = "com.example.veyra_client"/applicationId = "com.veyra.client"/' android/app/build.gradle.kts
-
+          grep -q 'namespace = "com.veyra.client"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.client"' android/app/build.gradle.kts
           mkdir -p android/app/src/main/kotlin/com/veyra/client
           mv android/app/src/main/kotlin/com/example/veyra_client/MainActivity.kt android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           sed -i 's/package com.example.veyra_client/package com.veyra.client/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           rm -rf android/app/src/main/kotlin/com/example
-
+          grep -q 'package com.veyra.client' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-
           printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.client' android/app/google-services.json
-
           flutter pub get
-          flutter build apk --debug \
-            --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} \
-            --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-
+          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
-
-      # Artifact upload is intentionally non-blocking: GitHub can reject
-      # uploads when the repository Actions storage quota is full even
-      # though the APK itself compiled successfully.
-      - name: Publish Client APK to GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view latest-v3-build >/dev/null 2>&1 || gh release create latest-v3-build --title "Veyra V3 latest build" --notes "Latest successful V3 Android build." --prerelease
-          gh release upload latest-v3-build veyra-client-debug.apk --clobber
-
-  build-driver:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Use fixed debug keystore
-        run: |
-          mkdir -p ~/.android
-          cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
 
       - name: Build Driver APK
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          set -euxo pipefail
           cd mobile-driver
           flutter create . --platforms=android --project-name veyra_driver
-
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
-
-          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
-          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
-
           sed -i 's/namespace = "com.example.veyra_driver"/namespace = "com.veyra.driver"/' android/app/build.gradle.kts
           sed -i 's/applicationId = "com.example.veyra_driver"/applicationId = "com.veyra.driver"/' android/app/build.gradle.kts
-
+          grep -q 'namespace = "com.veyra.driver"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.driver"' android/app/build.gradle.kts
           mkdir -p android/app/src/main/kotlin/com/veyra/driver
           mv android/app/src/main/kotlin/com/example/veyra_driver/MainActivity.kt android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
           sed -i 's/package com.example.veyra_driver/package com.veyra.driver/' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
           rm -rf android/app/src/main/kotlin/com/example
-
+          grep -q 'package com.veyra.driver' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-
           printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.driver' android/app/google-services.json
-
           flutter pub get
-          flutter build apk --debug \
-            --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} \
-            --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-
+          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
 
-      # Artifact upload is intentionally non-blocking for the same quota
-      # reason as the client job. Build success remains authoritative.
-      - name: Publish Driver APK to GitHub Release
+      - name: Publish APKs as a GitHub Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view latest-v3-build >/dev/null 2>&1 || gh release create latest-v3-build --title "Veyra V3 latest build" --notes "Latest successful V3 Android build." --prerelease
-          gh release upload latest-v3-build veyra-driver-debug.apk --clobber
+          # Real fix, same as feature/maps-live-tracking-v2: the previous
+          # two-job (build-client + build-driver) parallel workflow had
+          # both jobs racing to create/upload to the SAME release
+          # simultaneously, producing intermittent
+          # "HTTP 500: Error saving asset" / "Error creating asset temp
+          # dir" failures. Single job, single atomic release command with
+          # both APKs attached at once eliminates the race entirely.
+          gh release delete latest-v3-build --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-v3-build \
+            veyra-client-debug.apk veyra-driver-debug.apk \
+            --title "Veyra V3 latest build" \
+            --notes "Latest successful V3 Android build. Debug build only, not signed for the Play Store." \
+            --prerelease \
+            --target "${{ github.sha }}"
