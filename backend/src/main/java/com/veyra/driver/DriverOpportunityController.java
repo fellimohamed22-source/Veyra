@@ -36,6 +36,11 @@ public class DriverOpportunityController {
     }
 
     Map<String,Object> result=new LinkedHashMap<>(rows.getFirst());
+    putCanonical(result,"pickupLat","pickup_lat");
+    putCanonical(result,"pickupLng","pickup_lng");
+    putCanonical(result,"dropoffLat","dropoff_lat");
+    putCanonical(result,"dropoffLng","dropoff_lng");
+    putCanonical(result,"tripDistanceMeters","trip_distance_meters");
 
     // Objective economics for the driver's own job. current_driver_locations
     // stores latitude/longitude as scalar columns, so build a geography point
@@ -48,7 +53,11 @@ public class DriverOpportunityController {
         "from current_driver_locations cdl cross join scheduled_bookings sb " +
         "where sb.id=? and cdl.driver_id=? and cdl.recorded_at>now()-interval '10 minutes'",
         bookingId,driverId);
-    if(!approach.isEmpty()) result.putAll(approach.getFirst());
+    if(!approach.isEmpty()){
+      result.putAll(approach.getFirst());
+      putCanonical(result,"approachDistanceMeters","approach_distance_meters");
+      putCanonical(result,"driverLocationRecordedAt","driver_location_recorded_at");
+    }
 
     List<Map<String,Object>> ownOffers=db.queryForList(
         "select proposed_amount_minor from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",
@@ -69,6 +78,18 @@ public class DriverOpportunityController {
     result.put("pricingGuidance","MARKET_BENCHMARK_AND_JOB_ECONOMICS");
 
     return result;
+  }
+
+  private void putCanonical(Map<String,Object> result,String canonical,String alias){
+    if(result.containsKey(canonical)) return;
+    Object value=null;
+    boolean found=false;
+    for(Map.Entry<String,Object> e:new ArrayList<>(result.entrySet())){
+      if(e.getKey().equalsIgnoreCase(alias)||e.getKey().equalsIgnoreCase(canonical)){
+        value=e.getValue(); found=true; break;
+      }
+    }
+    if(found) result.put(canonical,value);
   }
 
   private UUID driverId(){
