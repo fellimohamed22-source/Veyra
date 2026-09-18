@@ -10,8 +10,13 @@ void main(){
     var publications=0;
     api.dio.interceptors.add(InterceptorsWrapper(onRequest:(request,handler){
       if(request.method=='POST')publications++;
-      handler.resolve(Response(requestOptions:request,statusCode:200,data:request.path.contains('vehicle-categories')
-        ?[{'id':'category','display_name':'Berline','code':'SEDAN'}]:{'mode':'BEST_VISIBLE'}));
+      final path=request.path;
+      final data=path.contains('vehicle-categories')
+        ?[{'id':'category','display_name':'Berline','code':'SEDAN'}]
+        :path.contains('routes/estimate')
+          ?{'distanceMeters':12000,'durationSeconds':900}
+          :{'mode':'BEST_VISIBLE'};
+      handler.resolve(Response(requestOptions:request,statusCode:200,data:data));
     }));
     addTearDown((){api.dio.interceptors.clear();api.dio.interceptors.addAll(interceptors);});
     tester.view.physicalSize=const Size(320,800);
