@@ -53,6 +53,16 @@ public class DriverOffersController {
         driverId);
   }
 
+  @DeleteMapping("/{offerId}")
+  public Map<String,Object> withdraw(@PathVariable UUID offerId){
+    UUID driverId=driverId();
+    int updated=db.update(
+        "update driver_offers set status='WITHDRAWN' where id=? and driver_id=? and status='ACTIVE'",
+        offerId,driverId);
+    if(updated==0) throw new ApiException(HttpStatus.CONFLICT,"OFFER_NOT_ACTIVE");
+    return Map.of("offerId",offerId,"status","WITHDRAWN");
+  }
+
   private UUID driverId(){
     List<UUID> rows=db.queryForList(
         "select id from drivers where user_id=?",
