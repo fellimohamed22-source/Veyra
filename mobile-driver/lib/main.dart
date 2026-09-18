@@ -502,7 +502,7 @@ class _LoginScreenState extends State<LoginScreen>{
             child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
           ),
           const Expanded(child:Divider()),
-        ])),
+        ]),
         const SizedBox(height:14),
         OutlinedButton.icon(
           onPressed:loading?null:_googleLogin,
@@ -1391,8 +1391,8 @@ class _AgendaScreenState extends State<AgendaScreen>{
     body:RefreshIndicator(
       onRefresh:()async{_refresh();await future;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
-        LayoutBuilder(builder:(context,constraints)=>Flex(direction:constraints.maxWidth<520?Axis.vertical:Axis.horizontal,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-          Expanded(flex:constraints.maxWidth<520?0:1,child:DropdownButtonFormField<String>(
+        Row(children:[
+          Expanded(child:DropdownButtonFormField<String>(
             key:ValueKey('booking-status-$status'),
             initialValue:status,
             isExpanded:true,
@@ -1418,8 +1418,8 @@ class _AgendaScreenState extends State<AgendaScreen>{
               });
             },
           )),
-          SizedBox(width:constraints.maxWidth<520?0:10,height:constraints.maxWidth<520?10:0),
-          Expanded(flex:constraints.maxWidth<520?0:1,child:DropdownButtonFormField<String>(
+          const SizedBox(width:10),
+          Expanded(child:DropdownButtonFormField<String>(
             key:ValueKey('booking-sort-$sort'),
             initialValue:sort,
             isExpanded:true,
@@ -1452,12 +1452,9 @@ class _AgendaScreenState extends State<AgendaScreen>{
             }
             final items=s.data??[];
             if(items.isEmpty){
-              final filtered=status!='ALL';
-              return Card(child:ListTile(
-                leading:const Icon(Icons.event_busy_outlined),
-                title:Text(filtered?t('Aucune course avec ce filtre'):t('Aucune course pour le moment.')),
-                subtitle:filtered?Text(t('Modifiez ou réinitialisez le filtre pour voir d’autres courses.')):null,
-                trailing:filtered?TextButton(onPressed:()=>setState((){status='ALL';page=0;future=_load();}),child:Text(t('Réinitialiser'))):null,
+              return Center(child:Padding(
+                padding:const EdgeInsets.all(32),
+                child:Text(t('Aucune course confirmée.')),
               ));
             }
             return Column(children:[
