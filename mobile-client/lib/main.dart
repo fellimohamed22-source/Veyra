@@ -1529,12 +1529,13 @@ class _AddressScreenState extends State<AddressScreen>{
           Row(children:[
             const Icon(Icons.route,size:18,color:Colors.black54),
             const SizedBox(width:6),
-            Text(
+            Flexible(child:Text(
               VeyraMoneyFormatter.distance(routePreview!['distanceMeters'])+
               ' • '+
               VeyraMoneyFormatter.duration(routePreview!['durationSeconds']),
               style:const TextStyle(fontSize:12,color:Colors.black54,fontWeight:FontWeight.w600),
-            ),
+              overflow:TextOverflow.ellipsis,
+            )),
           ]),
         const SizedBox(height:10),
       ],
