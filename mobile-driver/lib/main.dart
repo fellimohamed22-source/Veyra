@@ -1098,7 +1098,16 @@ class _RequestScreenState extends State<RequestScreen>{
 
   @override void initState(){
     super.initState();
+    amount.addListener(_refreshEconomics);
     detail=api.opportunityDetail(widget.bookingId);
+  }
+
+  void _refreshEconomics(){if(mounted)setState((){});}
+
+  @override void dispose(){
+    amount.removeListener(_refreshEconomics);
+    amount.dispose();
+    super.dispose();
   }
 
   Future<void> submit()async{
@@ -1176,13 +1185,21 @@ class _RequestScreenState extends State<RequestScreen>{
           if(s.hasError)return const SizedBox.shrink();
           final x=s.data??{};
           final bestMinor=x['currentBestOtherOfferMinor'];
-          final tripMeters=(x['trip_distance_meters'] as num?)?.toDouble();
+          final apiTripMeters=(x['trip_distance_meters'] as num?)?.toDouble();
+          final pickupLat=(x['pickup_lat'] as num?)?.toDouble();
+          final pickupLng=(x['pickup_lng'] as num?)?.toDouble();
+          final dropoffLat=(x['dropoff_lat'] as num?)?.toDouble();
+          final dropoffLng=(x['dropoff_lng'] as num?)?.toDouble();
+          final tripMeters=apiTripMeters??(
+            pickupLat!=null&&pickupLng!=null&&dropoffLat!=null&&dropoffLng!=null
+              ?const Distance().as(LengthUnit.Meter,LatLng(pickupLat,pickupLng),LatLng(dropoffLat,dropoffLng))
+              :null);
           final approachMeters=(x['approach_distance_meters'] as num?)?.toDouble();
           final totalMeters=(tripMeters??0)+(approachMeters??0);
+          final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
           final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
-          final netPerKm=(ownMinor!=null&&totalMeters>0)
-            ?(ownMinor.toDouble()/100)/(totalMeters/1000)
-            :null;
+          final netEuros=typedEuros??(ownMinor==null?null:ownMinor.toDouble()/100);
+          final netPerKm=(netEuros!=null&&totalMeters>0)?netEuros/(totalMeters/1000):null;
           return Column(children:[
             Card(child:ListTile(
               leading:const Icon(Icons.price_check_outlined),
@@ -1200,12 +1217,17 @@ class _RequestScreenState extends State<RequestScreen>{
                   Text(t('Économie de votre course'),style:const TextStyle(fontWeight:FontWeight.bold)),
                 ]),
                 const SizedBox(height:10),
-                if(approachMeters!=null)Text(t('Approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
-                if(tripMeters!=null)Text(t('Course')+' : '+VeyraMoneyFormatter.distance(tripMeters)),
-                if(approachMeters!=null&&tripMeters!=null)
+                Text(tripMeters==null
+                  ?t('Distance de la course indisponible')
+                  :t('Course')+' : '+VeyraMoneyFormatter.distance(tripMeters)),
+                Text(approachMeters==null
+                  ?t('Approche : position chauffeur récente indisponible')
+                  :t('Approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
+                if(tripMeters!=null)
                   Text(t('Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
-                if(netPerKm!=null)
-                  Text(t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
+                Text(netPerKm==null
+                  ?t('Saisissez votre prix net pour calculer votre net par km.')
+                  :t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
                 const SizedBox(height:6),
                 Text(
                   t('Ces données et le prix concurrent sont des repères. Vous choisissez librement le montant de votre offre.'),
@@ -1300,12 +1322,20 @@ class _AgendaScreenState extends State<AgendaScreen>{
     RefreshBus.tick.addListener(_refresh);
   }
 
-  Future<List<dynamic>> _load()=>api.bookings(
-    scope:'all',
-    page:page,
-    status:status=='ALL'?null:status,
-    sort:sort,
-  );
+  Future<List<dynamic>> _load() async {
+    final rows=await api.bookings(scope:'all',page:page,status:status=='ALL'?null:status,sort:sort);
+    var filtered=rows;
+    if(status!='ALL'){
+      filtered=filtered.where((raw)=>(raw as Map)['status']?.toString().toUpperCase()==status).toList();
+    }
+    filtered.sort((a,b){
+      final ad=DateTime.tryParse(((a as Map)['scheduled_at']??'').toString());
+      final bd=DateTime.tryParse(((b as Map)['scheduled_at']??'').toString());
+      final cmp=(ad==null||bd==null)?0:ad.compareTo(bd);
+      return sort=='desc'?-cmp:cmp;
+    });
+    return filtered;
+  }
   @override void dispose(){
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
