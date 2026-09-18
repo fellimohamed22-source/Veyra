@@ -1095,14 +1095,44 @@ class _RequestScreenState extends State<RequestScreen>{
   String? error;
   bool isAdjusting=false;
   bool _prefilled=false;
+  Position? _currentPosition;
+  String? _locationEconomicsMessage;
 
   @override void initState(){
     super.initState();
     amount.addListener(_refreshEconomics);
     detail=api.opportunityDetail(widget.bookingId);
+    _loadEconomicsPosition();
   }
 
   void _refreshEconomics(){if(mounted)setState((){});}
+
+  Future<void> _loadEconomicsPosition() async {
+    try{
+      if(!await Geolocator.isLocationServiceEnabled()){
+        if(mounted)setState(()=>_locationEconomicsMessage=t('Activez la localisation pour calculer votre approche.'));
+        return;
+      }
+      var permission=await Geolocator.checkPermission();
+      if(permission==LocationPermission.denied)permission=await Geolocator.requestPermission();
+      if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
+        if(mounted)setState(()=>_locationEconomicsMessage=t('Autorisez la localisation pour calculer votre approche.'));
+        return;
+      }
+      final p=await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:10)));
+      if(mounted)setState((){_currentPosition=p;_locationEconomicsMessage=null;});
+    }catch(_){
+      if(mounted)setState(()=>_locationEconomicsMessage=t('Position actuelle indisponible. Touchez Actualiser pour réessayer.'));
+    }
+  }
+
+  dynamic _field(Map<String,dynamic> x,String snake,String camel){
+    if(x.containsKey(snake))return x[snake];
+    if(x.containsKey(camel))return x[camel];
+    final wanted={snake.toLowerCase(),camel.toLowerCase()};
+    for(final e in x.entries){if(wanted.contains(e.key.toLowerCase()))return e.value;}
+    return null;
+  }
 
   double? _number(dynamic value){
     if(value is num)return value.toDouble();
@@ -1191,16 +1221,20 @@ class _RequestScreenState extends State<RequestScreen>{
           if(s.hasError)return const SizedBox.shrink();
           final x=s.data??{};
           final bestMinor=x['currentBestOtherOfferMinor'];
-          final apiTripMeters=_number(x['trip_distance_meters']??x['tripDistanceMeters']);
-          final pickupLat=_number(x['pickup_lat']??x['pickupLat']);
-          final pickupLng=_number(x['pickup_lng']??x['pickupLng']);
-          final dropoffLat=_number(x['dropoff_lat']??x['dropoffLat']);
-          final dropoffLng=_number(x['dropoff_lng']??x['dropoffLng']);
+          final apiTripMeters=_number(_field(x,'trip_distance_meters','tripDistanceMeters'));
+          final pickupLat=_number(_field(x,'pickup_lat','pickupLat'));
+          final pickupLng=_number(_field(x,'pickup_lng','pickupLng'));
+          final dropoffLat=_number(_field(x,'dropoff_lat','dropoffLat'));
+          final dropoffLng=_number(_field(x,'dropoff_lng','dropoffLng'));
           final tripMeters=apiTripMeters??(
             pickupLat!=null&&pickupLng!=null&&dropoffLat!=null&&dropoffLng!=null
               ?const Distance().as(LengthUnit.Meter,LatLng(pickupLat,pickupLng),LatLng(dropoffLat,dropoffLng))
               :null);
-          final approachMeters=_number(x['approach_distance_meters']??x['approachDistanceMeters']);
+          final backendApproachMeters=_number(_field(x,'approach_distance_meters','approachDistanceMeters'));
+          final localApproachMeters=pickupLat!=null&&pickupLng!=null&&_currentPosition!=null
+            ?const Distance().as(LengthUnit.Meter,LatLng(_currentPosition!.latitude,_currentPosition!.longitude),LatLng(pickupLat,pickupLng))
+            :null;
+          final approachMeters=backendApproachMeters??localApproachMeters;
           final totalMeters=(tripMeters??0)+(approachMeters??0);
           final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
           final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
@@ -1227,8 +1261,9 @@ class _RequestScreenState extends State<RequestScreen>{
                   ?t('Distance de la course indisponible')
                   :t('Course')+' : '+VeyraMoneyFormatter.distance(tripMeters)),
                 Text(approachMeters==null
-                  ?t('Approche : position chauffeur récente indisponible')
+                  ?(_locationEconomicsMessage??t('Approche : position chauffeur récente indisponible'))
                   :t('Approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
+                if(approachMeters==null)Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:_loadEconomicsPosition,icon:const Icon(Icons.my_location),label:Text(t('Actualiser ma position')))),
                 if(tripMeters!=null)
                   Text(t('Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
                 Text(netPerKm==null
