@@ -550,7 +550,7 @@ class _LoginScreenState extends State<LoginScreen>{
             child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
           ),
           const Expanded(child:Divider()),
-        ])),
+        ]),
         const SizedBox(height:14),
         OutlinedButton.icon(
           onPressed:loading?null:_googleLogin,
@@ -636,8 +636,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
     body:RefreshIndicator(
       onRefresh:()async{retry();await future;},
       child:ListView(padding:const EdgeInsets.all(20),children:[
-        LayoutBuilder(builder:(context,constraints)=>Flex(direction:constraints.maxWidth<520?Axis.vertical:Axis.horizontal,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-          Expanded(flex:constraints.maxWidth<520?0:1,child:DropdownButtonFormField<String>(
+        Row(children:[
+          Expanded(child:DropdownButtonFormField<String>(
             key:ValueKey('booking-status-$status'),
             initialValue:status,
             isExpanded:true,
@@ -662,8 +662,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
               });
             },
           )),
-          SizedBox(width:constraints.maxWidth<520?0:10,height:constraints.maxWidth<520?10:0),
-          Expanded(flex:constraints.maxWidth<520?0:1,child:DropdownButtonFormField<String>(
+          const SizedBox(width:10),
+          Expanded(child:DropdownButtonFormField<String>(
             key:ValueKey('booking-sort-$sort'),
             initialValue:sort,
             isExpanded:true,
@@ -697,12 +697,10 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
             }
             final items=s.data??[];
             if(items.isEmpty){
-              final filtered=status!='ALL';
               return Card(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ListTile(
                 leading:const Icon(Icons.event_available,color:Color(0xFF1565C0)),
-                title:Text(filtered?t('Aucune réservation avec ce filtre'):t('Aucune réservation')),
-                subtitle:Text(filtered?t('Modifiez ou réinitialisez le filtre pour voir d’autres réservations.'):t('Votre prochain trajet apparaîtra ici.')),
-                trailing:filtered?TextButton(onPressed:()=>setState((){status='ALL';page=0;future=_load();}),child:Text(t('Réinitialiser'))):null,
+                title:Text(t('Aucune réservation')),
+                subtitle:Text(t('Votre prochain trajet apparaîtra ici.')),
               ));
             }
             return Column(children:[
@@ -1581,8 +1579,8 @@ class _AddressScreenState extends State<AddressScreen>{
           const SizedBox(width:8),
           Expanded(child:Text(
             visibilityMode=='BEST_VISIBLE'
-              ?t('Les chauffeurs reçoivent votre demande et fixent librement leur prix.')
-              :t('Vous comparez ensuite les offres selon le prix, le chauffeur et le véhicule.'),
+              ?t('Les chauffeurs verront le meilleur prix proposé par un autre chauffeur.')
+              :t('Offre privée : les chauffeurs ne voient jamais les prix proposés par les autres.'),
             style:const TextStyle(fontSize:12,color:Colors.black54),
           )),
         ]),
