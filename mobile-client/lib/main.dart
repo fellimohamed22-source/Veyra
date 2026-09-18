@@ -629,7 +629,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
       child:ListView(padding:const EdgeInsets.all(20),children:[
         Row(children:[
           Expanded(child:DropdownButtonFormField<String>(
-            initialValue:status,
+            value:status,
+            isExpanded:true,
             decoration:InputDecoration(labelText:t('État')),
             items:[
               DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
@@ -653,7 +654,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
           )),
           const SizedBox(width:10),
           Expanded(child:DropdownButtonFormField<String>(
-            initialValue:sort,
+            value:sort,
+            isExpanded:true,
             decoration:InputDecoration(labelText:t('Date')),
             items:[
               DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
