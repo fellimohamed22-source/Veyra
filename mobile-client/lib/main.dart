@@ -715,11 +715,15 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
                 child:ListTile(
                   contentPadding:const EdgeInsets.all(14),
                   title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
-                  subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Row(children:[
-                    Expanded(child:Text(scheduled,style:const TextStyle(color:Colors.black54,fontSize:13))),
-                    VeyraStatusBadge(status:status),
+                  subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Row(children:[
+                      Expanded(child:Text(scheduled,style:const TextStyle(color:Colors.black54,fontSize:13))),
+                      VeyraStatusBadge(status:status),
+                    ]),
+                    const SizedBox(height:6),
+                    Text(status=='OPEN_FOR_OFFERS'||status=='OFFERS_RECEIVED'?t('Voir et comparer les offres'):status=='DRIVER_EN_ROUTE'?t('Suivre le chauffeur'):status=='DRIVER_ARRIVED'?t('Votre chauffeur est arrivé'):status=='IN_PROGRESS'?t('Suivre la course'):status=='COMPLETED'?t('Voir le récapitulatif'):t('Voir le détail'),style:const TextStyle(fontWeight:FontWeight.w600,fontSize:12)),
                   ])),
-                  isThreeLine:false,
+                  isThreeLine:true,
                   trailing:const Icon(Icons.chevron_right),
                   onTap:(){
                     final id=x['id']?.toString();
