@@ -1047,15 +1047,17 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                     const SizedBox(height:4),
                     Text(VeyraStatusLabels.offerStatus(x['status']?.toString()),style:const TextStyle(fontSize:12,color:Colors.black54)),
                   ]),
-                  onTap:bookingId==null?null:(){
-                    // Fiche D18 : "Offre gagnante -> D19" (réservation
-                    // attribuée), "Demande encore ouverte -> D15" (détail
-                    // demande, où l'offre déjà soumise est visible).
-                    if(isWon){
-                      context.push('/ride/'+bookingId);
-                    }else{
-                      context.push('/request/'+bookingId);
-                    }
+                  onTap:bookingId==null?null:(){if(isWon)context.push('/ride/'+bookingId);else context.push('/request/'+bookingId);},
+                  onLongPress:scope!='active'?null:()async{
+                    final offerId=x['offer_id']?.toString();
+                    if(offerId==null)return;
+                    final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
+                      title:Text(t('Retirer cette offre ?')),
+                      content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
+                      actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
+                    ));
+                    if(ok!=true)return;
+                    try{await api.withdrawOffer(offerId);if(mounted)setState(_load);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
                   },
                 ),
               );
