@@ -95,7 +95,7 @@ class DriverOffersControllerTest {
     ApiException ex=assertThrows(ApiException.class, () -> controller().list("active",-1));
 
     assertEquals("INVALID_PAGE",ex.code());
-    verify(db,never()).queryForList(contains("from driver_offers"),any());
+    verify(db,never()).queryForList(contains("from driver_offers"),ArgumentMatchers.<Object[]>any());
   }
 
 }
