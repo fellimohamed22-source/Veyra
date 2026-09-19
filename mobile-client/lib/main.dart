@@ -1250,11 +1250,21 @@ class _AddressScreenState extends State<AddressScreen>{
     setState((){if(isPickup)loadingPickup=true;else loadingDropoff=true;});
     try{
       final r=await api.autocomplete(q);
-      if(mounted)setState((){if(isPickup)pickupResults=r;else dropoffResults=r;});
+      if(!mounted)return;
+      // An older HTTP request may finish after a newer query. Never let
+      // that stale response replace suggestions for the text currently
+      // visible in the field.
+      final current=(isPickup?pickup:dropoff).text.trim();
+      if(current!=q.trim())return;
+      setState((){if(isPickup)pickupResults=r;else dropoffResults=r;});
     }catch(_){
-      if(mounted)setState(()=>error=t('Recherche d’adresse indisponible.'));
+      if(mounted&&(isPickup?pickup:dropoff).text.trim()==q.trim()){
+        setState(()=>error=t('Recherche d’adresse indisponible.'));
+      }
     }finally{
-      if(mounted)setState((){if(isPickup)loadingPickup=false;else loadingDropoff=false;});
+      if(mounted&&(isPickup?pickup:dropoff).text.trim()==q.trim()){
+        setState((){if(isPickup)loadingPickup=false;else loadingDropoff=false;});
+      }
     }
   }
 
