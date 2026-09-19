@@ -920,9 +920,30 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               final x=Map<String,dynamic>.from(raw as Map);
               final id=x['id'].toString();
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-              return Card(child:ListTile(
-                title:Text(title),subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                trailing:const Icon(Icons.chevron_right),onTap:()=>context.push('/request/'+id),
+              final tripMeters=(x['trip_distance_meters']??x['tripDistanceMeters']) as num?;
+              final approachMeters=(x['approach_distance_meters']??x['approachDistanceMeters']) as num?;
+              final ownOffer=x['own_offer_amount_minor']??x['ownOfferAmountMinor'];
+              final category=(x['category_name']??x['vehicle_category_name'])?.toString();
+              final passengers=x['passenger_count'];
+              final baggage=x['baggage_count'];
+              String distance(num? meters)=>meters==null?t('Indisponible'):(meters.toDouble()/1000).toStringAsFixed(meters<10000?1:0)+' km';
+              return Card(child:InkWell(
+                borderRadius:BorderRadius.circular(12),
+                onTap:()=>context.push('/request/'+id),
+                child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Row(crossAxisAlignment:CrossAxisAlignment.start,children:[Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w700))),const Icon(Icons.chevron_right)]),
+                  const SizedBox(height:8),
+                  Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                  const SizedBox(height:8),
+                  Wrap(spacing:8,runSpacing:6,children:[
+                    if(category!=null&&category.isNotEmpty)Chip(label:Text(category)),
+                    if(passengers!=null)Chip(avatar:const Icon(Icons.people_outline,size:16),label:Text('$passengers '+t('passager(s)'))),
+                    if(baggage!=null)Chip(avatar:const Icon(Icons.luggage_outlined,size:16),label:Text('$baggage '+t('bagage(s)'))),
+                  ]),
+                  const SizedBox(height:6),
+                  Text(t('Course')+' : '+distance(tripMeters)+' • '+t('Approche')+' : '+distance(approachMeters),style:const TextStyle(color:Colors.black54)),
+                  if(ownOffer!=null)Padding(padding:const EdgeInsets.only(top:6),child:Text(t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(ownOffer),style:const TextStyle(fontWeight:FontWeight.w700))),
+                ])),
               ));
             }).toList(),
               VeyraPaginationBar(
