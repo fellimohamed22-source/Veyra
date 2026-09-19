@@ -54,8 +54,8 @@ public class BookingQueryController {
     result.put("liveTrackingEligible",Set.of("DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
     result.put("liveTrackingFresh",Boolean.TRUE.equals(row.get("driver_location_fresh")));
     result.put("canContactDriver",driverSelected && Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
-    result.put("rideStarted",Set.of("IN_PROGRESS","COMPLETED").contains(status));
-    result.put("rideCompleted","COMPLETED".equals(status));
+    result.put("rideStarted",Set.of("IN_PROGRESS","COMPLETED","CLOSED").contains(status));
+    result.put("rideCompleted",Set.of("COMPLETED","CLOSED").contains(status));
 
     return result;
   }
