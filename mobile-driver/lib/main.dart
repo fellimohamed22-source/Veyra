@@ -1286,8 +1286,8 @@ class _RequestScreenState extends State<RequestScreen>{
       material.FutureBuilder<Map<String,dynamic>>(
         future:detail,
         builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
-          if(s.hasError)return const SizedBox.shrink();
+          if(s.connectionState!=ConnectionState.done)return const material.SizedBox.shrink();
+          if(s.hasError)return const material.SizedBox.shrink();
           final x=s.data??{};
           final bestMinor=x['currentBestOtherOfferMinor'];
           final apiTripMeters=_number(_field(x,'trip_distance_meters','tripDistanceMeters'));
@@ -1351,8 +1351,8 @@ class _RequestScreenState extends State<RequestScreen>{
       material.FutureBuilder<Map<String,dynamic>>(
         future:detail,
         builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
-          if(s.hasError)return const SizedBox.shrink();
+          if(s.connectionState!=ConnectionState.done)return const material.SizedBox.shrink();
+          if(s.hasError)return const material.SizedBox.shrink();
           final x=s.data??{};
           // Gap réel trouvé : hasActiveOffer existait déjà côté backend
           // (DriverOpportunityController) mais n'était lu nulle part côté
