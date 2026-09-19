@@ -651,7 +651,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
       title:Text(t('Mes réservations'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
     ),
     body:RefreshIndicator(
-      onRefresh:()async{retry();await future;},
+      onRefresh:()async{final refreshed=_load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(20),children:[
         Row(children:[
           Expanded(child:DropdownButtonFormField<String>(
@@ -1069,7 +1069,7 @@ class _FavoriteDriversScreenState extends State<FavoriteDriversScreen>{
   }
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes chauffeurs favoris'))),
-    body:RefreshIndicator(onRefresh:()async{reload();await future;},child:FutureBuilder<List<dynamic>>(future:future,builder:(context,s){
+    body:RefreshIndicator(onRefresh:()async{final refreshed=api.favoriteDrivers();setState(()=>future=refreshed);await refreshed;},child:FutureBuilder<List<dynamic>>(future:future,builder:(context,s){
       if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
       if(s.hasError)return ListView(children:[VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload)]);
       final items=s.data??[];
