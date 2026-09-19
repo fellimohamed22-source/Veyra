@@ -107,4 +107,33 @@ class BookingQueryControllerTest {
 
     assertEquals("BOOKING_NOT_FOUND", ex.code());
   }
+  @Test
+  void detailTreatsAnOldRecordedLocationAsStale() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(creatorId, null));
+    Map<String,Object> detail=row(null,null);
+    detail.put("status","DRIVER_EN_ROUTE");
+    detail.put("driver_location_recorded_at","2026-01-01T00:00:00Z");
+    detail.put("driver_location_fresh",false);
+    when(db.queryForList(contains("from scheduled_bookings sb"), eq(bookingId)))
+        .thenReturn(List.of(detail));
+
+    Map<String,Object> result=controller().detail(bookingId);
+
+    assertEquals(false,result.get("liveTrackingFresh"));
+  }
+
+  @Test
+  void detailSelectsAtMostOneApprovedVehicleMatchingTheBookingCategory() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(creatorId, null));
+    Map<String,Object> detail=row(null,null);
+    detail.put("status","OPEN_FOR_OFFERS");
+    when(db.queryForList(
+        argThat((String sql) -> sql.contains("left join lateral") &&
+            sql.contains("v0.category_id=sb.category_id") &&
+            sql.contains("limit 1) v on true")),
+        eq(bookingId))).thenReturn(List.of(detail));
+
+    assertDoesNotThrow(() -> controller().detail(bookingId));
+  }
+
 }
