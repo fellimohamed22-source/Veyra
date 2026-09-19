@@ -1222,6 +1222,7 @@ class _AddressScreenState extends State<AddressScreen>{
   bool submitting=false;
   String? error;
   Timer? _searchDebounce;
+  int _routePreviewRequest=0;
   Map<String,dynamic>? routePreview;
   bool routePreviewLoading=false;
   String? visibilityMode;
@@ -1239,6 +1240,8 @@ class _AddressScreenState extends State<AddressScreen>{
 
   @override void dispose(){
     _searchDebounce?.cancel();
+    pickup.dispose();
+    dropoff.dispose();
     super.dispose();
   }
 
@@ -1377,6 +1380,7 @@ class _AddressScreenState extends State<AddressScreen>{
   }
 
   Future<void> _refreshRoutePreview() async {
+    final request=++_routePreviewRequest;
     final from=pickupPlace;
     final to=dropoffPlace;
     if(from==null||to==null){
@@ -1397,14 +1401,14 @@ class _AddressScreenState extends State<AddressScreen>{
         toLat:toLat,
         toLng:toLng,
       );
-      if(mounted)setState(()=>routePreview=route);
+      if(mounted&&request==_routePreviewRequest)setState(()=>routePreview=route);
     }catch(_){
       // The booking can still be prepared if the free routing provider is
       // temporarily unavailable. The backend remains authoritative when
       // the request is finally published.
-      if(mounted)setState(()=>routePreview=null);
+      if(mounted&&request==_routePreviewRequest)setState(()=>routePreview=null);
     }finally{
-      if(mounted)setState(()=>routePreviewLoading=false);
+      if(mounted&&request==_routePreviewRequest)setState(()=>routePreviewLoading=false);
     }
   }
 
