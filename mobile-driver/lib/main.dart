@@ -834,6 +834,8 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   @override void dispose(){
     routeObserver.unsubscribe(this);
     RefreshBus.tick.removeListener(reload);
+    pickupFilter.dispose();
+    destinationFilter.dispose();
     super.dispose();
   }
   // Real gap fixed here: returning from submitting an offer, or from
