@@ -777,14 +777,27 @@ class _KycScreenState extends State<KycScreen>{
             ('DRIVING_LICENSE','Permis de conduire'),
             ('INSURANCE','Assurance professionnelle / véhicule'),
             ('VEHICLE_REGISTRATION','Carte grise du véhicule'),
-          ])
-            Card(child:ListTile(
+          ])Builder(builder:(context){
+            final docs=(status['documents'] as List? ?? const []).whereType<Map>().where((d)=>d['type']?.toString()==item.$1).toList();
+            final doc=docs.isEmpty?null:docs.first;
+            final docStatus=doc?['status']?.toString();
+            final rejected=docStatus=='REJECTED';
+            final reason=doc?['rejection_reason_code']?.toString();
+            final sentAt=doc?['created_at'];
+            return Card(child:ListTile(
+              leading:Icon(docStatus=='APPROVED'?Icons.verified_outlined:rejected?Icons.error_outline:docStatus==null?Icons.description_outlined:Icons.schedule_outlined),
               title:Text(item.$2),
-              subtitle:Text(t('PDF, JPG ou PNG — 10 Mo max')),
+              subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(docStatus==null?t('À compléter'):docStatus=='APPROVED'?t('Validé'):rejected?t('Refusé'):t('En vérification')),
+                if(sentAt!=null)Text(t('Envoyé le')+' '+VeyraDateFormatter.dateTime(sentAt),style:const TextStyle(fontSize:12)),
+                if(rejected&&reason!=null)Text(t('Motif')+' : '+reason,style:TextStyle(color:Theme.of(context).colorScheme.error)),
+                if(docStatus==null)Text(t('PDF, JPG ou PNG — 10 Mo max'),style:const TextStyle(fontSize:12)),
+              ]),
               trailing:uploadingType==item.$1
                 ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2))
-                :IconButton(onPressed:()=>upload(item.$1),tooltip:t('Téléverser'),icon:const Icon(Icons.upload_file)),
-            )),
+                :IconButton(onPressed:()=>upload(item.$1),tooltip:t(rejected?'Remplacer':'Téléverser'),icon:Icon(rejected?Icons.refresh:Icons.upload_file)),
+            ));
+          }),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
           if(approved)FilledButton(onPressed:()=>context.go('/home'),child:Text(t('Accéder aux demandes'))),
           if(!approved)Text(
