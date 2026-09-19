@@ -38,9 +38,17 @@ void openDriverPush(RemoteMessage message){
   final template=message.data['templateCode'];
   if(template=='NEW_BOOKING'){
     router.go('/request/'+bookingId);
-  }else{
-    router.go('/ride/'+bookingId);
+    return;
   }
+  if(template=='OFFER_ACCEPTED'||template=='BOOKING_REMINDER_24H'||
+     template=='BOOKING_REMINDER_2H'||template=='BOOKING_REMINDER_1H'||
+     template=='BOOKING_REMINDER_15M'||template=='DRIVER_BOOKING_REMINDER'){
+    router.go('/ride/'+bookingId);
+    return;
+  }
+  // Unknown booking-related templates still land on the authoritative
+  // ride detail instead of silently doing nothing.
+  router.go('/ride/'+bookingId);
 }
 
 /// Voir RefreshBus côté client (même fichier main.dart, app soeur) pour
