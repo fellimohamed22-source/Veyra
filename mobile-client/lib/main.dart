@@ -645,7 +645,184 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
 /// Écran Compte minimal : identité, langue, déconnexion. Aucune fiche du
 /// kit ne le détaille finement (composant implicite de navigation dans
 /// les maquettes C02/etc via la bottom nav), volontairement sobre.
-class AccountScreen extends StatefulWidget{const AccountScreen({super.key});@override State<AccountScreen> createState()=>_AccountScreenState();}class _AccountScreenState extends State<AccountScreen>{late Future<Map<String,dynamic>> future;Uint8List? avatar;bool busy=false;@override void initState(){super.initState();future=api.me();api.avatarBytes().then((v){if(mounted)setState(()=>avatar=v);});}Future<void> photo()async{final r=await FilePicker.platform.pickFiles(type:FileType.image),p=r?.files.single.path;if(p==null)return;setState(()=>busy=true);try{final m=await api.uploadAvatar(p),v=await api.avatarBytes();if(mounted)setState((){future=Future.value(m);avatar=v;});}finally{if(mounted)setState(()=>busy=false);}}Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState(()=>future=Future.value(u));}}Future<void> password()async{final o=TextEditingController(),n=TextEditingController();final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mon mot de passe')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:o,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe actuel'))),TextField(controller:n,obscureText:true,decoration:InputDecoration(labelText:t('Nouveau mot de passe')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&n.text.length>=10){try{await api.changePassword(o.text,n.text);await api.logout();if(mounted)context.go('/login');}catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Mot de passe actuel incorrect.'))));}}}Future<void> logout()async{await api.logout();if(mounted)context.go('/login');}@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Mon compte'))),body:FutureBuilder<Map<String,dynamic>>(future:future,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!));final m=s.data??{},name=((m['first_name']??'').toString()+' '+(m['last_name']??'').toString()).trim(),rating=double.tryParse((m['rating_average']??0).toString())??0,count=m['rating_count']??0;return ListView(padding:const EdgeInsets.all(20),children:[Center(child:Stack(children:[CircleAvatar(radius:48,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:42):null),Positioned(right:0,bottom:0,child:IconButton.filled(onPressed:busy?null:photo,icon:const Icon(Icons.camera_alt_outlined)))])),Center(child:Text(name.isEmpty?t('Client Veyra'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold))),Center(child:Text((m['email']??'').toString())),Center(child:Text((m['phone']??'').toString())),Center(child:Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.star,color:Colors.amber),Text(' '+rating.toStringAsFixed(1)+' ('+count.toString()+' '+t('avis')+')')])),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),const LanguageSwitch(),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}))));}
+class AccountScreen extends StatefulWidget {
+  const AccountScreen({super.key});
+
+  @override
+  State<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends State<AccountScreen> {
+  late Future<Map<String, dynamic>> future;
+  Uint8List? avatar;
+  bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    future = api.me();
+    api.avatarBytes().then((value) {
+      if (mounted) setState(() => avatar = value);
+    });
+  }
+
+  Future<void> photo() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    final path = result?.files.single.path;
+    if (path == null) return;
+    setState(() => busy = true);
+    try {
+      final profile = await api.uploadAvatar(path);
+      final bytes = await api.avatarBytes();
+      if (!mounted) return;
+      setState(() {
+        future = Future.value(profile);
+        avatar = bytes;
+      });
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> edit(Map<String, dynamic> profile) async {
+    final first = TextEditingController(text: (profile['first_name'] ?? '').toString());
+    final last = TextEditingController(text: (profile['last_name'] ?? '').toString());
+    final phone = TextEditingController(text: (profile['phone'] ?? '').toString());
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(t('Modifier mes informations')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: first, decoration: InputDecoration(labelText: t('Prénom'))),
+            TextField(controller: last, decoration: InputDecoration(labelText: t('Nom'))),
+            TextField(controller: phone, decoration: InputDecoration(labelText: t('Téléphone'))),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(t('Annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(t('Enregistrer'))),
+        ],
+      ),
+    );
+    if (confirmed == true && first.text.trim().isNotEmpty && phone.text.trim().length >= 6) {
+      final updated = await api.updateProfile(firstName: first.text, lastName: last.text, phone: phone.text);
+      if (mounted) setState(() => future = Future.value(updated));
+    }
+  }
+
+  Future<void> password() async {
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(t('Modifier mon mot de passe')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: current, obscureText: true, decoration: InputDecoration(labelText: t('Mot de passe actuel'))),
+            TextField(controller: next, obscureText: true, decoration: InputDecoration(labelText: t('Nouveau mot de passe'))),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(t('Annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(t('Enregistrer'))),
+        ],
+      ),
+    );
+    if (confirmed != true || next.text.length < 10) return;
+    try {
+      await api.changePassword(current.text, next.text);
+      await api.logout();
+      if (mounted) context.go('/login');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t('Mot de passe actuel incorrect.'))),
+        );
+      }
+    }
+  }
+
+  Future<void> logout() async {
+    await api.logout();
+    if (mounted) context.go('/login');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(t('Mon compte'))),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const VeyraLoadingView();
+          }
+          if (snapshot.hasError) {
+            return VeyraErrorView(customMessage: VeyraErrorMessages.forException(snapshot.error!));
+          }
+          final profile = snapshot.data ?? <String, dynamic>{};
+          final name = ('${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}').trim();
+          final rating = double.tryParse((profile['rating_average'] ?? 0).toString()) ?? 0;
+          final count = profile['rating_count'] ?? 0;
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Center(
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 48,
+                      backgroundImage: avatar == null ? null : MemoryImage(avatar!),
+                      child: avatar == null ? const Icon(Icons.person, size: 42) : null,
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: IconButton.filled(
+                        onPressed: busy ? null : photo,
+                        icon: const Icon(Icons.camera_alt_outlined),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Center(child: Text(name.isEmpty ? t('Client Veyra') : name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+              Center(child: Text((profile['email'] ?? '').toString())),
+              Center(child: Text((profile['phone'] ?? '').toString())),
+              const SizedBox(height: 8),
+              Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.star, color: Colors.amber),
+                    Text(' ${rating.toStringAsFixed(1)} ($count ${t('avis')})'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(leading: const Icon(Icons.edit), title: Text(t('Informations personnelles')), onTap: () => edit(profile)),
+                    ListTile(leading: const Icon(Icons.lock), title: Text(t('Modifier mon mot de passe')), onTap: password),
+                  ],
+                ),
+              ),
+              const LanguageSwitch(),
+              const SizedBox(height: 20),
+              VeyraSecondaryButton(label: t('Se déconnecter'), icon: Icons.logout, onPressed: logout),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
 
 /// Coquille de navigation persistante (bottom nav 4 onglets), conforme
 /// aux maquettes C02 et suivantes ("BottomNavigation" listé comme
