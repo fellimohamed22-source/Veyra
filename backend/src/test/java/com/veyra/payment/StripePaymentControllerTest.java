@@ -146,6 +146,30 @@ class StripePaymentControllerTest {
     verify(db, never()).update(anyString(), any(Object[].class));
   }
 
+
+  @Test
+  void retryWithANewKeyAfterAppRestartReusesTheBookingsPendingPayment() throws Exception {
+    stubPayableBooking("ONLINE", "CONFIRMED");
+    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("new-key")))
+        .thenReturn(List.of());
+    when(db.queryForList(contains("where booking_id=? and payer_user_id=? and method='ONLINE'"), eq(bookingId), eq(userId)))
+        .thenReturn(List.of(Map.of(
+            "id", UUID.randomUUID(),
+            "provider_payment_id", "pi_pending",
+            "status", "PENDING",
+            "amount_minor", 11000L,
+            "currency", "EUR")));
+    when(stripe.retrieve("pi_pending")).thenReturn(paymentIntent);
+    when(paymentIntent.getId()).thenReturn("pi_pending");
+    when(paymentIntent.getClientSecret()).thenReturn("secret_pending");
+
+    Map<String, Object> result = controller().createIntent(bookingId, "new-key");
+
+    assertEquals("pi_pending", result.get("paymentIntentId"));
+    verify(stripe, never()).create(anyLong(), anyString(), anyString(), anyString());
+    verify(db, never()).update(anyString(), any(Object[].class));
+  }
+
   @Test
   void freshRequestCreatesAPaymentIntentAndPersistsAPendingPayment() throws Exception {
     stubPayableBooking("ONLINE", "CONFIRMED");

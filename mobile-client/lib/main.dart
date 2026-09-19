@@ -241,7 +241,12 @@ final router=GoRouter(
       StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
     ],
   ),
-  GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
+  GoRoute(
+    path:'/addresses',
+    builder:(c,s)=>AddressScreen(
+      prefill:s.extra is Map ? Map<String,dynamic>.from(s.extra as Map) : null,
+    ),
+  ),
   GoRoute(path:'/favorites',builder:(c,s)=>const FavoriteDriversScreen()),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
@@ -1205,7 +1210,8 @@ class _CountStepper extends StatelessWidget{
 }
 
 class AddressScreen extends StatefulWidget{
-  const AddressScreen({super.key});
+  final Map<String,dynamic>? prefill;
+  const AddressScreen({this.prefill,super.key});
   @override State<AddressScreen> createState()=>_AddressScreenState();
 }
 class _AddressScreenState extends State<AddressScreen>{
@@ -1236,6 +1242,28 @@ class _AddressScreenState extends State<AddressScreen>{
   @override void initState(){
     super.initState();
     categories=api.vehicleCategories();
+    final p=widget.prefill;
+    if(p!=null){
+      final pickupLat=p['pickup_lat'];
+      final pickupLng=p['pickup_lng'];
+      final dropoffLat=p['dropoff_lat'];
+      final dropoffLng=p['dropoff_lng'];
+      final pickupLabel=p['pickup_address']?.toString();
+      final dropoffLabel=p['dropoff_address']?.toString();
+      if(pickupLat is num&&pickupLng is num&&pickupLabel!=null){
+        pickup.text=pickupLabel;
+        pickupPlace={'lat':pickupLat,'lng':pickupLng,'label':pickupLabel};
+      }
+      if(dropoffLat is num&&dropoffLng is num&&dropoffLabel!=null){
+        dropoff.text=dropoffLabel;
+        dropoffPlace={'lat':dropoffLat,'lng':dropoffLng,'label':dropoffLabel};
+      }
+      categoryId=p['category_id']?.toString();
+      paymentMethod=p['payment_method']?.toString()??'CASH';
+      passengerCount=(p['passenger_count'] as num?)?.toInt()??1;
+      baggageCount=(p['baggage_count'] as num?)?.toInt()??0;
+      WidgetsBinding.instance.addPostFrameCallback((_)=>_refreshRoutePreview());
+    }
     // Real gap fixed here: the client had no way to know whether their
     // booking would show competing prices to drivers or not -- this is
     // a platform-wide policy set by an admin (not a per-booking choice),
@@ -1953,13 +1981,13 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     setState(()=>loyaltySubmitting=true);
     try{
       if(repeat){
-        await api.repeatDriver(widget.bookingId);
+        final prefill=await api.repeatDriver(widget.bookingId);
         if(!mounted)return;
-        await showDialog<void>(context:context,builder:(d)=>AlertDialog(
-          title:Text(t('Chauffeur préféré enregistré')),
-          content:Text(t('Votre prochain trajet pourra être proposé en priorité à ce chauffeur. S’il n’est pas disponible, vous pourrez ouvrir la demande aux autres chauffeurs Veyra.')),
-          actions:[FilledButton(onPressed:()=>Navigator.pop(d),child:Text(t('Compris')))],
-        ));
+        // "Réserver à nouveau" must start a real booking flow, not merely
+        // save a preference. Route/drop-off, category, payment and capacity
+        // are prefilled; the date intentionally remains empty so an old ride
+        // can never be republished accidentally.
+        context.push('/addresses',extra:prefill);
       }else{
         await api.favoriteDriver(widget.bookingId);
         if(mounted)setState(()=>message=t('Chauffeur ajouté à vos favoris.'));
