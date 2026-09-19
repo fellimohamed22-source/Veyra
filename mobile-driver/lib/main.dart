@@ -1516,7 +1516,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
                     future=_load();
                   });
                 },
-              )),),
+              )),
             SizedBox(width:w,child:DropdownButtonFormField<String>(
                 key:ValueKey('booking-sort-$sort'),
                 initialValue:sort,
@@ -1534,7 +1534,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
                     future=_load();
                   });
                 },
-              )),),
+              )),
           ]);
         }),
         if(status!='ALL'||sort!='asc')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
