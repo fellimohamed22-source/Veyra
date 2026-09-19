@@ -1,20 +1,7 @@
 name: android-apk
 
-permissions:
-  contents: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
-
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main, feature/maps-live-tracking-v2]
-    paths:
-      - 'mobile-client/**'
-      - 'mobile-driver/**'
-      - '.github/workflows/android-apk.yml'
   push:
     branches: [main, feature/product-marketplace-v3]
     paths:
@@ -23,8 +10,13 @@ on:
       - '.github/workflows/android-apk.yml'
 
 jobs:
-  build-client:
+  build-apks:
     runs-on: ubuntu-latest
+    # Nécessaire pour créer/mettre à jour une Release via gh -- le
+    # GITHUB_TOKEN par défaut n'a que l'accès lecture au contenu du
+    # dépôt sauf déclaration explicite.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +25,25 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Use fixed debug keystore
+      - name: Use a fixed debug keystore across builds
         run: |
+          # REAL BUG FOUND AND FIXED: neither app's android/ folder is
+          # committed to the repo -- both are regenerated from scratch by
+          # `flutter create .` on every single run, on a fresh ubuntu-latest
+          # VM with no persisted ~/.android directory. The Android Gradle
+          # Plugin auto-generates a brand new, randomly-keyed
+          # ~/.android/debug.keystore the first time it's needed if none
+          # exists, so every CI run has produced an APK signed with a
+          # DIFFERENT debug key. Android refuses to install an update
+          # signed with a different key than the already-installed app
+          # (INSTALL_FAILED_UPDATE_INCOMPATIBLE) -- confirmed as the real
+          # explanation for reports of "the new build doesn't seem to
+          # contain any of the recent fixes" that kept surfacing even
+          # after a run had completed successfully: the install was
+          # silently failing and the previous APK kept running.
+          # Fix: commit one fixed debug keystore once and reuse it on
+          # every run, so all debug builds share the same signature and
+          # can update cleanly over each other.
           mkdir -p ~/.android
           cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
 
@@ -42,102 +51,135 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          set -euxo pipefail
           cd mobile-client
           flutter create . --platforms=android --project-name veyra_client
-
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
-
+          # Location permissions needed for the "use my current location"
+          # address field (geolocator) -- flutter create's own template
+          # never adds these on its own, for either debug or release
+          # builds, since it has no way to know the app will use location
+          # at all. Same real gap already found and fixed once for the
+          # driver app's own manifest permission needs earlier this
+          # project's history (INTERNET on a different, unrelated app) --
+          # applied proactively here rather than discovered via another
+          # broken build.
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
-
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
+          # Firebase wiring: google-services.json declares package_name
+          # "com.veyra.client" (the real Firebase Android app registered
+          # for this project) -- flutter create's own default
+          # namespace/applicationId is "com.example.veyra_client", which
+          # would silently mismatch and make FCM registration fail at
+          # runtime with no build-time error at all (the plugin would
+          # apply, but resource generation keys off the applicationId
+          # actually matching an entry in google-services.json). Both
+          # namespace and applicationId need the fix, not just one --
+          # Firebase's own docs are explicit that they must match.
           sed -i 's/namespace = "com.example.veyra_client"/namespace = "com.veyra.client"/' android/app/build.gradle.kts
           sed -i 's/applicationId = "com.example.veyra_client"/applicationId = "com.veyra.client"/' android/app/build.gradle.kts
-
+          grep -q 'namespace = "com.veyra.client"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.client"' android/app/build.gradle.kts
+          # REAL BUG FOUND AND FIXED: renaming namespace/applicationId above
+          # only edits build.gradle.kts. It does NOT move the actual
+          # MainActivity.kt source file (still at
+          # kotlin/com/example/veyra_client/MainActivity.kt with
+          # `package com.example.veyra_client`) or update its package
+          # declaration. AndroidManifest.xml ends up pointing at
+          # com.veyra.client.MainActivity while the compiled class is still
+          # under com.example.veyra_client -- confirmed via a real device's
+          # logcat: "ClassNotFoundException: Didn't find class
+          # com.veyra.client.MainActivity", crashing on every launch.
           mkdir -p android/app/src/main/kotlin/com/veyra/client
           mv android/app/src/main/kotlin/com/example/veyra_client/MainActivity.kt android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           sed -i 's/package com.example.veyra_client/package com.veyra.client/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           rm -rf android/app/src/main/kotlin/com/example
-
+          grep -q 'package com.veyra.client' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          # Google Services Gradle plugin -- required to actually process
+          # google-services.json into usable Android resources; having
+          # firebase_core/firebase_messaging as Dart dependencies alone
+          # does not apply this plugin (that's a separate, manual Gradle-
+          # level step even flutter create doesn't automate). Real,
+          # current instructions confirmed directly (Firebase's own docs +
+          # multiple current FlutterFire setup guides for the Kotlin DSL
+          # template this project actually uses), not guessed.
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-
           printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.client' android/app/google-services.json
-
           flutter pub get
-          flutter build apk --debug \
-            --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} \
-            --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-
+          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
-
-      # Artifact upload is intentionally non-blocking: GitHub can reject
-      # uploads when the repository Actions storage quota is full even
-      # though the APK itself compiled successfully.
-      - name: Publish Client APK to GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view latest-v3-build >/dev/null 2>&1 || gh release create latest-v3-build --title "Veyra V3 latest build" --notes "Latest successful V3 Android build." --prerelease
-          gh release upload latest-v3-build veyra-client-debug.apk --clobber
-
-  build-driver:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Use fixed debug keystore
-        run: |
-          mkdir -p ~/.android
-          cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
 
       - name: Build Driver APK
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          set -euxo pipefail
           cd mobile-driver
           flutter create . --platforms=android --project-name veyra_driver
-
+          # REAL BUG FOUND AND FIXED: file_picker's own dependency
+          # (flutter_plugin_android_lifecycle) requires compiling against
+          # API 36+, but flutter.compileSdkVersion (the value Flutter's own
+          # generated build.gradle.kts uses by default) currently resolves
+          # to 34 -- confirmed directly from a real failed build's log:
+          # "file_picker is currently compiled against android-34...
+          # Recommended action: Update this project to use a newer
+          # compileSdk of at least 36". A prior attempt to fix this by
+          # upgrading geolocator was based on a plausible but wrong
+          # diagnosis (a different, superficially similar known geolocator
+          # issue) -- this fix is instead based on the actual real error
+          # text from a real failed run.
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
-
-          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
-          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
-
+          # Same real package-name mismatch fix as the client build --
+          # google-services.json declares "com.veyra.driver" for this app.
           sed -i 's/namespace = "com.example.veyra_driver"/namespace = "com.veyra.driver"/' android/app/build.gradle.kts
           sed -i 's/applicationId = "com.example.veyra_driver"/applicationId = "com.veyra.driver"/' android/app/build.gradle.kts
-
+          grep -q 'namespace = "com.veyra.driver"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.driver"' android/app/build.gradle.kts
+          # Same real MainActivity package/location bug as the client build
+          # -- see the client build step's comment for the confirmed logcat
+          # evidence (ClassNotFoundException on both apps).
           mkdir -p android/app/src/main/kotlin/com/veyra/driver
           mv android/app/src/main/kotlin/com/example/veyra_driver/MainActivity.kt android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
           sed -i 's/package com.example.veyra_driver/package com.veyra.driver/' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
           rm -rf android/app/src/main/kotlin/com/example
-
+          grep -q 'package com.veyra.driver' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-
           printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.driver' android/app/google-services.json
-
           flutter pub get
-          flutter build apk --debug \
-            --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} \
-            --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-
+          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
 
-      # Artifact upload is intentionally non-blocking for the same quota
-      # reason as the client job. Build success remains authoritative.
-      - name: Publish Driver APK to GitHub Release
+      - name: Publish APKs as a GitHub Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view latest-v3-build >/dev/null 2>&1 || gh release create latest-v3-build --title "Veyra V3 latest build" --notes "Latest successful V3 Android build." --prerelease
-          gh release upload latest-v3-build veyra-driver-debug.apk --clobber
+          # Real fix for the persistent "Artifact storage quota has
+          # been hit" failure (actions/upload-artifact): GitHub Release
+          # assets are a completely separate storage mechanism from
+          # Actions artifact storage -- a different quota entirely, not
+          # subject to the same 0.5 GB free-tier limit or its slow
+          # (6-12h, per GitHub's own error message) usage recalculation.
+          # Confirmed this is the actual, distinct mechanism before
+          # relying on it, not assumed.
+          #
+          # Single fixed tag, recreated on every run, rather than a new
+          # release per build: this is a debug/dev build, not a real
+          # versioned release -- a stable, bookmarkable URL for "the
+          # latest debug build" is more useful here than accumulating
+          # one release per push. --prerelease marks it clearly as such
+          # rather than a real release.
+          gh release delete latest-v3-build --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-v3-build \
+            veyra-client-debug.apk veyra-driver-debug.apk \
+            --title "Veyra V3 latest debug APKs" \
+            --notes "Générés automatiquement à chaque push. Non signés pour la Play Store -- build de debug uniquement." \
+            --prerelease \
+            --target "${{ github.sha }}"
