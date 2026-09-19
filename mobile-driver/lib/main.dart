@@ -264,6 +264,7 @@ class _LoginScreenState extends State<LoginScreen>{
       if(!mounted)return;
       final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
       context.go(approved?'/home':'/kyc');
+      if(approved)await configureDriverPush();
     }on DioException catch(e){
       if(!mounted)return;
       if(e.response?.statusCode==401||e.response?.statusCode==403){

@@ -176,7 +176,7 @@ final router=GoRouter(
       StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
     ],
   ),
-  GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
+  GoRoute(path:'/addresses',builder:(c,s)=>AddressScreen(initialBooking:s.extra is Map?Map<String,dynamic>.from(s.extra as Map):null)),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/booking/:id',builder:(c,s)=>BookingDetailScreen(bookingId:s.pathParameters['id']!)),
@@ -249,7 +249,10 @@ class _LoginScreenState extends State<LoginScreen>{
       }catch(_){
         return;
       }
-      if(token!=null&&mounted)context.go('/home');
+      if(token!=null&&mounted){
+        context.go('/home');
+        await configurePush();
+      }
     });
   }
 
@@ -768,7 +771,8 @@ class _CountStepper extends StatelessWidget{
 }
 
 class AddressScreen extends StatefulWidget{
-  const AddressScreen({super.key});
+  final Map<String,dynamic>? initialBooking;
+  const AddressScreen({this.initialBooking,super.key});
   @override State<AddressScreen> createState()=>_AddressScreenState();
 }
 class _AddressScreenState extends State<AddressScreen>{
@@ -796,6 +800,24 @@ class _AddressScreenState extends State<AddressScreen>{
   @override void initState(){
     super.initState();
     categories=api.vehicleCategories();
+    final initial=widget.initialBooking;
+    if(initial!=null){
+      final pickupLabel=initial['pickup_address']?.toString()??'';
+      final dropoffLabel=initial['dropoff_address']?.toString()??'';
+      final pickupLat=(initial['pickup_lat'] as num?)?.toDouble();
+      final pickupLng=(initial['pickup_lng'] as num?)?.toDouble();
+      final dropoffLat=(initial['dropoff_lat'] as num?)?.toDouble();
+      final dropoffLng=(initial['dropoff_lng'] as num?)?.toDouble();
+      pickup.text=pickupLabel; dropoff.text=dropoffLabel;
+      if(pickupLat!=null&&pickupLng!=null)pickupPlace={'label':pickupLabel,'lat':pickupLat,'lng':pickupLng};
+      if(dropoffLat!=null&&dropoffLng!=null)dropoffPlace={'label':dropoffLabel,'lat':dropoffLat,'lng':dropoffLng};
+      categoryId=initial['vehicle_category_id']?.toString()??initial['category_id']?.toString();
+      categoryName=initial['vehicle_category_name']?.toString()??initial['category_name']?.toString();
+      paymentMethod=initial['payment_method']?.toString()??'CASH';
+      passengerCount=(initial['passenger_count'] as num?)?.toInt()??1;
+      baggageCount=(initial['baggage_count'] as num?)?.toInt()??0;
+      scheduledAt=DateTime.now().add(const Duration(hours:3));
+    }
     // Real gap fixed here: the client had no way to know whether their
     // booking would show competing prices to drivers or not -- this is
     // a platform-wide policy set by an admin (not a per-booking choice),
@@ -1524,6 +1546,8 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             ],
             TextButton(onPressed:(cancelling||loadingPreview)?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):loadingPreview?t('Calcul des frais…'):t('Annuler la réservation'))),
           ],
+          if({'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER'}.contains(status))
+            OutlinedButton.icon(onPressed:()=>context.push('/addresses',extra:x),icon:const Icon(Icons.replay),label:Text(t('Réserver à nouveau'))),
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Text(t('Noter le chauffeur'),style:const TextStyle(fontWeight:FontWeight.bold)),
@@ -2086,11 +2110,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
             return ListView(children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
           }
           if(s.hasError){
+            final offline=VeyraErrorMessages.isOffline(s.error!);
             return ListView(children:[
               const SizedBox(height:160),
-              const Icon(Icons.cloud_off,size:48),
-              Center(child:Text(t('Notifications indisponibles.'))),
-              Center(child:TextButton(onPressed:reload,child:Text(t('Réessayer')))),
+              if(offline) VeyraOfflineBanner(onRetry:reload)
+              else VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload),
             ]);
           }
           final items=s.data??[];
