@@ -1,0 +1,129 @@
+workflows:
+  veyra-client-android:
+    name: Veyra Client - Android debug APK
+    instance_type: linux_x2
+    max_build_duration: 30
+    working_directory: mobile-client
+    environment:
+      flutter: stable
+      # Secrets à configurer dans Codemagic (App settings > Environment
+      # variables), pas dans ce fichier -- même séparation que les
+      # secrets GitHub Actions déjà en place pour ce projet.
+      # GOOGLE_SERVICES_JSON : contenu complet du fichier Firebase Android
+      #   pour com.veyra.client (marquer "Secure" dans Codemagic).
+      # VEYRA_API_BASE_URL : URL du backend (ex: https://veyra-wr6p.onrender.com)
+      # STRIPE_PUBLISHABLE_KEY : clé publique Stripe (marquer "Secure").
+      vars:
+        PACKAGE_NAME: "com.veyra.client"
+    scripts:
+      - name: Use a fixed debug keystore across builds
+        script: |
+          set -e
+          # Même correctif que sur GitHub Actions : sans keystore fixe,
+          # chaque nouvelle machine de build génère une clé de debug
+          # différente, et Android refuse d'installer une mise à jour
+          # signée par une clé différente de celle déjà installée
+          # (INSTALL_FAILED_UPDATE_INCOMPATIBLE).
+          mkdir -p ~/.android
+          cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
+
+      - name: Generate android/ and fix package identity
+        script: |
+          set -e
+          flutter create . --platforms=android --project-name veyra_client
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+          grep -q 'compileSdk = 36' android/app/build.gradle.kts
+
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
+
+          sed -i 's/namespace = "com.example.veyra_client"/namespace = "com.veyra.client"/' android/app/build.gradle.kts
+          sed -i 's/applicationId = "com.example.veyra_client"/applicationId = "com.veyra.client"/' android/app/build.gradle.kts
+          grep -q 'namespace = "com.veyra.client"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.client"' android/app/build.gradle.kts
+
+          mkdir -p android/app/src/main/kotlin/com/veyra/client
+          mv android/app/src/main/kotlin/com/example/veyra_client/MainActivity.kt android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          sed -i 's/package com.example.veyra_client/package com.veyra.client/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          rm -rf android/app/src/main/kotlin/com/example
+          grep -q 'package com.veyra.client' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+
+          sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
+          sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
+          printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          grep -q 'com.veyra.client' android/app/google-services.json
+
+      - name: Get packages
+        script: flutter pub get
+
+      - name: Build debug APK
+        script: |
+          flutter build apk --debug \
+            --dart-define=API_BASE_URL="$VEYRA_API_BASE_URL" \
+            --dart-define=STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY"
+
+    artifacts:
+      - mobile-client/build/app/outputs/flutter-apk/*.apk
+
+  veyra-driver-android:
+    name: Veyra Driver - Android debug APK
+    instance_type: linux_x2
+    max_build_duration: 30
+    working_directory: mobile-driver
+    environment:
+      flutter: stable
+      # GOOGLE_SERVICES_JSON ici est le fichier Firebase pour
+      # com.veyra.driver -- différent de celui du workflow client
+      # ci-dessus (deux apps Firebase distinctes). VEYRA_API_BASE_URL et
+      # STRIPE_PUBLISHABLE_KEY peuvent être partagées entre les deux
+      # workflows via un groupe de variables Codemagic.
+      vars:
+        PACKAGE_NAME: "com.veyra.driver"
+    scripts:
+      - name: Use a fixed debug keystore across builds
+        script: |
+          set -e
+          mkdir -p ~/.android
+          cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
+
+      - name: Generate android/ and fix package identity
+        script: |
+          set -e
+          flutter create . --platforms=android --project-name veyra_driver
+          # Correctif réel confirmé par un vrai échec de build : file_picker
+          # exige compileSdk >= 36, alors que flutter.compileSdkVersion
+          # résout actuellement à 34.
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+          grep -q 'compileSdk = 36' android/app/build.gradle.kts
+
+          sed -i 's/namespace = "com.example.veyra_driver"/namespace = "com.veyra.driver"/' android/app/build.gradle.kts
+          sed -i 's/applicationId = "com.example.veyra_driver"/applicationId = "com.veyra.driver"/' android/app/build.gradle.kts
+          grep -q 'namespace = "com.veyra.driver"' android/app/build.gradle.kts
+          grep -q 'applicationId = "com.veyra.driver"' android/app/build.gradle.kts
+
+          mkdir -p android/app/src/main/kotlin/com/veyra/driver
+          mv android/app/src/main/kotlin/com/example/veyra_driver/MainActivity.kt android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
+          sed -i 's/package com.example.veyra_driver/package com.veyra.driver/' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
+          rm -rf android/app/src/main/kotlin/com/example
+          grep -q 'package com.veyra.driver' android/app/src/main/kotlin/com/veyra/driver/MainActivity.kt
+
+          sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts
+          sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
+          printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          grep -q 'com.veyra.driver' android/app/google-services.json
+
+      - name: Get packages
+        script: flutter pub get
+
+      - name: Build debug APK
+        script: |
+          flutter build apk --debug \
+            --dart-define=API_BASE_URL="$VEYRA_API_BASE_URL" \
+            --dart-define=STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY"
+
+    artifacts:
+      - mobile-driver/build/app/outputs/flutter-apk/*.apk
