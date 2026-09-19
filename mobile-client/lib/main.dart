@@ -1214,6 +1214,7 @@ class _AddressScreenState extends State<AddressScreen>{
   Timer? _searchDebounce;
   Map<String,dynamic>? routePreview;
   bool routePreviewLoading=false;
+  String? visibilityMode;
 
   @override void initState(){
     super.initState();
