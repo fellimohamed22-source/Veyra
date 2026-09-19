@@ -232,6 +232,7 @@ final router=GoRouter(
     ],
   ),
   GoRoute(path:'/addresses',builder:(c,s)=>const AddressScreen()),
+  GoRoute(path:'/favorites',builder:(c,s)=>const FavoriteDriversScreen()),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/booking/:id',builder:(c,s)=>BookingDetailScreen(bookingId:s.pathParameters['id']!)),
@@ -1016,6 +1017,14 @@ class _AccountScreenState extends State<AccountScreen>{
             ),
           )),
           const SizedBox(height:16),
+          Card(child:ListTile(
+            leading:const Icon(Icons.favorite_outline),
+            title:Text(t('Mes chauffeurs favoris')),
+            subtitle:Text(t('Retrouvez et gérez les chauffeurs que vous avez appréciés.')),
+            trailing:const Icon(Icons.chevron_right),
+            onTap:()=>context.push('/favorites'),
+          )),
+          const SizedBox(height:16),
           const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
           const SizedBox(height:24),
           VeyraSecondaryButton(
@@ -1026,6 +1035,40 @@ class _AccountScreenState extends State<AccountScreen>{
         ]);
       },
     ),
+  );
+}
+
+class FavoriteDriversScreen extends StatefulWidget{
+  const FavoriteDriversScreen({super.key});
+  @override State<FavoriteDriversScreen> createState()=>_FavoriteDriversScreenState();
+}
+class _FavoriteDriversScreenState extends State<FavoriteDriversScreen>{
+  late Future<List<dynamic>> future;
+  @override void initState(){super.initState();future=api.favoriteDrivers();}
+  void reload()=>setState(()=>future=api.favoriteDrivers());
+  Future<void> remove(String driverId)async{
+    final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Retirer ce chauffeur des favoris ?')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))]));
+    if(ok!=true)return;
+    try{await api.unfavoriteDriver(driverId);if(mounted){reload();ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Chauffeur retiré des favoris.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+  }
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:Text(t('Mes chauffeurs favoris'))),
+    body:RefreshIndicator(onRefresh:()async{reload();await future;},child:FutureBuilder<List<dynamic>>(future:future,builder:(context,s){
+      if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
+      if(s.hasError)return ListView(children:[VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload)]);
+      final items=s.data??[];
+      if(items.isEmpty)return ListView(children:[VeyraEmptyView(icon:Icons.favorite_border,message:t('Aucun chauffeur favori pour le moment. Après une course terminée, vous pourrez ajouter votre chauffeur ici.'))]);
+      return ListView.separated(padding:const EdgeInsets.all(16),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(context,i){
+        final x=Map<String,dynamic>.from(items[i] as Map);final id=x['driver_id']?.toString()??'';
+        final name=[x['first_name'],x['last_name']].where((v)=>v!=null&&v.toString().trim().isNotEmpty).join(' ');
+        final vehicle=[x['vehicle_brand'],x['vehicle_model'],x['vehicle_year'],x['vehicle_color']].where((v)=>v!=null&&v.toString().trim().isNotEmpty).join(' • ');
+        return Card(child:Padding(padding:const EdgeInsets.all(14),child:Row(children:[
+          const CircleAvatar(child:Icon(Icons.person)),const SizedBox(width:12),
+          Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(name.isEmpty?t('Chauffeur Veyra'):name,style:const TextStyle(fontWeight:FontWeight.bold)),const SizedBox(height:4),Text(t('Note')+' : '+(x['rating']??'-').toString()),if(vehicle.isNotEmpty)Text(vehicle,style:const TextStyle(color:Colors.black54))])),
+          IconButton(tooltip:t('Retirer des favoris'),onPressed:id.isEmpty?null:()=>remove(id),icon:const Icon(Icons.favorite,color:Color(0xFFDC2626))),
+        ])));
+      });
+    })),
   );
 }
 
