@@ -3252,7 +3252,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
                   borderRadius:BorderRadius.circular(20),
                   onTap:bookingId==null||bookingId.isEmpty
                     ?null
-                    :()=>context.push('/booking/'+bookingId),
+                    :(){
+                        if(template=='NEW_OFFER'){
+                          context.push('/offers/'+bookingId);
+                        }else{
+                          context.push('/booking/'+bookingId);
+                        }
+                      },
                   child:Padding(
                     padding:const EdgeInsets.all(16),
                     child:Column(
