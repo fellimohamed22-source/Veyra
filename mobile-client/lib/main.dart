@@ -2430,6 +2430,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Map<String,dynamic>? etaInfo;
   Map<String,dynamic>? tripEtaInfo;
   DateTime? lastEtaRefresh;
+  int _etaRequest=0;
   String? error;
   bool loading=true;
 
@@ -2522,6 +2523,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   }
 
   Future<void> _refreshEta({bool force=false}) async {
+    final request=++_etaRequest;
     final live=location;
     final booking=bookingMap;
     if(booking==null)return;
@@ -2578,7 +2580,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       loadActiveLeg(),
       loadTrip(),
     ]);
-    if(!mounted)return;
+    if(!mounted||request!=_etaRequest)return;
     setState((){
       etaInfo=results[0];
       tripEtaInfo=results[1];
