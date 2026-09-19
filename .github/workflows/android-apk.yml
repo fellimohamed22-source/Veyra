@@ -3,7 +3,7 @@ name: android-apk
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/product-marketplace-v3]
     paths:
       - 'mobile-client/**'
       - 'mobile-driver/**'
