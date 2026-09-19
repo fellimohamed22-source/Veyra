@@ -1244,7 +1244,10 @@ class _AddressScreenState extends State<AddressScreen>{
 
   Future<void> search(bool isPickup,String q)async{
     if(q.trim().length<3){
-      setState((){if(isPickup)pickupResults=[];else dropoffResults=[];});
+      setState((){
+        if(isPickup){pickupResults=[];loadingPickup=false;}
+        else{dropoffResults=[];loadingDropoff=false;}
+      });
       return;
     }
     setState((){if(isPickup)loadingPickup=true;else loadingDropoff=true;});
