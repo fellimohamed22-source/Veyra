@@ -36,6 +36,16 @@ bool pushHandlersConfigured=false;
 void openPush(RemoteMessage message){
   final bookingId=message.data['bookingId']?.toString();
   if(bookingId==null||bookingId.isEmpty)return;
+  final template=message.data['templateCode']?.toString();
+  // Keep push navigation aligned with the in-app notification center:
+  // a NEW_OFFER must land directly on the offer comparison screen,
+  // not on the generic booking detail where the new price is hidden
+  // one navigation step away. Other customer booking events still open
+  // the booking detail, which is the authoritative status screen.
+  if(template=='NEW_OFFER'){
+    router.go('/offers/'+bookingId);
+    return;
+  }
   router.go('/booking/'+bookingId);
 }
 
