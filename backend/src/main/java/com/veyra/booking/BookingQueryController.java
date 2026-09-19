@@ -33,7 +33,7 @@ public class BookingQueryController {
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "left join drivers d on d.id=sb.selected_driver_id " +
         "left join users du on du.id=d.user_id " +
-        "left join vehicles v on v.driver_id=d.id and v.status='APPROVED' " +
+        "left join lateral (select v0.* from vehicles v0 where v0.driver_id=d.id and v0.status='APPROVED' order by v0.updated_at desc nulls last,v0.created_at desc limit 1) v on true " +
         "left join current_driver_locations cdl on cdl.driver_id=sb.selected_driver_id and cdl.booking_id=sb.id " +
         "where sb.id=? limit 1",
         bookingId);
