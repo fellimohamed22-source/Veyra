@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart' show FilePicker, FilePickerResult, PlatformFile;
+import 'package:file_picker/file_picker.dart' as fp;
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -700,7 +700,7 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   Future<void> upload(String type)async{
-    final result=await FilePicker.platform.pickFiles(
+    final result=await fp.FilePicker.platform.pickFiles(
       type:FileType.custom,
       allowedExtensions:['pdf','jpg','jpeg','png'],
     );
