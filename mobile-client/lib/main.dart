@@ -1171,7 +1171,6 @@ class _AddressScreenState extends State<AddressScreen>{
   String? categoryId;
   String? categoryName;
   late Future<List<dynamic>> categories;
-  String? visibilityMode;
   bool loadingPickup=false;
   bool loadingDropoff=false;
   bool locating=false;
@@ -1576,17 +1575,12 @@ class _AddressScreenState extends State<AddressScreen>{
         ],
         onChanged:(v){if(v!=null)setState(()=>paymentMethod=v);},
       ),
-      if(visibilityMode!=null)Padding(
+      Padding(
         padding:const EdgeInsets.only(top:10),
         child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Icon(visibilityMode=='BEST_VISIBLE'?Icons.visibility_outlined:Icons.visibility_off_outlined,size:18,color:Colors.black54),
+          const Icon(Icons.handshake_outlined,size:18,color:Colors.black54),
           const SizedBox(width:8),
-          Expanded(child:Text(
-            visibilityMode=='BEST_VISIBLE'
-              ?t('Les chauffeurs verront le meilleur prix proposé par un autre chauffeur.')
-              :t('Offre privée : les chauffeurs ne voient jamais les prix proposés par les autres.'),
-            style:const TextStyle(fontSize:12,color:Colors.black54),
-          )),
+          Expanded(child:Text(t('Les chauffeurs reçoivent votre demande et fixent librement leur prix. Vous choisissez ensuite selon le prix, le chauffeur et le véhicule.'),style:const TextStyle(fontSize:12,color:Colors.black54))),
         ]),
       ),
       const SizedBox(height:18),
