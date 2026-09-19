@@ -28,7 +28,8 @@ public class BookingQueryController {
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
         "du.first_name as driver_first_name,du.last_name as driver_last_name,du.phone as driver_phone,d.rating as driver_rating,d.kyc_status as driver_kyc_status,d.status as driver_status," +
         "v.brand as vehicle_brand,v.model as vehicle_model,v.plate_number,v.color as vehicle_color,v.year as vehicle_year,v.status as vehicle_status," +
-        "cdl.lat as driver_lat,cdl.lng as driver_lng,cdl.heading as driver_heading,cdl.speed_mps as driver_speed_mps,cdl.recorded_at as driver_location_recorded_at " +
+        "cdl.lat as driver_lat,cdl.lng as driver_lng,cdl.heading as driver_heading,cdl.speed_mps as driver_speed_mps,cdl.recorded_at as driver_location_recorded_at," +
+        "(cdl.recorded_at is not null and cdl.recorded_at>=now()-interval '2 minutes') as driver_location_fresh " +
         "from scheduled_bookings sb " +
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "left join drivers d on d.id=sb.selected_driver_id " +
@@ -51,7 +52,7 @@ public class BookingQueryController {
     result.put("driverVerified",driverSelected && "APPROVED".equals(row.get("driver_kyc_status")) && "ACTIVE".equals(row.get("driver_status")));
     result.put("vehicleVerified",driverSelected && "APPROVED".equals(row.get("vehicle_status")));
     result.put("liveTrackingEligible",Set.of("DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
-    result.put("liveTrackingFresh",row.get("driver_location_recorded_at")!=null);
+    result.put("liveTrackingFresh",Boolean.TRUE.equals(row.get("driver_location_fresh")));
     result.put("canContactDriver",driverSelected && Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS").contains(status));
     result.put("rideStarted",Set.of("IN_PROGRESS","COMPLETED").contains(status));
     result.put("rideCompleted","COMPLETED".equals(status));
