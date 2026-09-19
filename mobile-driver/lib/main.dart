@@ -896,7 +896,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
       IconButton(onPressed:()=>context.push('/notifications'),tooltip:t('Notifications'),icon:const Icon(Icons.notifications_outlined)),
     ]),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{final refreshed=load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         DropdownButtonFormField<String>(
           initialValue:sort,
@@ -1486,7 +1486,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes courses'))),
     body:RefreshIndicator(
-      onRefresh:()async{_refresh();await future;},
+      onRefresh:()async{final refreshed=_load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         LayoutBuilder(builder:(context,constraints){
           final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
@@ -2729,7 +2729,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{final refreshed=api.notifications(page:page);setState(()=>future=refreshed);await refreshed;},
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
