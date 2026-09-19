@@ -6,14 +6,16 @@ workflows:
     working_directory: mobile-client
     environment:
       flutter: stable
-      # Seul GOOGLE_SERVICES_JSON reste à configurer manuellement dans
-      # Codemagic (App settings > Environment variables, marquer "Secure")
-      # -- contenu complet du fichier Firebase Android pour com.veyra.client.
-      # VEYRA_API_BASE_URL et STRIPE_PUBLISHABLE_KEY sont déjà codées en dur
-      # ci-dessous : ni l'une ni l'autre n'est un vrai secret (URL publique
-      # du backend ; clé Stripe PUBLIABLE, conçue pour être visible côté
-      # client) -- choix explicite de l'utilisateur, dépôt privé à usage
-      # personnel.
+      # Toutes les valeurs nécessaires sont désormais codées en dur dans ce
+      # fichier -- aucune configuration manuelle requise dans le dashboard
+      # Codemagic. Choix explicite de l'utilisateur (dépôt privé, usage
+      # personnel) : VEYRA_API_BASE_URL (URL publique du backend),
+      # STRIPE_PUBLISHABLE_KEY (clé Stripe PUBLIABLE, conçue pour être
+      # visible côté client) et le contenu de google-services.json (une clé
+      # API Firebase Android, protégée par les règles de sécurité Firebase
+      # et la restriction de package name côté Google, pas un secret serveur
+      # classique -- elle finit de toute façon embarquée telle quelle dans
+      # l'APK compilé).
       vars:
         PACKAGE_NAME: "com.veyra.client"
         VEYRA_API_BASE_URL: "https://veyra-wr6p.onrender.com"
@@ -60,7 +62,56 @@ workflows:
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
           grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-          printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          cat > android/app/google-services.json << 'GSJEOF'
+          {
+            "project_info": {
+              "project_number": "42273532770",
+              "project_id": "veyra-4806a",
+              "storage_bucket": "veyra-4806a.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:42273532770:android:66b6f1fa6ad831b5c71a3b",
+                  "android_client_info": {
+                    "package_name": "com.veyra.client"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyApGifrfh1mMa9iQf6U4hsxFf6cXYeP_Ac"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:42273532770:android:c2bbed4e3363bc30c71a3b",
+                  "android_client_info": {
+                    "package_name": "com.veyra.driver"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyApGifrfh1mMa9iQf6U4hsxFf6cXYeP_Ac"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          GSJEOF
           grep -q 'com.veyra.client' android/app/google-services.json
 
       - name: Get packages
@@ -82,11 +133,12 @@ workflows:
     working_directory: mobile-driver
     environment:
       flutter: stable
-      # GOOGLE_SERVICES_JSON ici est le fichier Firebase pour
-      # com.veyra.driver -- différent de celui du workflow client
-      # ci-dessus (deux apps Firebase distinctes, à configurer séparément
-      # dans Codemagic). VEYRA_API_BASE_URL et STRIPE_PUBLISHABLE_KEY sont
-      # déjà codées en dur ci-dessous, mêmes valeurs que côté client.
+      # Le fichier google-services.json des deux apps contient en réalité
+      # les mêmes deux entrées (com.veyra.client et com.veyra.driver) --
+      # Firebase génère un seul fichier par projet, pas un par app. Le
+      # plugin Gradle sélectionne automatiquement la bonne entrée selon
+      # l'applicationId au moment du build ; même contenu écrit ici que
+      # dans le workflow client ci-dessus.
       vars:
         PACKAGE_NAME: "com.veyra.driver"
         VEYRA_API_BASE_URL: "https://veyra-wr6p.onrender.com"
@@ -122,7 +174,56 @@ workflows:
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
           grep -q 'com.google.gms.google-services' android/settings.gradle.kts
           sed -i '/id("com.android.application")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
-          printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          cat > android/app/google-services.json << 'GSJEOF'
+          {
+            "project_info": {
+              "project_number": "42273532770",
+              "project_id": "veyra-4806a",
+              "storage_bucket": "veyra-4806a.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:42273532770:android:66b6f1fa6ad831b5c71a3b",
+                  "android_client_info": {
+                    "package_name": "com.veyra.client"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyApGifrfh1mMa9iQf6U4hsxFf6cXYeP_Ac"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:42273532770:android:c2bbed4e3363bc30c71a3b",
+                  "android_client_info": {
+                    "package_name": "com.veyra.driver"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyApGifrfh1mMa9iQf6U4hsxFf6cXYeP_Ac"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          GSJEOF
           grep -q 'com.veyra.driver' android/app/google-services.json
 
       - name: Get packages
