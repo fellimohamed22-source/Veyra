@@ -1619,6 +1619,26 @@ class _AddressScreenState extends State<AddressScreen>{
           Expanded(child:Text(t('Les chauffeurs reçoivent votre demande et fixent librement leur prix. Vous choisissez ensuite selon le prix, le chauffeur et le véhicule.'),style:const TextStyle(fontSize:12,color:Colors.black54))),
         ]),
       ),
+      const SizedBox(height:12),
+      if(visibilityMode!=null)
+        Container(
+          padding:const EdgeInsets.all(12),
+          decoration:BoxDecoration(
+            color:const Color(0xFFF7FAFD),
+            borderRadius:BorderRadius.circular(VeyraRadius.md),
+            border:Border.all(color:const Color(0xFFE2E8F0)),
+          ),
+          child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            const Icon(Icons.visibility_outlined,size:18,color:Colors.black54),
+            const SizedBox(width:8),
+            Expanded(child:Text(
+              visibilityMode=='BEST_VISIBLE'
+                ?t('Pendant l’appel d’offres, les chauffeurs peuvent voir le meilleur prix concurrent afin d’ajuster librement leur proposition.')
+                :t('Les propositions des chauffeurs restent privées : chaque chauffeur fixe son prix sans voir les offres concurrentes.'),
+              style:const TextStyle(fontSize:12,color:Colors.black54),
+            )),
+          ]),
+        ),
       const SizedBox(height:18),
       // Ajouté suite à l'étude UX/navigation : rien ne permettait
       // auparavant de revoir d'un coup d'œil les choix faits dans ce
