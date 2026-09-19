@@ -1628,6 +1628,7 @@ class _RideScreenState extends State<RideScreen>{
   Map<String,dynamic>? etaInfo;
   Map<String,dynamic>? tripEtaInfo;
   DateTime? lastEtaRefresh;
+  int _etaRequest=0;
   int ratingScore=0;
   bool ratingSubmitting=false;
   bool ratingSubmitted=false;
@@ -1734,6 +1735,7 @@ class _RideScreenState extends State<RideScreen>{
   }
 
   Future<void> _refreshEta(Position p) async {
+    final request=++_etaRequest;
     try{
       final booking=await api.bookingDetail(widget.bookingId);
       final status=(booking['status']??'').toString();
@@ -1774,7 +1776,7 @@ class _RideScreenState extends State<RideScreen>{
         activeLeg(),
         customerTrip(),
       ]);
-      if(mounted){
+      if(mounted&&request==_etaRequest){
         setState((){
           etaInfo=results[0];
           tripEtaInfo=results[1];
@@ -1783,7 +1785,7 @@ class _RideScreenState extends State<RideScreen>{
     }catch(_){
       // Route provider failures must not turn into a persistent generic
       // course error. GPS sync and course data remain usable independently.
-      if(mounted){
+      if(mounted&&request==_etaRequest){
         setState((){
           etaInfo=null;
           tripEtaInfo=null;
