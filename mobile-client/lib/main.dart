@@ -1993,6 +1993,15 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
           const SizedBox(height:12),
           Card(child:ListTile(title:Text(t('Statut')),trailing:VeyraStatusBadge(status:status))),
+          Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(t('Détails du trajet'),style:const TextStyle(fontWeight:FontWeight.bold)),
+            const SizedBox(height:8),
+            if(x['category_name']!=null)Text(t('Catégorie')+' : '+x['category_name'].toString()),
+            Text(t('Passagers')+' : '+(x['passenger_count']??1).toString()),
+            Text(t('Bagages')+' : '+(x['baggage_count']??0).toString()),
+            Text(t('Paiement')+' : '+VeyraStatusLabels.paymentMethod(x['payment_method']?.toString())),
+            if(x['customer_notes']!=null&&x['customer_notes'].toString().trim().isNotEmpty)...[const SizedBox(height:6),Text(t('Notes')+' : '+x['customer_notes'].toString())],
+          ]))),
           if({'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status))
             FilledButton.icon(
               onPressed:()=>context.push('/offers/'+widget.bookingId),
