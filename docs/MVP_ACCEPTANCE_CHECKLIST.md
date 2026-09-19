@@ -13,7 +13,7 @@
 - [x] Routing provider abstrait
 - [x] Demandes chauffeur avec tris sans proximité
 - [x] Offre privée chauffeur
-- [x] Aucune visibilité chauffeur sur les offres concurrentes
+- [x] Visibilité BEST_VISIBLE : meilleur prix concurrent actif affiché comme benchmark, sans imposer le prix du chauffeur
 - [x] Client/Partenaire voit toutes les offres actives
 - [x] Sélection atomique d'une offre
 - [x] Snapshot financier immuable
