@@ -4,8 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/material.dart' as material;
-import 'package:flutter/material.dart' hide Padding, SizedBox, FutureBuilder;
+import 'package:flutter/material.dart';
 import 'file_picker_bridge.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -150,9 +149,9 @@ final router=GoRouter(
     backgroundColor:const Color(0xFFF2F6FB),
     body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
       const Icon(Icons.error_outline,size:48,color:Color(0xFFDC2626)),
-      const material.SizedBox(height:16),
+      const SizedBox(height:16),
       Text(t('Page introuvable'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
-      const material.SizedBox(height:16),
+      const SizedBox(height:16),
       FilledButton(onPressed:()=>c.go('/home'),child:Text(t("Retour à l'accueil"))),
     ])),
   ),
@@ -173,7 +172,7 @@ class VeyraPaginationBar extends StatelessWidget{
     this.onNext,
   });
 
-  @override Widget build(BuildContext context)=>material.Padding(
+  @override Widget build(BuildContext context)=>Padding(
     padding:const EdgeInsets.only(top:14,bottom:4),
     child:Row(children:[
       Expanded(child:OutlinedButton.icon(
@@ -181,7 +180,7 @@ class VeyraPaginationBar extends StatelessWidget{
         icon:const Icon(Icons.chevron_left),
         label:Text(t('Précédent')),
       )),
-      material.Padding(
+      Padding(
         padding:const EdgeInsets.symmetric(horizontal:14),
         child:Text(
           t('Page')+' '+(page+1).toString(),
@@ -464,55 +463,55 @@ class _LoginScreenState extends State<LoginScreen>{
         child:Column(children:[
           Align(alignment:Alignment.topRight,child:LanguageSwitch(style:TextButton.styleFrom(foregroundColor:Colors.white))),
           const Icon(Icons.location_on,color:Colors.white,size:40),
-          const material.SizedBox(height:8),
+          const SizedBox(height:8),
           const Text('Veyra',style:TextStyle(color:Colors.white,fontSize:32,fontWeight:FontWeight.bold)),
-          const material.SizedBox(height:4),
+          const SizedBox(height:4),
           Text(t('Espace Chauffeur'),style:const TextStyle(color:Colors.white70,fontSize:14)),
         ]),
       ),
       Expanded(child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
         Text(t('Connectez-vous à votre compte'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
-        if(startupChecking)material.Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Row(children:[
-          const material.SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)),
-          const material.SizedBox(width:12),
+        if(startupChecking)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Row(children:[
+          const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)),
+          const SizedBox(width:12),
           Text(t('Restauration de votre session…'),style:const TextStyle(color:Colors.black54)),
         ])),
         if(startupRetryAvailable)Card(
           color:const Color(0xFFFFF7ED),
           margin:const EdgeInsets.symmetric(vertical:12),
-          child:material.Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text(t('Connexion impossible'),style:const TextStyle(fontWeight:FontWeight.bold)),
-            const material.SizedBox(height:4),
+            const SizedBox(height:4),
             Text(t('Votre session est conservée.'),style:const TextStyle(color:Colors.black54)),
-            const material.SizedBox(height:12),
+            const SizedBox(height:12),
             OutlinedButton(onPressed:_restoreSession,child:Text(t('Réessayer'))),
           ])),
         ),
-        const material.SizedBox(height:20),
+        const SizedBox(height:20),
         TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
-        const material.SizedBox(height:12),
+        const SizedBox(height:12),
         TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),prefixIcon:const Icon(Icons.lock_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
-        if(offline)material.Padding(padding:const EdgeInsets.only(top:12),child:VeyraOfflineBanner(onRetry:submit)),
-        if(error!=null)material.Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-        const material.SizedBox(height:20),
+        if(offline)Padding(padding:const EdgeInsets.only(top:12),child:VeyraOfflineBanner(onRetry:submit)),
+        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+        const SizedBox(height:20),
         VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
-        const material.SizedBox(height:14),
+        const SizedBox(height:14),
         Row(children:[
           const Expanded(child:Divider()),
-          material.Padding(
+          Padding(
             padding:const EdgeInsets.symmetric(horizontal:12),
             child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
           ),
           const Expanded(child:Divider()),
         ]),
-        const material.SizedBox(height:14),
+        const SizedBox(height:14),
         OutlinedButton.icon(
           onPressed:loading?null:_googleLogin,
           icon:const Icon(Icons.g_mobiledata_rounded,size:28),
           label:Text(t('Continuer avec Google')),
           style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
         ),
-        const material.SizedBox(height:10),
+        const SizedBox(height:10),
         OutlinedButton.icon(
           onPressed:loading?null:_phoneLogin,
           icon:const Icon(Icons.phone_android_rounded),
@@ -556,12 +555,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
     appBar:AppBar(title:Text(t('Mot de passe oublié')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
       Text(t('Saisissez votre e-mail. Le message ne révèle pas si un compte existe.')),
-      const material.SizedBox(height:16),
+      const SizedBox(height:16),
       TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
-      const material.SizedBox(height:16),
+      const SizedBox(height:16),
       VeyraPrimaryButton(label:t('Envoyer les instructions'),loading:loading,onPressed:submit),
-      if(message!=null)material.Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(message!)),
-      const material.SizedBox(height:8),
+      if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(message!)),
+      const SizedBox(height:8),
       TextButton(
         onPressed:()=>context.push('/reset-password'),
         child:Text(t('J’ai déjà un code de réinitialisation')),
@@ -614,18 +613,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>{
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
       if(success)...[
         const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
-        const material.SizedBox(height:16),
+        const SizedBox(height:16),
         Text(t('Mot de passe mis à jour. Vous pouvez vous reconnecter.')),
-        const material.SizedBox(height:16),
+        const SizedBox(height:16),
         FilledButton(onPressed:()=>context.go('/login'),child:Text(t('Retour à la connexion'))),
       ]else...[
         Text(t('Collez le code reçu par e-mail et choisissez un nouveau mot de passe.')),
-        const material.SizedBox(height:16),
+        const SizedBox(height:16),
         TextField(controller:token,decoration:InputDecoration(labelText:t('Code reçu par e-mail'),prefixIcon:const Icon(Icons.vpn_key_outlined),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
-        const material.SizedBox(height:16),
+        const SizedBox(height:16),
         TextField(controller:newPassword,obscureText:true,decoration:InputDecoration(labelText:t('Nouveau mot de passe'),helperText:t('10 caractères minimum'),prefixIcon:const Icon(Icons.lock_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
-        if(error!=null)material.Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-        const material.SizedBox(height:16),
+        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+        const SizedBox(height:16),
         VeyraPrimaryButton(label:t('Réinitialiser'),loading:loading,onPressed:submit),
       ],
     ])),
@@ -723,7 +722,7 @@ class _KycScreenState extends State<KycScreen>{
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Dossier Chauffeur VTC'))),
-    body:material.FutureBuilder<Map<String,dynamic>>(
+    body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
@@ -736,16 +735,16 @@ class _KycScreenState extends State<KycScreen>{
             title:Text(approved?t('Dossier approuvé'):t('Vérification en cours')),
             subtitle:Text(t('Statut du dossier')+' : '+VeyraStatusLabels.kycStatus(status['kyc_status']?.toString())),
           )),
-          const material.SizedBox(height:16),
+          const SizedBox(height:16),
           const Text('Informations professionnelles',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           TextField(controller:legalName,decoration:InputDecoration(labelText:t('Raison sociale'))),
           TextField(controller:siren,decoration:const InputDecoration(labelText:'SIREN')),
           TextField(controller:siret,decoration:const InputDecoration(labelText:'SIRET')),
           TextField(controller:registrationNumber,decoration:InputDecoration(labelText:t('N° inscription registre VTC'))),
           TextField(controller:cardNumber,decoration:InputDecoration(labelText:t('N° carte professionnelle VTC'))),
-          const material.SizedBox(height:12),
+          const SizedBox(height:12),
           const Text('Véhicule',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-          material.FutureBuilder<List<dynamic>>(
+          FutureBuilder<List<dynamic>>(
             future:categories,
             builder:(context,cs){
               if(cs.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
@@ -769,9 +768,9 @@ class _KycScreenState extends State<KycScreen>{
           TextField(controller:year,keyboardType:TextInputType.number,decoration:InputDecoration(labelText:t('Année'))),
           TextField(controller:plate,decoration:InputDecoration(labelText:t('Immatriculation'))),
           TextField(controller:color,decoration:InputDecoration(labelText:t('Couleur'))),
-          const material.SizedBox(height:12),
+          const SizedBox(height:12),
           FilledButton(onPressed:saving?null:saveProfessionalData,child:Text(saving?t('Enregistrement…'):t('Enregistrer les informations'))),
-          const material.SizedBox(height:24),
+          const SizedBox(height:24),
           const Text('Documents obligatoires',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           for(final item in const [
             ('IDENTITY','Pièce d’identité'),
@@ -796,11 +795,11 @@ class _KycScreenState extends State<KycScreen>{
                 if(docStatus==null)Text(t('PDF, JPG ou PNG — 10 Mo max'),style:const TextStyle(fontSize:12)),
               ]),
               trailing:uploadingType==item.$1
-                ?const material.SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2))
+                ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2))
                 :IconButton(onPressed:()=>upload(item.$1),tooltip:t(rejected?'Remplacer':'Téléverser'),icon:Icon(rejected?Icons.refresh:Icons.upload_file)),
             ));
           }),
-          if(message!=null)material.Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
+          if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
           if(approved)FilledButton(onPressed:()=>context.go('/home'),child:Text(t('Accéder aux demandes'))),
           if(!approved)Text(
             t('Après envoi, l’équipe Veyra vérifie le dossier avant d’activer l’accès aux demandes.'),
@@ -882,22 +881,22 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             future=load();
           });}},
         ),
-        const material.SizedBox(height:10),
+        const SizedBox(height:10),
         ExpansionTile(
           tilePadding:EdgeInsets.zero,
           title:Row(children:[Expanded(child:Text(t('Filtres'))),if(pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null)const Icon(Icons.filter_alt,size:18)]),
           children:[
             TextField(controller:pickupFilter,decoration:InputDecoration(labelText:t('Lieu de départ contient'))),
-            const material.SizedBox(height:8),
+            const SizedBox(height:8),
             TextField(controller:destinationFilter,decoration:InputDecoration(labelText:t('Destination contient'))),
-            const material.SizedBox(height:8),
+            const SizedBox(height:8),
             DropdownButtonFormField<int?>(
               initialValue:minPassengers,
               decoration:InputDecoration(labelText:t('Minimum passagers')),
               items:[DropdownMenuItem<int?>(value:null,child:Text(t('Tous'))), ...List.generate(8,(i)=>DropdownMenuItem<int?>(value:i+1,child:Text('${i+1}+')))],
               onChanged:(v)=>setState(()=>minPassengers=v),
             ),
-            const material.SizedBox(height:10),
+            const SizedBox(height:10),
             Row(children:[
               Expanded(child:OutlinedButton(onPressed:(){
                 pickupFilter.clear();
@@ -908,7 +907,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
                   future=load();
                 });
               },child:Text(t('Réinitialiser')))),
-              const material.SizedBox(width:8),
+              const SizedBox(width:8),
               Expanded(child:FilledButton(onPressed:(){
                 setState((){
                   page=0;
@@ -918,11 +917,11 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             ]),
           ],
         ),
-        const material.SizedBox(height:16),
-        material.FutureBuilder<List<dynamic>>(
+        const SizedBox(height:16),
+        FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
-            if(s.connectionState!=ConnectionState.done)return const Center(child:material.Padding(padding:EdgeInsets.all(32),child:CircularProgressIndicator()));
+            if(s.connectionState!=ConnectionState.done)return const Center(child:Padding(padding:EdgeInsets.all(32),child:CircularProgressIndicator()));
             if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
               ?VeyraOfflineBanner(onRetry:reload)
               :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
@@ -951,19 +950,19 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               return Card(child:InkWell(
                 borderRadius:BorderRadius.circular(12),
                 onTap:()=>context.push('/request/'+id),
-                child:material.Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                   Row(crossAxisAlignment:CrossAxisAlignment.start,children:[Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w700))),const Icon(Icons.chevron_right)]),
-                  const material.SizedBox(height:8),
+                  const SizedBox(height:8),
                   Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                  const material.SizedBox(height:8),
+                  const SizedBox(height:8),
                   Wrap(spacing:8,runSpacing:6,children:[
                     if(category!=null&&category.isNotEmpty)Chip(label:Text(category)),
                     if(passengers!=null)Chip(avatar:const Icon(Icons.people_outline,size:16),label:Text('$passengers '+t('passager(s)'))),
                     if(baggage!=null)Chip(avatar:const Icon(Icons.luggage_outlined,size:16),label:Text('$baggage '+t('bagage(s)'))),
                   ]),
-                  const material.SizedBox(height:6),
+                  const SizedBox(height:6),
                   Text(t('Course')+' : '+distance(tripMeters)+' • '+t('Approche')+' : '+distance(approachMeters),style:const TextStyle(color:Colors.black54)),
-                  if(ownOffer!=null)material.Padding(padding:const EdgeInsets.only(top:6),child:Text(t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(ownOffer),style:const TextStyle(fontWeight:FontWeight.w700))),
+                  if(ownOffer!=null)Padding(padding:const EdgeInsets.only(top:6),child:Text(t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(ownOffer),style:const TextStyle(fontWeight:FontWeight.w700))),
                 ])),
               ));
             }).toList(),
@@ -1049,7 +1048,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
         });
         await refreshed;
       },
-      child:material.FutureBuilder<List<dynamic>>(
+      child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done){
@@ -1107,23 +1106,23 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                       context.push('/ride/'+bookingId);
                     }
                   },
-                  child:material.Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                     Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
                       Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w600))),
-                      const material.SizedBox(width:8),
+                      const SizedBox(width:8),
                       Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
                     ]),
-                    const material.SizedBox(height:6),
+                    const SizedBox(height:6),
                     Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54)),
-                    const material.SizedBox(height:6),
+                    const SizedBox(height:6),
                     Wrap(spacing:8,runSpacing:6,children:[
                       Chip(label:Text(VeyraStatusLabels.offerStatus(x['status']?.toString()))),
                       if(bookingStatus!=null&&bookingStatus.isNotEmpty) VeyraStatusBadge(status:bookingStatus),
                     ]),
-                    if(expires!=null)material.Padding(padding:const EdgeInsets.only(top:4),child:Text(t('Expiration')+' : '+VeyraDateFormatter.dateTime(expires),style:const TextStyle(fontSize:12,color:Colors.black54))),
-                    if(scope=='active')material.Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
+                    if(expires!=null)Padding(padding:const EdgeInsets.only(top:4),child:Text(t('Expiration')+' : '+VeyraDateFormatter.dateTime(expires),style:const TextStyle(fontSize:12,color:Colors.black54))),
+                    if(scope=='active')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
                       Expanded(child:OutlinedButton.icon(onPressed:bookingId==null?null:()=>context.push('/request/'+bookingId),icon:const Icon(Icons.edit_outlined),label:Text(t('Modifier')))),
-                      const material.SizedBox(width:8),
+                      const SizedBox(width:8),
                       Expanded(child:TextButton.icon(onPressed:offerId==null?null:withdraw,icon:const Icon(Icons.delete_outline),label:Text(t('Retirer')))),
                     ])),
                   ])),
@@ -1257,7 +1256,7 @@ class _RequestScreenState extends State<RequestScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Proposer un prix'))),
     body:ListView(padding:const EdgeInsets.all(20),children:[
-      material.FutureBuilder<Map<String,dynamic>>(
+      FutureBuilder<Map<String,dynamic>>(
         future:detail,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
@@ -1283,11 +1282,11 @@ class _RequestScreenState extends State<RequestScreen>{
           ]);
         },
       ),
-      material.FutureBuilder<Map<String,dynamic>>(
+      FutureBuilder<Map<String,dynamic>>(
         future:detail,
         builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const material.SizedBox.shrink();
-          if(s.hasError)return const material.SizedBox.shrink();
+          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
+          if(s.hasError)return const SizedBox.shrink();
           final x=s.data??{};
           final bestMinor=x['currentBestOtherOfferMinor'];
           final apiTripMeters=_number(_field(x,'trip_distance_meters','tripDistanceMeters'));
@@ -1317,15 +1316,15 @@ class _RequestScreenState extends State<RequestScreen>{
                 ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
                 :t('Prix le plus bas proposé par un autre chauffeur')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor)),
             )),
-            Card(child:material.Padding(
+            Card(child:Padding(
               padding:const EdgeInsets.all(16),
               child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                 Row(children:[
                   const Icon(Icons.analytics_outlined),
-                  const material.SizedBox(width:8),
+                  const SizedBox(width:8),
                   Text(t('Économie de votre course'),style:const TextStyle(fontWeight:FontWeight.bold)),
                 ]),
-                const material.SizedBox(height:10),
+                const SizedBox(height:10),
                 Text(tripMeters==null
                   ?t('Distance de la course indisponible')
                   :t('Course')+' : '+VeyraMoneyFormatter.distance(tripMeters)),
@@ -1338,7 +1337,7 @@ class _RequestScreenState extends State<RequestScreen>{
                 Text(netPerKm==null
                   ?t('Saisissez votre prix net pour calculer votre net par km.')
                   :t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
-                const material.SizedBox(height:6),
+                const SizedBox(height:6),
                 Text(
                   t('Ces données et le prix concurrent sont des repères. Vous choisissez librement le montant de votre offre.'),
                   style:const TextStyle(color:Colors.black54,fontSize:12),
@@ -1348,11 +1347,11 @@ class _RequestScreenState extends State<RequestScreen>{
           ]);
         },
       ),
-      material.FutureBuilder<Map<String,dynamic>>(
+      FutureBuilder<Map<String,dynamic>>(
         future:detail,
         builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const material.SizedBox.shrink();
-          if(s.hasError)return const material.SizedBox.shrink();
+          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
+          if(s.hasError)return const SizedBox.shrink();
           final x=s.data??{};
           // Gap réel trouvé : hasActiveOffer existait déjà côté backend
           // (DriverOpportunityController) mais n'était lu nulle part côté
@@ -1383,7 +1382,7 @@ class _RequestScreenState extends State<RequestScreen>{
                 subtitle:Text(t('Vous pouvez ajuster votre prix ci-dessous, ou la retrouver dans Mes offres.')),
                 trailing:TextButton(onPressed:()=>context.push('/driver/offers'),child:Text(t('Voir'))),
               )),
-              const material.SizedBox(height:16),
+              const SizedBox(height:16),
               TextField(
                 controller:amount,
                 keyboardType:const TextInputType.numberWithOptions(decimal:true),
@@ -1392,8 +1391,8 @@ class _RequestScreenState extends State<RequestScreen>{
                   helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
                 ),
               ),
-              if(error!=null)material.Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-              const material.SizedBox(height:20),
+              if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+              const SizedBox(height:20),
               FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Mettre à jour mon offre'))),
             ]);
           }
@@ -1406,8 +1405,8 @@ class _RequestScreenState extends State<RequestScreen>{
                 helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
               ),
             ),
-            if(error!=null)material.Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-            const material.SizedBox(height:20),
+            if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+            const SizedBox(height:20),
             FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Envoyer mon offre'))),
           ]);
         },
@@ -1460,7 +1459,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
         LayoutBuilder(builder:(context,constraints){
           final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
           return Wrap(spacing:10,runSpacing:10,children:[
-            material.SizedBox(width:w,child:DropdownButtonFormField<String>(
+            SizedBox(width:w,child:DropdownButtonFormField<String>(
                 key:ValueKey('booking-status-$status'),
                 initialValue:status,
                 isExpanded:true,
@@ -1486,7 +1485,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
                   });
                 },
               )),),
-            material.SizedBox(width:w,child:DropdownButtonFormField<String>(
+            SizedBox(width:w,child:DropdownButtonFormField<String>(
                 key:ValueKey('booking-sort-$sort'),
                 initialValue:sort,
                 isExpanded:true,
@@ -1506,16 +1505,16 @@ class _AgendaScreenState extends State<AgendaScreen>{
               )),),
           ]);
         }),
-        if(status!='ALL'||sort!='asc')material.Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
-          const Icon(Icons.filter_alt_outlined,size:18),const material.SizedBox(width:6),Expanded(child:Text(t('Filtres actifs'))),
+        if(status!='ALL'||sort!='asc')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
+          const Icon(Icons.filter_alt_outlined,size:18),const SizedBox(width:6),Expanded(child:Text(t('Filtres actifs'))),
           TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser'))),
         ])),
-        const material.SizedBox(height:14),
-        material.FutureBuilder<List<dynamic>>(
+        const SizedBox(height:14),
+        FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
             if(s.connectionState!=ConnectionState.done){
-              return const material.Padding(padding:EdgeInsets.all(32),child:Center(child:CircularProgressIndicator()));
+              return const Padding(padding:EdgeInsets.all(32),child:Center(child:CircularProgressIndicator()));
             }
             if(s.hasError){
               return VeyraErrorMessages.isOffline(s.error!)
@@ -1524,7 +1523,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
             }
             final items=s.data??[];
             if(items.isEmpty){
-              return Center(child:material.Padding(
+              return Center(child:Padding(
                 padding:const EdgeInsets.all(32),
                 child:Column(mainAxisSize:MainAxisSize.min,children:[Text(status=='ALL'?t('Aucune course pour le moment.'):t('Aucune course ne correspond aux filtres.')),if(status!='ALL'||sort!='asc')TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser les filtres')))]),
               ));
@@ -1532,7 +1531,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
             return Column(children:[
               ...items.map((raw){
                 final x=Map<String,dynamic>.from(raw as Map);
-                return Card(child:material.Padding(
+                return Card(child:Padding(
                   padding:const EdgeInsets.all(12),
                   child:InkWell(
                     onTap:()=>context.push('/ride/'+x['id'].toString()),
@@ -1541,14 +1540,14 @@ class _AgendaScreenState extends State<AgendaScreen>{
                         (x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
                         style:const TextStyle(fontWeight:FontWeight.w600),
                       ),
-                      const material.SizedBox(height:4),
+                      const SizedBox(height:4),
                       Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
-                      const material.SizedBox(height:8),
+                      const SizedBox(height:8),
                       Row(children:[
                         VeyraStatusBadge(status:(x['status']??'').toString()),
                         const Spacer(),
                         Flexible(child:Text((x['status']??'')=='CONFIRMED'?t('Démarrer l’approche'):(x['status']??'')=='DRIVER_EN_ROUTE'?t('Continuer vers le client'):(x['status']??'')=='DRIVER_ARRIVED'?t('Démarrer la course'):(x['status']??'')=='IN_PROGRESS'?t('Continuer la course'):t('Voir le détail'),textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w600,fontSize:12))),
-                        const material.SizedBox(width:4),
+                        const SizedBox(width:4),
                         const Icon(Icons.chevron_right,color:Colors.black38),
                       ]),
                     ]),
@@ -1856,7 +1855,7 @@ class _RideScreenState extends State<RideScreen>{
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Course'))),
-    body:material.FutureBuilder<Map<String,dynamic>>(
+    body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
@@ -1910,7 +1909,7 @@ class _RideScreenState extends State<RideScreen>{
         return ListView(
           padding:EdgeInsets.zero,
           children:[
-            material.SizedBox(
+            SizedBox(
               height:mapHeight,
               child:VeyraMap(
                 pickup:pickup,
@@ -1922,7 +1921,7 @@ class _RideScreenState extends State<RideScreen>{
                 userAgentPackageName:'com.veyra.driver',
               ),
             ),
-            material.Padding(
+            Padding(
               padding:const EdgeInsets.fromLTRB(20,18,20,28),
               child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
                 Row(children:[
@@ -1932,14 +1931,14 @@ class _RideScreenState extends State<RideScreen>{
                   )),
                   VeyraStatusBadge(status:status),
                 ]),
-                const material.SizedBox(height:10),
+                const SizedBox(height:10),
                 Text(
                   (x['pickup_address']??'Départ').toString()+
                     ' → '+
                     (x['dropoff_address']??'Destination').toString(),
                   style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600),
                 ),
-                const material.SizedBox(height:12),
+                const SizedBox(height:12),
                 Row(children:[
                   Expanded(child:_DriverEtaCard(
                     icon:Icons.person_pin_circle_rounded,
@@ -1952,7 +1951,7 @@ class _RideScreenState extends State<RideScreen>{
                       :null,
                     accent:const Color(0xFF2563EB),
                   )),
-                  const material.SizedBox(width:10),
+                  const SizedBox(width:10),
                   Expanded(child:_DriverEtaCard(
                     icon:Icons.flag_rounded,
                     label:t('Client → destination'),
@@ -1966,7 +1965,7 @@ class _RideScreenState extends State<RideScreen>{
                   )),
                 ]),
                 if(x['customer_name']!=null)
-                  material.Padding(
+                  Padding(
                     padding:const EdgeInsets.only(top:8),
                     child:Text(t('Client : ')+x['customer_name'].toString()),
                   ),
@@ -1989,7 +1988,7 @@ class _RideScreenState extends State<RideScreen>{
                   title:Text(t('Facturation partenaire • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
                   subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
                 )),
-                if(error!=null)material.Padding(
+                if(error!=null)Padding(
                   padding:const EdgeInsets.symmetric(vertical:10),
                   child:VeyraErrorView(
                     customMessage:error!,
@@ -2025,12 +2024,12 @@ class _RideScreenState extends State<RideScreen>{
                     label:Text(t('Je suis arrivé')),
                   ),
                 if(status=='DRIVER_ARRIVED')...[
-                  const material.SizedBox(height:8),
+                  const SizedBox(height:8),
                   Text(
                     t('Code PIN du client'),
                     style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16),
                   ),
-                  const material.SizedBox(height:8),
+                  const SizedBox(height:8),
                   TextField(
                     controller:pin,
                     maxLength:4,
@@ -2076,17 +2075,17 @@ class _RideScreenState extends State<RideScreen>{
                     child:Text(t('Terminer la course')),
                   ),
                 if({'COMPLETED','CLOSED'}.contains(status))
-                  Card(child:material.Padding(
+                  Card(child:Padding(
                     padding:const EdgeInsets.all(16),
                     child:ratingSubmitted
                       ?Row(children:[
                           const Icon(Icons.check_circle,color:Colors.green),
-                          const material.SizedBox(width:8),
+                          const SizedBox(width:8),
                           Text(t('Merci pour votre avis !')),
                         ])
                       :Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                           Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
-                          const material.SizedBox(height:8),
+                          const SizedBox(height:8),
                           Row(children:[
                             for(int i=1;i<=5;i++)
                               IconButton(
@@ -2103,7 +2102,7 @@ class _RideScreenState extends State<RideScreen>{
                           ),
                         ]),
                   )),
-                const material.SizedBox(height:12),
+                const SizedBox(height:12),
                 if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status)&&pickupLat!=null&&pickupLng!=null)
                   OutlinedButton.icon(
                     onPressed:()=>launchUrl(
@@ -2130,7 +2129,7 @@ class _RideScreenState extends State<RideScreen>{
                     icon:const Icon(Icons.phone_outlined),
                     label:Text(t('Appeler')),
                   )),
-                  const material.SizedBox(width:12),
+                  const SizedBox(width:12),
                   Expanded(child:OutlinedButton.icon(
                     onPressed:()=>context.push('/chat/'+widget.bookingId),
                     icon:const Icon(Icons.chat_bubble_outline),
@@ -2173,7 +2172,7 @@ class _WalletScreenState extends State<WalletScreen>{
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Portefeuille'))),
-    body:material.FutureBuilder<Map<String,dynamic>>(
+    body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
@@ -2192,14 +2191,14 @@ class _WalletScreenState extends State<WalletScreen>{
               ' • '+t('blocage CASH')+' ${VeyraMoneyFormatter.fromMinor(x['cashBlockedThresholdMinor'])}',
             ),
           )),
-          const material.SizedBox(height:20),
+          const SizedBox(height:20),
           Text(t('Transactions'),style:const TextStyle(fontSize:16,fontWeight:FontWeight.w600)),
-          const material.SizedBox(height:8),
-          material.FutureBuilder<List<dynamic>>(
+          const SizedBox(height:8),
+          FutureBuilder<List<dynamic>>(
             future:transactionsFuture,
             builder:(context,ts){
               if(ts.connectionState!=ConnectionState.done){
-                return const material.Padding(padding:EdgeInsets.all(16),child:Center(child:CircularProgressIndicator()));
+                return const Padding(padding:EdgeInsets.all(16),child:Center(child:CircularProgressIndicator()));
               }
               if(ts.hasError){
                 return Card(child:ListTile(
@@ -2240,7 +2239,7 @@ class _WalletScreenState extends State<WalletScreen>{
                     leading:Icon(isPositive?Icons.add_circle_outline:Icons.remove_circle_outline,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
                     title:Text(VeyraStatusLabels.ledgerEvent(eventType)),
                     subtitle:Text(VeyraDateFormatter.dateTime(tx['created_at'])),
-                    trailing:Row(mainAxisSize:MainAxisSize.min,children:[Text((isPositive?'+ ':'- ')+amount,style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626))),if(bookingId!=null)...[const material.SizedBox(width:4),const Icon(Icons.chevron_right,size:18)]]),
+                    trailing:Row(mainAxisSize:MainAxisSize.min,children:[Text((isPositive?'+ ':'- ')+amount,style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626))),if(bookingId!=null)...[const SizedBox(width:4),const Icon(Icons.chevron_right,size:18)]]),
                     onTap:bookingId==null?null:()=>context.push('/ride/'+bookingId),
                   ));
                 }),
@@ -2303,9 +2302,9 @@ class _AccountScreenState extends State<AccountScreen>{
         title:Text(t('Modifier mes informations')),
         content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
           TextField(controller:first,decoration:InputDecoration(labelText:t('Prénom'))),
-          const material.SizedBox(height:10),
+          const SizedBox(height:10),
           TextField(controller:last,decoration:InputDecoration(labelText:t('Nom'))),
-          const material.SizedBox(height:10),
+          const SizedBox(height:10),
           TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
         ])),
         actions:[
@@ -2331,7 +2330,7 @@ class _AccountScreenState extends State<AccountScreen>{
       backgroundColor:const Color(0xFFF2F6FB),elevation:0,
       title:Text(t('Mon compte'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
     ),
-    body:material.FutureBuilder<Map<String,dynamic>>(
+    body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
@@ -2357,9 +2356,9 @@ class _AccountScreenState extends State<AccountScreen>{
               onPressed:()=>editProfile(me),
             ),
           )),
-          const material.SizedBox(height:16),
-          const material.Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
-          const material.SizedBox(height:24),
+          const SizedBox(height:16),
+          const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
+          const SizedBox(height:24),
           VeyraSecondaryButton(
             label:t('Se déconnecter'),
             icon:Icons.logout,
@@ -2435,16 +2434,16 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
     appBar:AppBar(title:Text(t('Créer un compte Chauffeur'))),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
       TextField(controller:firstName,decoration:InputDecoration(labelText:t('Prénom'))),
-      const material.SizedBox(height:12),
+      const SizedBox(height:12),
       TextField(controller:lastName,decoration:InputDecoration(labelText:t('Nom'))),
-      const material.SizedBox(height:12),
+      const SizedBox(height:12),
       TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
-      const material.SizedBox(height:12),
+      const SizedBox(height:12),
       TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
-      const material.SizedBox(height:12),
+      const SizedBox(height:12),
       TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),helperText:'10 caractères minimum')),
-      if(error!=null)material.Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-      const material.SizedBox(height:16),
+      if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+      const SizedBox(height:16),
       FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Continuer vers mon dossier VTC'))),
     ])),
   );
@@ -2475,14 +2474,14 @@ class _DriverEtaCard extends StatelessWidget{
     ),
     child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       Icon(icon,color:accent,size:20),
-      const material.SizedBox(height:8),
+      const SizedBox(height:8),
       Text(label,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(
         color:Color(0xFF6B7280),fontSize:11,fontWeight:FontWeight.w600,height:1.15,
       )),
-      const material.SizedBox(height:4),
+      const SizedBox(height:4),
       Text(value,style:TextStyle(color:accent,fontSize:18,fontWeight:FontWeight.w900)),
       if(detail!=null)...[
-        const material.SizedBox(height:2),
+        const SizedBox(height:2),
         Text(detail!,style:const TextStyle(color:Color(0xFF6B7280),fontSize:11)),
       ],
     ]),
@@ -2643,7 +2642,7 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
                     child:Column(crossAxisAlignment:CrossAxisAlignment.end,mainAxisSize:MainAxisSize.min,children:[
                       Text((m['body']??'').toString(),style:TextStyle(color:isMine?Colors.white:const Color(0xFF1F2937))),
                       if(time!=null)...[
-                        const material.SizedBox(height:4),
+                        const SizedBox(height:4),
                         Text(time,style:TextStyle(fontSize:11,color:isMine?Colors.white70:const Color(0xFF9CA3AF))),
                       ],
                     ]),
@@ -2652,7 +2651,7 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
               },
             ),
         ),
-        SafeArea(child:material.Padding(
+        SafeArea(child:Padding(
           padding:const EdgeInsets.all(12),
           child:Row(children:[
             Expanded(child:TextField(
@@ -2669,9 +2668,9 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
               ),
               onSubmitted:(_)=>sending?null:send(),
             )),
-            const material.SizedBox(width:8),
+            const SizedBox(width:8),
             CircleAvatar(radius:22,backgroundColor:scheme.primary,child:sending
-              ?const material.SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
+              ?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
               :IconButton(onPressed:send,tooltip:t('Envoyer'),icon:const Icon(Icons.send,color:Colors.white,size:20)),
             ),
           ]),
@@ -2697,15 +2696,15 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
     appBar:AppBar(title:Text(t('Notifications'))),
     body:RefreshIndicator(
       onRefresh:()async{reload();await future;},
-      child:material.FutureBuilder<List<dynamic>>(
+      child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done){
-            return ListView(children:const [material.SizedBox(height:220),Center(child:CircularProgressIndicator())]);
+            return ListView(children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
           }
           if(s.hasError){
             return ListView(children:[
-              const material.SizedBox(height:160),
+              const SizedBox(height:160),
               const Icon(Icons.cloud_off,size:48),
               Center(child:Text(t('Notifications indisponibles.'))),
               Center(child:TextButton(onPressed:reload,child:Text(t('Réessayer')))),
@@ -2714,7 +2713,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
           final items=s.data??[];
           if(items.isEmpty){
             return ListView(children:[
-              material.SizedBox(height:160),
+              SizedBox(height:160),
               Icon(Icons.notifications_none,size:56),
               Center(child:Text(t('Aucune notification pour le moment.'))),
             ]);
@@ -2722,7 +2721,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
           return ListView.separated(
             padding:const EdgeInsets.all(16),
             itemCount:items.length+1,
-            separatorBuilder:(_,__)=>const material.SizedBox(height:8),
+            separatorBuilder:(_,__)=>const SizedBox(height:8),
             itemBuilder:(context,index){
               if(index==items.length){
                 return VeyraPaginationBar(
