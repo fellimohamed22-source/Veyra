@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart' as picker;
 import 'file_picker_bridge.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -701,8 +702,8 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   Future<void> upload(String type)async{
-    final result=await FilePicker.platform.pickFiles(
-      type:FileType.custom,
+    final result=await picker.FilePicker.platform.pickFiles(
+      type:picker.FileType.custom,
       allowedExtensions:['pdf','jpg','jpeg','png'],
     );
     if(result==null||result.files.single.path==null)return;
