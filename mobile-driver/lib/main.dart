@@ -1040,7 +1040,14 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
     required int page,
   }){
     return RefreshIndicator(
-      onRefresh:()async{setState(_load);await future;},
+      onRefresh:()async{
+        late Future<List<dynamic>> refreshed;
+        setState((){
+          _load();
+          refreshed=scope=='active'?active:scope=='won'?won:closed;
+        });
+        await refreshed;
+      },
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
