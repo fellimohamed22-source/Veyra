@@ -340,6 +340,12 @@ class _LoginScreenState extends State<LoginScreen>{
     WidgetsBinding.instance.addPostFrameCallback((_)=>_restoreSession());
   }
 
+  @override void dispose(){
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
   Future<void> _restoreSession() async {
     final valid=await api.validateStoredSession();
     if(!mounted)return;
@@ -2929,6 +2935,11 @@ class _RegisterScreenState extends State<RegisterScreen>{
   String? error;
   bool offline=false;
 
+  @override void dispose(){
+    for(final controller in [firstName,lastName,phone,email,password]){controller.dispose();}
+    super.dispose();
+  }
+
   Future<void> submit()async{
     if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
       setState((){error=t('Prénom, e-mail et mot de passe de 10 caractères minimum requis.');offline=false;});
@@ -2991,6 +3002,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
   bool loading=false;
   String? message;
 
+  @override void dispose(){
+    email.dispose();
+    super.dispose();
+  }
+
   Future<void> submit()async{
     setState((){loading=true;message=null;});
     try{
@@ -3043,6 +3059,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>{
   bool loading=false;
   bool success=false;
   String? error;
+
+  @override void dispose(){
+    token.dispose();
+    newPassword.dispose();
+    super.dispose();
+  }
 
   Future<void> submit()async{
     if(token.text.trim().isEmpty){

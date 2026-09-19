@@ -229,6 +229,12 @@ class _LoginScreenState extends State<LoginScreen>{
     WidgetsBinding.instance.addPostFrameCallback((_)=>_restoreSession());
   }
 
+  @override void dispose(){
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
   Future<void> _restoreSession()async{
     String? accessToken;
     String? refreshToken;
@@ -538,6 +544,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
   bool loading=false;
   String? message;
 
+  @override void dispose(){
+    email.dispose();
+    super.dispose();
+  }
+
   Future<void> submit()async{
     setState((){loading=true;message=null;});
     try{
@@ -579,6 +590,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>{
   bool loading=false;
   bool success=false;
   String? error;
+
+  @override void dispose(){
+    token.dispose();
+    newPassword.dispose();
+    super.dispose();
+  }
 
   Future<void> submit()async{
     if(token.text.trim().isEmpty){
@@ -659,6 +676,13 @@ class _KycScreenState extends State<KycScreen>{
     super.initState();
     future=api.onboardingStatus();
     categories=api.vehicleCategories();
+  }
+
+  @override void dispose(){
+    for(final controller in [legalName,siren,siret,registrationNumber,cardNumber,brand,model,year,plate,color]){
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> saveProfessionalData()async{
