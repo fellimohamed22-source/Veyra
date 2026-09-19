@@ -41,6 +41,9 @@ class VeyraErrorMessages {
     'DRIVER_PROFILE_REQUIRED': "Complétez votre dossier chauffeur avant de continuer.",
     'PARTNER_SCOPE_FORBIDDEN': "Vous n'avez pas accès à ce compte partenaire.",
     'PARTNER_INVOICE_NOT_ELIGIBLE': "La facturation partenaire n'est pas disponible pour ce compte.",
+    'PARTNER_REQUIRED': "Sélectionnez un partenaire avant de choisir la facturation partenaire.",
+    'FORBIDDEN': "Vous n’avez pas l’autorisation d’effectuer cette action.",
+    'NOT_FOUND': "Cette réservation ou ressource n’est plus disponible.",
     // LOT 3 additions -- vérifiés dans AuthController.login().
     'INVALID_CREDENTIALS': "Email ou mot de passe incorrect.",
     'ACCOUNT_LOCKED': "Compte temporairement verrouillé suite à plusieurs échecs. Réessayez plus tard.",
@@ -71,6 +74,9 @@ class VeyraErrorMessages {
     'DRIVER_PROFILE_REQUIRED': 'Complete your driver profile before continuing.',
     'PARTNER_SCOPE_FORBIDDEN': "You don't have access to this partner account.",
     'PARTNER_INVOICE_NOT_ELIGIBLE': 'Partner invoicing is not available for this account.',
+    'PARTNER_REQUIRED': 'Select a partner before choosing partner invoicing.',
+    'FORBIDDEN': 'You are not allowed to perform this action.',
+    'NOT_FOUND': 'This booking or resource is no longer available.',
     // LOT 3 additions.
     'INVALID_CREDENTIALS': 'Incorrect email or password.',
     'ACCOUNT_LOCKED': 'Account temporarily locked after several failed attempts. Try again later.',
