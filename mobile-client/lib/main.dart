@@ -920,11 +920,7 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
                 onTap:(){
                   final id=x['id']?.toString();
                   if(id==null)return;
-                  if(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'){
-                    context.push('/offers/'+id);
-                  }else{
-                    context.push('/booking/'+id);
-                  }
+                  context.push('/booking/'+id);
                 },
               ),
             );
