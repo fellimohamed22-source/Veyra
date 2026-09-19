@@ -55,15 +55,10 @@ class RefreshBus {
 Future<void> configureDriverPush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+    if(!driverPushHandlersConfigured){driverPushHandlersConfigured=true;FirebaseMessaging.onMessageOpenedApp.listen(openDriverPush);FirebaseMessaging.instance.onTokenRefresh.listen((token)async{try{await api.registerDevice(token,platform:'android');}catch(e){debugPrint('DRIVER_PUSH_TOKEN_REFRESH_FAILED: $e');}});final initial=await FirebaseMessaging.instance.getInitialMessage();if(initial!=null)WidgetsBinding.instance.addPostFrameCallback((_){openDriverPush(initial);});}
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
-    if(token!=null)await api.registerDevice(token);
-    if(!driverPushHandlersConfigured){
-      driverPushHandlersConfigured=true;
-      FirebaseMessaging.onMessageOpenedApp.listen(openDriverPush);
-      final initial=await FirebaseMessaging.instance.getInitialMessage();
-      if(initial!=null)openDriverPush(initial);
-    }
+    if(token!=null)await api.registerDevice(token,platform:'android');
   }catch(e){
     debugPrint('PUSH_CONFIGURE_FAILED: $e');
   }
@@ -1208,36 +1203,19 @@ class _RequestScreenState extends State<RequestScreen>{
   String? error;
   bool isAdjusting=false;
   bool _prefilled=false;
-  Position? _currentPosition;
-  String? _locationEconomicsMessage;
+  Map<String,dynamic>? _tripEconomics;
+  bool _tripEconomicsLoading=false;
 
   @override void initState(){
     super.initState();
     amount.addListener(_refreshEconomics);
     detail=api.opportunityDetail(widget.bookingId);
-    _loadEconomicsPosition();
+    detail.then(_loadTripEconomics).catchError((_){ });
   }
 
   void _refreshEconomics(){if(mounted)setState((){});}
 
-  Future<void> _loadEconomicsPosition() async {
-    try{
-      if(!await Geolocator.isLocationServiceEnabled()){
-        if(mounted)setState(()=>_locationEconomicsMessage=t('Activez la localisation pour calculer votre approche.'));
-        return;
-      }
-      var permission=await Geolocator.checkPermission();
-      if(permission==LocationPermission.denied)permission=await Geolocator.requestPermission();
-      if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
-        if(mounted)setState(()=>_locationEconomicsMessage=t('Autorisez la localisation pour calculer votre approche.'));
-        return;
-      }
-      final p=await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:10)));
-      if(mounted)setState((){_currentPosition=p;_locationEconomicsMessage=null;});
-    }catch(_){
-      if(mounted)setState(()=>_locationEconomicsMessage=t('Position actuelle indisponible. Touchez Actualiser pour réessayer.'));
-    }
-  }
+  Future<void> _loadTripEconomics(Map<String,dynamic>x)async{final a=_number(_field(x,'pickup_lat','pickupLat')),b=_number(_field(x,'pickup_lng','pickupLng')),c=_number(_field(x,'dropoff_lat','dropoffLat')),e=_number(_field(x,'dropoff_lng','dropoffLng'));if(a==null||b==null||c==null||e==null)return;if(mounted)setState(()=>_tripEconomicsLoading=true);try{final r=await api.routeEstimate(fromLat:a,fromLng:b,toLat:c,toLng:e);if(mounted)setState(()=>_tripEconomics=r);}catch(_){}finally{if(mounted)setState(()=>_tripEconomicsLoading=false);}}
 
   dynamic _field(Map<String,dynamic> x,String snake,String camel){
     if(x.containsKey(snake))return x[snake];
@@ -1343,12 +1321,9 @@ class _RequestScreenState extends State<RequestScreen>{
             pickupLat!=null&&pickupLng!=null&&dropoffLat!=null&&dropoffLng!=null
               ?const Distance().as(LengthUnit.Meter,LatLng(pickupLat,pickupLng),LatLng(dropoffLat,dropoffLng))
               :null);
-          final backendApproachMeters=_number(_field(x,'approach_distance_meters','approachDistanceMeters'));
-          final localApproachMeters=pickupLat!=null&&pickupLng!=null&&_currentPosition!=null
-            ?const Distance().as(LengthUnit.Meter,LatLng(_currentPosition!.latitude,_currentPosition!.longitude),LatLng(pickupLat,pickupLng))
-            :null;
-          final approachMeters=backendApproachMeters??localApproachMeters;
-          final totalMeters=(tripMeters??0)+(approachMeters??0);
+          final courseMeters=_number(_tripEconomics?['distanceMeters'])??tripMeters;
+          final routeSeconds=_number(_tripEconomics?['durationSeconds']);
+          final totalMeters=courseMeters??0;
           final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
           final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
           final netEuros=typedEuros??(ownMinor==null?null:ownMinor.toDouble()/100);
@@ -1370,15 +1345,10 @@ class _RequestScreenState extends State<RequestScreen>{
                   Text(t('Économie de votre course'),style:const TextStyle(fontWeight:FontWeight.bold)),
                 ]),
                 const SizedBox(height:10),
-                Text(tripMeters==null
-                  ?t('Distance de la course indisponible')
-                  :t('Course')+' : '+VeyraMoneyFormatter.distance(tripMeters)),
-                Text(approachMeters==null
-                  ?(_locationEconomicsMessage??t('Approche : position chauffeur récente indisponible'))
-                  :t('Approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
-                if(approachMeters==null)Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:_loadEconomicsPosition,icon:const Icon(Icons.my_location),label:Text(t('Actualiser ma position')))),
-                if(tripMeters!=null)
-                  Text(t('Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
+                if(_tripEconomicsLoading)const LinearProgressIndicator(),
+                Text(courseMeters==null?t('Distance de la course indisponible'):t('Distance départ → destination')+' : '+VeyraMoneyFormatter.distance(courseMeters)),
+                if(routeSeconds!=null)Text(t('Durée routière estimée')+' : '+VeyraMoneyFormatter.duration(routeSeconds)),
+                Text(t('Calcul basé sur les adresses de départ et d’arrivée, sans utiliser votre position actuelle.'),style:const TextStyle(color:Colors.black54,fontSize:12)),
                 Text(netPerKm==null
                   ?t('Saisissez votre prix net pour calculer votre net par km.')
                   :t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
@@ -2318,104 +2288,7 @@ class _WalletScreenState extends State<WalletScreen>{
 
 /// Écran Compte minimal côté chauffeur : identité, statut KYC, langue,
 /// déconnexion. Miroir de AccountScreen côté client.
-class AccountScreen extends StatefulWidget{
-  const AccountScreen({super.key});
-  @override State<AccountScreen> createState()=>_AccountScreenState();
-}
-class _AccountScreenState extends State<AccountScreen>{
-  late Future<Map<String,dynamic>> future;
-  bool loggingOut=false;
-
-  @override void initState(){super.initState();future=api.me();}
-
-  Future<void> logout()async{
-    setState(()=>loggingOut=true);
-    try{
-      await api.logout();
-      try{await FirebaseAuth.instance.signOut();}catch(_){}
-      try{await GoogleSignIn().signOut();}catch(_){}
-    }finally{
-      if(mounted)context.go('/login');
-    }
-  }
-
-  Future<void> editProfile(Map<String,dynamic> me) async {
-    final first=TextEditingController(text:(me['first_name']??'').toString());
-    final last=TextEditingController(text:(me['last_name']??'').toString());
-    final phone=TextEditingController(text:(me['phone']??'').toString());
-    final save=await showDialog<bool>(
-      context:context,
-      builder:(dialogContext)=>AlertDialog(
-        title:Text(t('Modifier mes informations')),
-        content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
-          TextField(controller:first,decoration:InputDecoration(labelText:t('Prénom'))),
-          const SizedBox(height:10),
-          TextField(controller:last,decoration:InputDecoration(labelText:t('Nom'))),
-          const SizedBox(height:10),
-          TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
-        ])),
-        actions:[
-          TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Annuler'))),
-          FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Enregistrer'))),
-        ],
-      ),
-    );
-    if(save==true&&first.text.trim().isNotEmpty){
-      final updated=await api.updateProfile(
-        firstName:first.text,
-        lastName:last.text,
-        phone:phone.text,
-      );
-      if(mounted)setState(()=>future=Future.value(updated));
-    }
-    first.dispose();last.dispose();phone.dispose();
-  }
-
-  @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(
-      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
-      title:Text(t('Mon compte'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
-    ),
-    body:FutureBuilder<Map<String,dynamic>>(
-      future:future,
-      builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
-        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.me();}))
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.me();}));
-        final me=s.data??{};
-        final firstName=(me['first_name']??'').toString();
-        final lastName=(me['last_name']??'').toString();
-        final email=(me['email']??'').toString();
-        return ListView(padding:const EdgeInsets.all(20),children:[
-          Card(child:ListTile(
-            leading:const CircleAvatar(child:Icon(Icons.person)),
-            title:Text('$firstName $lastName'.trim().isEmpty?t('Chauffeur Veyra'):'$firstName $lastName'.trim()),
-            subtitle:Text([
-              email,
-              if((me['phone']??'').toString().isNotEmpty)(me['phone']??'').toString(),
-            ].join('\n')),
-            isThreeLine:(me['phone']??'').toString().isNotEmpty,
-            trailing:IconButton(
-              tooltip:t('Modifier'),
-              icon:const Icon(Icons.edit_outlined),
-              onPressed:()=>editProfile(me),
-            ),
-          )),
-          const SizedBox(height:16),
-          const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
-          const SizedBox(height:24),
-          VeyraSecondaryButton(
-            label:t('Se déconnecter'),
-            icon:Icons.logout,
-            onPressed:loggingOut?null:logout,
-          ),
-        ]);
-      },
-    ),
-  );
-}
+class AccountScreen extends StatefulWidget{const AccountScreen({super.key});@override State<AccountScreen> createState()=>_AccountScreenState();}class _AccountScreenState extends State<AccountScreen>{late Future<Map<String,dynamic>> future;late Future<List<dynamic>> docs;Uint8List? avatar;bool busy=false;@override void initState(){super.initState();future=api.me();docs=api.documents();api.avatarBytes().then((v){if(mounted)setState(()=>avatar=v);});}Future<void> photo()async{final r=await FilePicker.platform.pickFiles(type:FileType.image),p=r?.files.single.path;if(p==null)return;setState(()=>busy=true);try{final m=await api.uploadAvatar(p),v=await api.avatarBytes();if(mounted)setState((){future=Future.value(m);avatar=v;});}finally{if(mounted)setState(()=>busy=false);}}Future<void> doc(String type)async{final r=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf','jpg','jpeg','png']),p=r?.files.single.path;if(p==null)return;setState(()=>busy=true);try{await api.uploadDocument(type,p);if(mounted)setState(()=>docs=api.documents());}finally{if(mounted)setState(()=>busy=false);}}Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState(()=>future=Future.value(u));}}Future<void> password()async{final o=TextEditingController(),n=TextEditingController();final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mon mot de passe')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:o,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe actuel'))),TextField(controller:n,obscureText:true,decoration:InputDecoration(labelText:t('Nouveau mot de passe')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&n.text.length>=10)try{await api.changePassword(o.text,n.text);await logout();}catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Mot de passe actuel incorrect.'))));}}Future<void> logout()async{await api.logout();try{await FirebaseAuth.instance.signOut();}catch(_){}if(mounted)context.go('/login');}@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Mon compte'))),body:FutureBuilder<Map<String,dynamic>>(future:future,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!));final m=s.data??{},name=((m['first_name']??'').toString()+' '+(m['last_name']??'').toString()).trim(),rating=double.tryParse((m['rating_average']??0).toString())??0,count=m['rating_count']??0;return ListView(padding:const EdgeInsets.all(20),children:[Center(child:Stack(children:[CircleAvatar(radius:48,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:42):null),Positioned(right:0,bottom:0,child:IconButton.filled(onPressed:busy?null:photo,icon:const Icon(Icons.camera_alt_outlined)))])),Center(child:Text(name.isEmpty?t('Chauffeur Veyra'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold))),Center(child:Text((m['email']??'').toString())),Center(child:Text((m['phone']??'').toString())),Center(child:Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.star,color:Colors.amber),Text(' '+rating.toStringAsFixed(1)+' ('+count.toString()+' '+t('avis')+')')])),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),FutureBuilder<List<dynamic>>(future:docs,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();final rows=s.data??[];return Column(children:rows.map((raw){final x=Map<String,dynamic>.from(raw as Map),type=(x['type']??'').toString();return Card(child:ListTile(leading:const Icon(Icons.description),title:Text(type),subtitle:Text((x['original_filename']??'').toString()+' • '+(x['status']??'').toString()),trailing:IconButton(icon:const Icon(Icons.upload_file),onPressed:busy?null:()=>doc(type))));}).toList());}),const LanguageSwitch(),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);})));}
 
 /// Coquille de navigation persistante chauffeur (bottom nav 4 onglets),
 /// conforme à la maquette D14 : Demandes / Planning / Revenus / Compte.
@@ -2454,8 +2327,8 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
   String? error;
 
   Future<void> submit()async{
-    if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
-      setState(()=>error=t('Prénom, e-mail et mot de passe de 10 caractères minimum requis.'));
+    if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
+      setState(()=>error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.'));
       return;
     }
     setState((){loading=true;error=null;});
@@ -2467,7 +2340,6 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
         lastName:lastName.text,
         phone:phone.text,
       );
-      await api.createProfile();
       await configureDriverPush();
       if(mounted)context.go('/kyc');
     }catch(_){
@@ -2792,13 +2664,8 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
               final data=x['data'] is Map?Map<String,dynamic>.from(x['data'] as Map):<String,dynamic>{};
               final bookingId=data['bookingId']?.toString();
               final template=(x['template_code']??'').toString();
-              return Card(child:ListTile(
-                leading:const Icon(Icons.notifications_active_outlined),
-                title:Text(VeyraStatusLabels.notificationTemplate(template)),
-                subtitle:Text(VeyraDateFormatter.dateTime(x['created_at'])),
-                trailing:bookingId==null?null:const Icon(Icons.chevron_right),
-                onTap:bookingId==null?null:()=>context.push(driverNotificationRoute(bookingId,template,data)),
-              ));
+              final pickup=(x['pickup_address']??'').toString(),dropoff=(x['dropoff_address']??'').toString(),scheduled=x['scheduled_at'];
+              return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.notifications_active_outlined)),title:Text(VeyraStatusLabels.notificationTemplate(template),style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[if(pickup.isNotEmpty&&dropoff.isNotEmpty)Text(pickup+' → '+dropoff,style:const TextStyle(fontWeight:FontWeight.w600)),if(scheduled!=null)Text(VeyraDateFormatter.dateTime(scheduled)),Text(t('Reçue le')+' '+VeyraDateFormatter.dateTime(x['created_at']))]),isThreeLine:true,trailing:bookingId==null?null:const Icon(Icons.chevron_right),onTap:bookingId==null?null:()=>router.go(driverNotificationRoute(bookingId,template,data))));
             },
           );
         },

@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_storage_key VARCHAR(512);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_content_type VARCHAR(120);

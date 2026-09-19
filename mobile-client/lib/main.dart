@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -63,15 +64,10 @@ class RefreshBus {
 Future<void> configurePush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+    if(!pushHandlersConfigured){pushHandlersConfigured=true;FirebaseMessaging.onMessageOpenedApp.listen(openPush);FirebaseMessaging.instance.onTokenRefresh.listen((token)async{try{await api.registerDevice(token,platform:'android');}catch(e){debugPrint('PUSH_TOKEN_REFRESH_FAILED: $e');}});final initial=await FirebaseMessaging.instance.getInitialMessage();if(initial!=null)WidgetsBinding.instance.addPostFrameCallback((_){openPush(initial);});}
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
-    if(token!=null)await api.registerDevice(token);
-    if(!pushHandlersConfigured){
-      pushHandlersConfigured=true;
-      FirebaseMessaging.onMessageOpenedApp.listen(openPush);
-      final initial=await FirebaseMessaging.instance.getInitialMessage();
-      if(initial!=null)openPush(initial);
-    }
+    if(token!=null)await api.registerDevice(token,platform:'android');
   }catch(e){
     // Real bug fixed here while investigating "push notifications don't
     // work": this used to be catch(_){}, silently discarding every
@@ -648,61 +644,7 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
 /// Écran Compte minimal : identité, langue, déconnexion. Aucune fiche du
 /// kit ne le détaille finement (composant implicite de navigation dans
 /// les maquettes C02/etc via la bottom nav), volontairement sobre.
-class AccountScreen extends StatefulWidget{
-  const AccountScreen({super.key});
-  @override State<AccountScreen> createState()=>_AccountScreenState();
-}
-class _AccountScreenState extends State<AccountScreen>{
-  late Future<Map<String,dynamic>> future;
-  bool loggingOut=false;
-
-  @override void initState(){super.initState();future=api.me();}
-
-  Future<void> logout()async{
-    setState(()=>loggingOut=true);
-    try{
-      await api.logout();
-    }finally{
-      if(mounted)context.go('/login');
-    }
-  }
-
-  @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(
-      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
-      title:Text(t('Mon compte'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
-    ),
-    body:FutureBuilder<Map<String,dynamic>>(
-      future:future,
-      builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
-        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.me();}))
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.me();}));
-        final me=s.data??{};
-        final firstName=(me['first_name']??'').toString();
-        final lastName=(me['last_name']??'').toString();
-        final email=(me['email']??'').toString();
-        return ListView(padding:const EdgeInsets.all(20),children:[
-          Card(child:ListTile(
-            leading:const CircleAvatar(child:Icon(Icons.person)),
-            title:Text('$firstName $lastName'.trim().isEmpty?t('Client Veyra'):'$firstName $lastName'.trim()),
-            subtitle:Text(email),
-          )),
-          const SizedBox(height:16),
-          const Padding(padding:EdgeInsets.symmetric(horizontal:4),child:LanguageSwitch()),
-          const SizedBox(height:24),
-          VeyraSecondaryButton(
-            label:t('Se déconnecter'),
-            icon:Icons.logout,
-            onPressed:loggingOut?null:logout,
-          ),
-        ]);
-      },
-    ),
-  );
-}
+class AccountScreen extends StatefulWidget{const AccountScreen({super.key});@override State<AccountScreen> createState()=>_AccountScreenState();}class _AccountScreenState extends State<AccountScreen>{late Future<Map<String,dynamic>> future;Uint8List? avatar;bool busy=false;@override void initState(){super.initState();future=api.me();api.avatarBytes().then((v){if(mounted)setState(()=>avatar=v);});}Future<void> photo()async{final r=await FilePicker.platform.pickFiles(type:FileType.image),p=r?.files.single.path;if(p==null)return;setState(()=>busy=true);try{final m=await api.uploadAvatar(p),v=await api.avatarBytes();if(mounted)setState((){future=Future.value(m);avatar=v;});}finally{if(mounted)setState(()=>busy=false);}}Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState(()=>future=Future.value(u));}}Future<void> password()async{final o=TextEditingController(),n=TextEditingController();final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mon mot de passe')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:o,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe actuel'))),TextField(controller:n,obscureText:true,decoration:InputDecoration(labelText:t('Nouveau mot de passe')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&n.text.length>=10){try{await api.changePassword(o.text,n.text);await api.logout();if(mounted)context.go('/login');}catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Mot de passe actuel incorrect.'))));}}}Future<void> logout()async{await api.logout();if(mounted)context.go('/login');}@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Mon compte'))),body:FutureBuilder<Map<String,dynamic>>(future:future,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!));final m=s.data??{},name=((m['first_name']??'').toString()+' '+(m['last_name']??'').toString()).trim(),rating=double.tryParse((m['rating_average']??0).toString())??0,count=m['rating_count']??0;return ListView(padding:const EdgeInsets.all(20),children:[Center(child:Stack(children:[CircleAvatar(radius:48,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:42):null),Positioned(right:0,bottom:0,child:IconButton.filled(onPressed:busy?null:photo,icon:const Icon(Icons.camera_alt_outlined)))])),Center(child:Text(name.isEmpty?t('Client Veyra'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold))),Center(child:Text((m['email']??'').toString())),Center(child:Text((m['phone']??'').toString())),Center(child:Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.star,color:Colors.amber),Text(' '+rating.toStringAsFixed(1)+' ('+count.toString()+' '+t('avis')+')')])),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),const LanguageSwitch(),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);})));}
 
 /// Coquille de navigation persistante (bottom nav 4 onglets), conforme
 /// aux maquettes C02 et suivantes ("BottomNavigation" listé comme
@@ -1975,8 +1917,8 @@ class _RegisterScreenState extends State<RegisterScreen>{
   bool offline=false;
 
   Future<void> submit()async{
-    if(firstName.text.trim().isEmpty||email.text.trim().isEmpty||password.text.length<10){
-      setState((){error=t('Prénom, e-mail et mot de passe de 10 caractères minimum requis.');offline=false;});
+    if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
+      setState((){error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.');offline=false;});
       return;
     }
     setState((){loading=true;error=null;offline=false;});
@@ -2190,13 +2132,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
               final data=x['data'] is Map?Map<String,dynamic>.from(x['data'] as Map):<String,dynamic>{};
               final bookingId=data['bookingId']?.toString();
               final template=(x['template_code']??'').toString();
-              return Card(child:ListTile(
-                leading:const Icon(Icons.notifications_active_outlined),
-                title:Text(VeyraStatusLabels.notificationTemplate(template)),
-                subtitle:Text(VeyraDateFormatter.dateTime(x['created_at'])),
-                trailing:bookingId==null?null:const Icon(Icons.chevron_right),
-                onTap:bookingId==null?null:()=>context.push(clientNotificationRoute(bookingId,template,data)),
-              ));
+              final pickup=(x['pickup_address']??'').toString(),dropoff=(x['dropoff_address']??'').toString(),scheduled=x['scheduled_at'];
+              return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.notifications_active_outlined)),title:Text(VeyraStatusLabels.notificationTemplate(template),style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[if(pickup.isNotEmpty&&dropoff.isNotEmpty)Text(pickup+' → '+dropoff,style:const TextStyle(fontWeight:FontWeight.w600)),if(scheduled!=null)Text(VeyraDateFormatter.dateTime(scheduled),style:const TextStyle(color:VeyraColors.primaryDark)),Text(t('Reçue le')+' '+VeyraDateFormatter.dateTime(x['created_at']))]),isThreeLine:true,trailing:bookingId==null?null:const Icon(Icons.chevron_right),onTap:bookingId==null?null:()=>router.go(clientNotificationRoute(bookingId,template,data))));
             },
           );
         },

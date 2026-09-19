@@ -67,6 +67,7 @@ jobs:
           # broken build.
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>' android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
           # Firebase wiring: google-services.json declares package_name
@@ -135,6 +136,11 @@ jobs:
           # text from a real failed run.
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.POST_NOTIFICATIONS' android/app/src/main/AndroidManifest.xml
           # Same real package-name mismatch fix as the client build --
           # google-services.json declares "com.veyra.driver" for this app.
           sed -i 's/namespace = "com.example.veyra_driver"/namespace = "com.veyra.driver"/' android/app/build.gradle.kts

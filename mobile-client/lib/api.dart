@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -198,6 +199,10 @@ class Api {
     return Map<String,dynamic>.from(r.data);
   }
 
+  Future<Map<String,dynamic>> updateProfile({required String firstName,String? lastName,String? phone})async{final r=await dio.patch('/api/v1/me',data:{'firstName':firstName.trim(),'lastName':lastName?.trim(),'phone':phone?.trim()});_me=Map<String,dynamic>.from(r.data);return _me!;}
+  Future<void> changePassword(String old,String next)async=>dio.post('/api/v1/me/password',data:{'currentPassword':old,'newPassword':next});
+  Future<Map<String,dynamic>> uploadAvatar(String path)async{final r=await dio.post('/api/v1/me/avatar',data:FormData.fromMap({'file':await MultipartFile.fromFile(path)}));_me=Map<String,dynamic>.from(r.data);return _me!;}
+  Future<Uint8List?> avatarBytes()async{try{final r=await dio.get<List<int>>('/api/v1/me/avatar',options:Options(responseType:ResponseType.bytes));return Uint8List.fromList(r.data??const[]);}catch(_){return null;}}
   Map<String,dynamic>? _me;
   Future<Map<String,dynamic>> me() async {
     if(_me!=null)return _me!;

@@ -1,5 +1,1 @@
-package com.veyra.provider;
-public interface RoutingProvider {
-  record Route(int distanceMeters,int durationSeconds,String geometry){}
-  Route route(double fromLat,double fromLng,double toLat,double toLng);
-}
+package com.veyra.provider;import java.util.*;public interface RoutingProvider{record Route(int distanceMeters,int durationSeconds,List<Map<String,Double>> points){}Route route(double fromLat,double fromLng,double toLat,double toLng);}

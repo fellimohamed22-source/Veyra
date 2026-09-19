@@ -76,6 +76,19 @@ public class AuthController {
     return ResponseEntity.status(HttpStatus.CREATED).body(tokens(user,"registration"));
   }
 
+  @PostMapping("/register-driver")
+  @Transactional
+  public ResponseEntity<Tokens> registerDriver(@Valid @RequestBody Register request){
+    String email=request.email().trim().toLowerCase(Locale.ROOT);
+    if(users.existsByEmailIgnoreCase(email))throw new ApiException(HttpStatus.CONFLICT,"EMAIL_ALREADY_USED");
+    if(request.phone()==null||request.phone().trim().length()<6)throw new ApiException(HttpStatus.BAD_REQUEST,"PHONE_REQUIRED");
+    User user=users.save(new User(request.firstName().trim(),request.lastName()==null?null:request.lastName().trim(),email,encoder.encode(request.password())));
+    db.update("update users set phone=? where id=?",request.phone().trim(),user.id());
+    db.update("insert into user_roles(user_id,role_id) select ?,id from roles where code='DRIVER' on conflict do nothing",user.id());
+    db.update("insert into drivers(id,user_id) values (?,?)",UUID.randomUUID(),user.id());
+    return ResponseEntity.status(HttpStatus.CREATED).body(tokens(user,"driver-registration"));
+  }
+
   @PostMapping("/login")
   @Transactional
   public Tokens login(@Valid @RequestBody Login request){
