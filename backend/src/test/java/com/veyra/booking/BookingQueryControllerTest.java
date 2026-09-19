@@ -136,4 +136,18 @@ class BookingQueryControllerTest {
     assertDoesNotThrow(() -> controller().detail(bookingId));
   }
 
+  @Test
+  void closedBookingStillReportsTheRideAsStartedAndCompleted() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(creatorId, null));
+    Map<String,Object> detail=row(null,null);
+    detail.put("status","CLOSED");
+    when(db.queryForList(contains("from scheduled_bookings sb"), eq(bookingId)))
+        .thenReturn(List.of(detail));
+
+    Map<String,Object> result=controller().detail(bookingId);
+
+    assertEquals(true,result.get("rideStarted"));
+    assertEquals(true,result.get("rideCompleted"));
+  }
+
 }
