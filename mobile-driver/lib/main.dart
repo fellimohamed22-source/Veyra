@@ -868,7 +868,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
         const SizedBox(height:10),
         ExpansionTile(
           tilePadding:EdgeInsets.zero,
-          title:Text(t('Filtres')),
+          title:Row(children:[Expanded(child:Text(t('Filtres'))),if(pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null)const Icon(Icons.filter_alt,size:18)]),
           children:[
             TextField(controller:pickupFilter,decoration:InputDecoration(labelText:t('Lieu de départ contient'))),
             const SizedBox(height:8),
@@ -901,7 +901,6 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             ]),
           ],
         ),
-        Text(t('Aucun tri par proximité. Les chauffeurs ne voient jamais les prix concurrents.')),
         const SizedBox(height:16),
         FutureBuilder<List<dynamic>>(
           future:future,
@@ -911,10 +910,15 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               ?VeyraOfflineBanner(onRetry:reload)
               :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
             final items=s.data??[];
-            if(items.isEmpty)return Card(child:ListTile(
-              leading:Icon(Icons.inbox_outlined),title:Text(t('Aucune demande ouverte')),
-              subtitle:Text(t('Les nouvelles demandes apparaîtront ici.')),
-            ));
+            if(items.isEmpty){
+              final filtered=pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null;
+              return Card(child:ListTile(
+                leading:const Icon(Icons.inbox_outlined),
+                title:Text(filtered?t('Aucune demande ne correspond aux filtres.'):t('Aucune demande ouverte')),
+                subtitle:Text(filtered?t('Modifiez ou réinitialisez les filtres pour élargir la recherche.'):t('Les nouvelles demandes apparaîtront ici.')),
+                trailing:filtered?TextButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState((){minPassengers=null;page=0;future=load();});},child:Text(t('Réinitialiser'))):null,
+              ));
+            }
             return Column(children:[
               ...items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
