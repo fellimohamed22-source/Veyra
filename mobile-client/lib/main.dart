@@ -362,11 +362,21 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
     backgroundColor:const Color(0xFFF2F6FB),
     appBar:AppBar(
       backgroundColor:const Color(0xFFF2F6FB),elevation:0,
-      title:Text(t('Mes réservations'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
+      title:Text(t('Mes trajets planifiés'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
     ),
     body:RefreshIndicator(
       onRefresh:()async{retry();await future;},
       child:ListView(padding:const EdgeInsets.all(20),children:[
+        Container(
+          padding:const EdgeInsets.all(14),
+          decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+          child:Row(children:[
+            const Icon(Icons.schedule_rounded,color:VeyraColors.primary),
+            const SizedBox(width:10),
+            Expanded(child:Text(t('Veyra MVP fonctionne uniquement sur réservation planifiée, au minimum 2 h avant le départ.'),style:const TextStyle(color:VeyraColors.primaryDark,fontWeight:FontWeight.w600,height:1.3))),
+          ]),
+        ),
+        const SizedBox(height:16),
         FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
@@ -506,21 +516,41 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
           },
         ),
         const SizedBox(height:4),
-        Text(t('Où souhaitez-vous aller ?'),style:const TextStyle(color:Color(0xFF6B7280))),
-        const SizedBox(height:16),
+        Text(t('Vos trajets VTC, réservés à l’avance.'),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:15)),
+        const SizedBox(height:18),
         Container(
           decoration:BoxDecoration(
-            gradient:const LinearGradient(colors:[Color(0xFF123A66),Color(0xFF1565C0)]),
-            borderRadius:BorderRadius.circular(16),
+            gradient:const LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[VeyraColors.primaryDark,VeyraColors.primary]),
+            borderRadius:BorderRadius.circular(VeyraRadius.card),
           ),
           child:Material(color:Colors.transparent,child:InkWell(
-            borderRadius:BorderRadius.circular(16),
+            borderRadius:BorderRadius.circular(VeyraRadius.card),
             onTap:()=>context.push('/addresses'),
-            child:Padding(padding:const EdgeInsets.all(20),child:Row(children:[
-              const Icon(Icons.add_circle,color:Colors.white,size:32),
-              const SizedBox(width:16),
-              Expanded(child:Text(t('Planifier un trajet'),style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w600))),
-              const Icon(Icons.arrow_forward_ios,color:Colors.white70,size:16),
+            child:Padding(padding:const EdgeInsets.all(22),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Container(
+                padding:const EdgeInsets.symmetric(horizontal:10,vertical:6),
+                decoration:BoxDecoration(color:Colors.white.withValues(alpha:.14),borderRadius:BorderRadius.circular(VeyraRadius.pill)),
+                child:Row(mainAxisSize:MainAxisSize.min,children:[
+                  const Icon(Icons.event_available_outlined,color:Colors.white,size:16),
+                  const SizedBox(width:6),
+                  Text(t('Réservation planifiée'),style:const TextStyle(color:Colors.white,fontSize:12,fontWeight:FontWeight.w800)),
+                ]),
+              ),
+              const SizedBox(height:18),
+              Text(t('Planifiez votre prochain trajet'),style:const TextStyle(color:Colors.white,fontSize:23,fontWeight:FontWeight.w900,height:1.15,letterSpacing:-.3)),
+              const SizedBox(height:8),
+              Text(t('Choisissez le trajet, la date et l’heure. Départ au minimum 2 h à l’avance.'),style:const TextStyle(color:Colors.white70,height:1.35)),
+              const SizedBox(height:20),
+              Container(
+                padding:const EdgeInsets.symmetric(horizontal:16,vertical:13),
+                decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+                child:Row(children:[
+                  const Icon(Icons.add_road_rounded,color:VeyraColors.primary),
+                  const SizedBox(width:10),
+                  Expanded(child:Text(t('Planifier une réservation'),style:const TextStyle(color:VeyraColors.primaryDark,fontWeight:FontWeight.w800))),
+                  const Icon(Icons.arrow_forward_rounded,color:VeyraColors.primary),
+                ]),
+              ),
             ])),
           )),
         ),
@@ -580,27 +610,34 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
             final x=next;
             final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
             final status=(x['status']??'').toString();
-            return Card(
-              shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),
-              child:ListTile(
-                contentPadding:const EdgeInsets.all(14),
-                title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
-                subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Row(children:[
-                  Expanded(child:Text(VeyraDateFormatter.relativeDay(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13))),
-                  VeyraStatusBadge(status:status),
-                ])),
-                trailing:const Icon(Icons.chevron_right),
-                onTap:(){
-                  final id=x['id']?.toString();
-                  if(id==null)return;
-                  if(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'){
-                    context.push('/offers/'+id);
-                  }else{
-                    context.push('/booking/'+id);
-                  }
-                },
-              ),
-            );
+            final offerPhase={'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status);
+            return Card(child:InkWell(
+              borderRadius:BorderRadius.circular(VeyraRadius.card),
+              onTap:(){
+                final id=x['id']?.toString();
+                if(id==null)return;
+                context.push(offerPhase?'/offers/$id':'/booking/$id');
+              },
+              child:Padding(padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Row(children:[
+                  Container(width:48,height:48,decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.calendar_month_rounded,color:VeyraColors.primary)),
+                  const SizedBox(width:12),
+                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Text(VeyraDateFormatter.relativeDay(x['scheduled_at']),style:const TextStyle(color:VeyraColors.primaryDark,fontSize:17,fontWeight:FontWeight.w900)),
+                    const SizedBox(height:4),
+                    VeyraStatusBadge(status:status),
+                  ])),
+                ]),
+                const SizedBox(height:16),
+                Text(title,style:const TextStyle(fontSize:16,fontWeight:FontWeight.w800,height:1.3)),
+                const SizedBox(height:14),
+                Row(children:[
+                  Text(offerPhase?t('Comparer les offres'):t('Voir les détails'),style:const TextStyle(color:VeyraColors.primary,fontWeight:FontWeight.w800)),
+                  const Spacer(),
+                  const Icon(Icons.arrow_forward_rounded,color:VeyraColors.primary),
+                ]),
+              ])),
+            ));
           },
         ),
       ]),
@@ -1243,7 +1280,7 @@ class _OffersScreenState extends State<OffersScreen>{
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(title:Text(t('Offres reçues')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
+    appBar:AppBar(title:Text(t('Choisir votre chauffeur')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
     body:ListView(padding:const EdgeInsets.all(16),children:[
       FutureBuilder<Map<String,dynamic>>(
         future:bookingFuture,
@@ -1276,8 +1313,10 @@ class _OffersScreenState extends State<OffersScreen>{
             :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
           final items=s.data??[];
           if(items.isEmpty)return Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.')));
-          return Column(children:[
-            Text(t('Choisissez librement selon le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:Colors.black54)),
+          return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(items.length==1?t('1 offre reçue'):items.length.toString()+' '+t('offres reçues'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
+            const SizedBox(height:5),
+            Text(t('Comparez librement le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:VeyraColors.textSecondary,height:1.35)),
             if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
             const SizedBox(height:14),
             for(final raw in items)Builder(builder:(context){
@@ -1307,15 +1346,19 @@ class _OffersScreenState extends State<OffersScreen>{
                     Text(VeyraMoneyFormatter.fromMinor(x['totalMinor']),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
                   ]),
                 ]),
-                const SizedBox(height:4),
-                Text(t('Chauffeur : ')+VeyraMoneyFormatter.fromMinor(x['driverPriceMinor'])+'  •  '+t('Frais Veyra : ')+VeyraMoneyFormatter.fromMinor(x['commissionMinor']),style:const TextStyle(fontSize:12,color:Colors.black45)),
-                const SizedBox(height:12),
+                const SizedBox(height:8),
+                Row(children:[
+                  const Icon(Icons.verified_user_outlined,size:16,color:VeyraColors.success),
+                  const SizedBox(width:5),
+                  Text(t('Chauffeur Veyra vérifié'),style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary,fontWeight:FontWeight.w600)),
+                ]),
+                const SizedBox(height:14),
                 SizedBox(width:double.infinity,child:FilledButton(
                   style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
                   onPressed:acceptingOfferId!=null?null:()=>chooseOffer(x['offerId'].toString()),
                   child:acceptingOfferId==x['offerId'].toString()
                     ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
-                    :Text(t('Choisir')),
+                    :Text(t('Choisir cette offre')),
                 )),
               ])),
             );

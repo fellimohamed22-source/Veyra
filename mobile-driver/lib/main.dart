@@ -883,13 +883,27 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   void reload()=>setState((){future=load();});
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Demandes disponibles')),actions:[
+    appBar:AppBar(title:Text(t('Courses planifiées')),actions:[
       IconButton(onPressed:()=>context.push('/driver/offers'),icon:const Icon(Icons.local_offer_outlined),tooltip:t('Mes offres')),
       IconButton(onPressed:()=>context.push('/notifications'),tooltip:t('Notifications'),icon:const Icon(Icons.notifications_outlined)),
     ]),
     body:RefreshIndicator(
       onRefresh:()async{final refreshed=load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
+        Container(
+          padding:const EdgeInsets.all(16),
+          decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+          child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            const Icon(Icons.event_available_rounded,color:VeyraColors.primary),
+            const SizedBox(width:10),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(t('Marketplace des réservations à venir'),style:const TextStyle(fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
+              const SizedBox(height:4),
+              Text(t('Consultez les trajets planifiés et proposez librement votre prix.'),style:const TextStyle(color:VeyraColors.textSecondary,height:1.3)),
+            ])),
+          ]),
+        ),
+        const SizedBox(height:14),
         DropdownButtonFormField<String>(
           initialValue:sort,
           decoration:InputDecoration(labelText:t('Trier les demandes')),
@@ -945,7 +959,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
         FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
-            if(s.connectionState!=ConnectionState.done)return const Center(child:Padding(padding:EdgeInsets.all(32),child:CircularProgressIndicator()));
+            if(s.connectionState!=ConnectionState.done)return const Padding(padding:EdgeInsets.symmetric(vertical:48),child:VeyraLoadingView());
             if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
               ?VeyraOfflineBanner(onRetry:reload)
               :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
@@ -975,9 +989,16 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
                 borderRadius:BorderRadius.circular(12),
                 onTap:()=>context.push('/request/'+id),
                 child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                  Row(crossAxisAlignment:CrossAxisAlignment.start,children:[Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w700))),const Icon(Icons.chevron_right)]),
-                  const SizedBox(height:8),
-                  Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                  Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Container(width:42,height:42,decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(12)),child:const Icon(Icons.schedule_rounded,color:VeyraColors.primary)),
+                    const SizedBox(width:10),
+                    Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
+                      const SizedBox(height:5),
+                      Text(title,style:const TextStyle(fontWeight:FontWeight.w800,height:1.25)),
+                    ])),
+                    const Icon(Icons.chevron_right),
+                  ]),
                   const SizedBox(height:8),
                   Wrap(spacing:8,runSpacing:6,children:[
                     if(category!=null&&category.isNotEmpty)Chip(label:Text(category)),
@@ -1278,7 +1299,7 @@ class _RequestScreenState extends State<RequestScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Proposer un prix'))),
+    appBar:AppBar(title:Text(t('Détail de la course planifiée'))),
     body:ListView(padding:const EdgeInsets.all(20),children:[
       FutureBuilder<Map<String,dynamic>>(
         future:detail,
@@ -1335,10 +1356,10 @@ class _RequestScreenState extends State<RequestScreen>{
           return Column(children:[
             Card(child:ListTile(
               leading:const Icon(Icons.price_check_outlined),
-              title:Text(t('Repère du marché')),
+              title:Text(t('Repère du marché'),style:const TextStyle(fontWeight:FontWeight.w800)),
               subtitle:Text(bestMinor==null
                 ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
-                :t('Prix le plus bas proposé par un autre chauffeur')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor)),
+                :t('Meilleure offre actuelle des autres chauffeurs')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor)+'\n'+t('Vous restez libre de fixer votre prix.')),
             )),
             Card(child:Padding(
               padding:const EdgeInsets.all(16),
@@ -1880,7 +1901,7 @@ class _RideScreenState extends State<RideScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Course'))),
+    appBar:AppBar(title:Text(t('Mission planifiée'))),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
