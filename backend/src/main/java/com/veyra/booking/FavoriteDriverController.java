@@ -40,7 +40,8 @@ public class FavoriteDriverController {
     return db.queryForList(
       "select d.id as driver_id,u.first_name,u.last_name,d.rating,v.brand as vehicle_brand,v.model as vehicle_model,v.color as vehicle_color,v.year as vehicle_year " +
       "from client_favorite_drivers f join drivers d on d.id=f.driver_id join users u on u.id=d.user_id " +
-      "left join vehicles v on v.driver_id=d.id and v.status='APPROVED' where f.client_user_id=? order by f.created_at desc",
+      "left join lateral (select v0.* from vehicles v0 where v0.driver_id=d.id and v0.status='APPROVED' order by v0.id limit 1) v on true " +
+      "where f.client_user_id=? order by f.created_at desc",
       CurrentUser.id());
   }
 
