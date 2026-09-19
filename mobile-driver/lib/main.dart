@@ -1033,35 +1033,45 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
               final x=Map<String,dynamic>.from(items[i] as Map);
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               final bookingId=x['booking_id']?.toString();
+              final offerId=x['offer_id']?.toString();
+              final expires=x['expires_at'];
+              final bookingStatus=x['booking_status']?.toString();
+              Future<void> withdraw()async{
+                if(offerId==null)return;
+                final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
+                  title:Text(t('Retirer cette offre ?')),
+                  content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
+                  actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
+                ));
+                if(ok!=true)return;
+                try{await api.withdrawOffer(offerId);if(mounted){setState(_load);ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Offre retirée.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+              }
               return Card(
                 margin:const EdgeInsets.only(bottom:10),
-                child:ListTile(
-                  contentPadding:const EdgeInsets.all(14),
-                  title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
-                  subtitle:Padding(
-                    padding:const EdgeInsets.only(top:6),
-                    child:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                  ),
-                  trailing:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.end,children:[
-                    Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
-                    const SizedBox(height:4),
-                    Text(VeyraStatusLabels.offerStatus(x['status']?.toString()),style:const TextStyle(fontSize:12,color:Colors.black54)),
-                  ]),
+                child:InkWell(
                   onTap:bookingId==null?null:(){if(isWon)context.push('/ride/'+bookingId);else context.push('/request/'+bookingId);},
-                  onLongPress:scope!='active'?null:()async{
-                    final offerId=x['offer_id']?.toString();
-                    if(offerId==null)return;
-                    final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
-                      title:Text(t('Retirer cette offre ?')),
-                      content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
-                      actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
-                    ));
-                    if(ok!=true)return;
-                    try{await api.withdrawOffer(offerId);if(mounted)setState(_load);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
-                  },
+                  child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w600))),
+                      const SizedBox(width:8),
+                      Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
+                    ]),
+                    const SizedBox(height:6),
+                    Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54)),
+                    const SizedBox(height:6),
+                    Wrap(spacing:8,runSpacing:6,children:[
+                      Chip(label:Text(VeyraStatusLabels.offerStatus(x['status']?.toString()))),
+                      if(bookingStatus!=null&&bookingStatus.isNotEmpty) VeyraStatusBadge(status:bookingStatus),
+                    ]),
+                    if(expires!=null)Padding(padding:const EdgeInsets.only(top:4),child:Text(t('Expiration')+' : '+VeyraDateFormatter.dateTime(expires),style:const TextStyle(fontSize:12,color:Colors.black54))),
+                    if(scope=='active')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
+                      Expanded(child:OutlinedButton.icon(onPressed:bookingId==null?null:()=>context.push('/request/'+bookingId),icon:const Icon(Icons.edit_outlined),label:Text(t('Modifier')))),
+                      const SizedBox(width:8),
+                      Expanded(child:TextButton.icon(onPressed:offerId==null?null:withdraw,icon:const Icon(Icons.delete_outline),label:Text(t('Retirer')))),
+                    ])),
+                  ])),
                 ),
-              );
-            },
+              );            },
           );
         },
       ),
