@@ -721,8 +721,8 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   Future<void> upload(String type)async{
-    final result=await picker.FilePicker.platform.pickFiles(
-      type:picker.FileType.custom,
+    final result=await FilePicker.platform.pickFiles(
+      type:FileType.custom,
       allowedExtensions:['pdf','jpg','jpeg','png'],
     );
     if(result==null||result.files.single.path==null)return;
