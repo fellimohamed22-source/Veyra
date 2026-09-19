@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart' hide Padding, SizedBox, FutureBuilder;
+import 'package:file_picker/file_picker.dart' show FilePicker, FilePickerResult, PlatformFile;
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
