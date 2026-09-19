@@ -3197,8 +3197,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
     ),
     body:RefreshIndicator(
       onRefresh:()async{
-        reload();
-        await future;
+        final refreshed=api.notifications(page:page);
+        setState(()=>future=refreshed);
+        await refreshed;
       },
       child:FutureBuilder<List<dynamic>>(
         future:future,
