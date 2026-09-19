@@ -37,6 +37,7 @@ import java.util.*;
     private final com.veyra.finance.LedgerService ledger;
     private final BookingStatusHistoryService history;
     private final SecureRandom rnd=new SecureRandom();
+    private final BookingStateMachine stateMachine=new BookingStateMachine();
     private final long minLead,maxWindow,normalClose,shortClose;
     public BookingController(JdbcTemplate d,PasswordEncoder e,com.veyra.security.PinCrypto pc,com.veyra.finance.LedgerService l,@Value("${veyra.marketplace.min-lead-minutes}")long a,@Value("${veyra.marketplace.max-offer-window-hours}")long b,@Value("${veyra.marketplace.normal-close-before-minutes}")long c,@Value("${veyra.marketplace.short-close-before-minutes}")long f,BookingStatusHistoryService h){
         db=d;
@@ -174,7 +175,10 @@ import java.util.*;
         // -- only the FIRST offer on a booking actually causes this
         // transition; every subsequent offer's UPDATE affects 0 rows.
         // Only record history when the transition genuinely happened.
-        if(transitioned>0)history.record(bookingId,"OPEN_FOR_OFFERS","OFFERS_RECEIVED","DRIVER",CurrentUser.id(),null);
+        if(transitioned>0){
+            stateMachine.check(BookingStatus.OPEN_FOR_OFFERS,BookingStatus.OFFERS_RECEIVED);
+            history.record(bookingId,"OPEN_FOR_OFFERS","OFFERS_RECEIVED","DRIVER",CurrentUser.id(),null);
+        }
         event(bookingId,"offer.created",id);
         Map<String,Object>response=new HashMap<>(Map.of("offerId",id));
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
@@ -280,6 +284,7 @@ import java.util.*;
         owner(b);
             if(!Set.of("OPEN_FOR_OFFERS",
         "OFFERS_RECEIVED").contains(b.get("status")))throw new ApiException(HttpStatus.CONFLICT,"BOOKING_CLOSED");
+        stateMachine.check(BookingStatus.valueOf((String)b.get("status")),BookingStatus.CONFIRMED);
         Map<String,Object>o=one("select driver_id,proposed_amount_minor,currency,status from driver_offers where id=? and booking_id=? for update",offerId,bookingId);
         if(!"ACTIVE".equals(o.get("status")))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         UUID d=(UUID)o.get("driver_id");
@@ -347,6 +352,11 @@ import java.util.*;
         Map<String,Object>b=one("select selected_driver_id,status,pin_hash,pin_failed_attempts,pin_locked_until from scheduled_bookings where id=? for update",id);
         if(!d.equals(b.get("selected_driver_id")))throw new ApiException(HttpStatus.FORBIDDEN,"NOT_SELECTED_DRIVER");
         if(!from.equals(b.get("status")))throw new ApiException(HttpStatus.CONFLICT,"INVALID_BOOKING_TRANSITION");
+        try{
+            stateMachine.check(BookingStatus.valueOf((String)b.get("status")),BookingStatus.valueOf(to));
+        }catch(IllegalStateException|IllegalArgumentException ex){
+            throw new ApiException(HttpStatus.CONFLICT,"INVALID_BOOKING_TRANSITION");
+        }
         if("IN_PROGRESS".equals(to)){
             OffsetDateTime locked=DbTime.toOffsetDateTime(b.get("pin_locked_until"));
             if(locked!=null&&locked.isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"PIN_TEMPORARILY_LOCKED");

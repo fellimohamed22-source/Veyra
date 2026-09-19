@@ -11,6 +11,7 @@ class VeyraStatusLabels {
   VeyraStatusLabels._();
 
   static const Map<String, String> _bookingStatusFr = {
+    'DRAFT': 'Brouillon',
     'OPEN_FOR_OFFERS': 'Demande publiée',
     'OFFERS_RECEIVED': 'Offres reçues',
     'CONFIRMED': 'Réservation confirmée',
@@ -22,7 +23,9 @@ class VeyraStatusLabels {
     'CANCELLED': 'Annulée',
     'CANCELLED_BY_CLIENT': 'Annulée',
     'CANCELLED_BY_DRIVER': 'Annulée par le chauffeur',
+    'DRIVER_CANCELLED': 'Annulée par le chauffeur',
     'CUSTOMER_NO_SHOW': 'Client absent',
+    'INCIDENT': 'Incident en cours',
     'EXPIRED': 'Demande expirée',
     'NO_OFFER': 'Aucune offre reçue',
     'NO_DRIVER': 'Aucune offre reçue',
@@ -32,6 +35,7 @@ class VeyraStatusLabels {
   };
 
   static const Map<String, String> _bookingStatusEn = {
+    'DRAFT': 'Draft',
     'OPEN_FOR_OFFERS': 'Request published',
     'OFFERS_RECEIVED': 'Offers received',
     'CONFIRMED': 'Booking confirmed',
@@ -43,7 +47,9 @@ class VeyraStatusLabels {
     'CANCELLED': 'Cancelled',
     'CANCELLED_BY_CLIENT': 'Cancelled',
     'CANCELLED_BY_DRIVER': 'Cancelled by driver',
+    'DRIVER_CANCELLED': 'Cancelled by driver',
     'CUSTOMER_NO_SHOW': 'Customer no-show',
+    'INCIDENT': 'Incident in progress',
     'EXPIRED': 'Request expired',
     'NO_OFFER': 'No offer received',
     'NO_DRIVER': 'No offer received',

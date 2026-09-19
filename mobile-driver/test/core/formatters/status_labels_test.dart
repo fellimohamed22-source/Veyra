@@ -15,6 +15,12 @@ void main() {
     expect(VeyraStatusLabels.bookingStatus('COMPLETED'), 'Terminée');
     expect(VeyraStatusLabels.bookingStatus('CANCELLED'), 'Annulée');
     expect(VeyraStatusLabels.bookingStatus('EXPIRED'), 'Demande expirée');
+    expect(VeyraStatusLabels.bookingStatus('DRAFT'), 'Brouillon');
+    expect(VeyraStatusLabels.bookingStatus('DRIVER_CANCELLED'), 'Annulée par le chauffeur');
+    expect(VeyraStatusLabels.bookingStatus('CUSTOMER_NO_SHOW'), 'Client absent');
+    expect(VeyraStatusLabels.bookingStatus('INCIDENT'), 'Incident en cours');
+    expect(VeyraStatusLabels.bookingStatus('CLOSED'), 'Terminée');
+    expect(VeyraStatusLabels.bookingStatus('NO_OFFER'), 'Aucune offre reçue');
   });
 
   test('offer visibility modes never show the raw backend enum', () {
