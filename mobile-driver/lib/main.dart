@@ -896,7 +896,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
       IconButton(onPressed:()=>context.push('/notifications'),tooltip:t('Notifications'),icon:const Icon(Icons.notifications_outlined)),
     ]),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{final refreshed=load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         DropdownButtonFormField<String>(
           initialValue:sort,
@@ -1486,7 +1486,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes courses'))),
     body:RefreshIndicator(
-      onRefresh:()async{_refresh();await future;},
+      onRefresh:()async{final refreshed=_load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         LayoutBuilder(builder:(context,constraints){
           final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
@@ -1628,6 +1628,7 @@ class _RideScreenState extends State<RideScreen>{
   Map<String,dynamic>? etaInfo;
   Map<String,dynamic>? tripEtaInfo;
   DateTime? lastEtaRefresh;
+  int _etaRequest=0;
   int ratingScore=0;
   bool ratingSubmitting=false;
   bool ratingSubmitted=false;
@@ -1734,6 +1735,7 @@ class _RideScreenState extends State<RideScreen>{
   }
 
   Future<void> _refreshEta(Position p) async {
+    final request=++_etaRequest;
     try{
       final booking=await api.bookingDetail(widget.bookingId);
       final status=(booking['status']??'').toString();
@@ -1774,7 +1776,7 @@ class _RideScreenState extends State<RideScreen>{
         activeLeg(),
         customerTrip(),
       ]);
-      if(mounted){
+      if(mounted&&request==_etaRequest){
         setState((){
           etaInfo=results[0];
           tripEtaInfo=results[1];
@@ -1783,7 +1785,7 @@ class _RideScreenState extends State<RideScreen>{
     }catch(_){
       // Route provider failures must not turn into a persistent generic
       // course error. GPS sync and course data remain usable independently.
-      if(mounted){
+      if(mounted&&request==_etaRequest){
         setState((){
           etaInfo=null;
           tripEtaInfo=null;
@@ -2727,7 +2729,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{final refreshed=api.notifications(page:page);setState(()=>future=refreshed);await refreshed;},
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){

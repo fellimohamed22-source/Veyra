@@ -651,7 +651,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
       title:Text(t('Mes réservations'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
     ),
     body:RefreshIndicator(
-      onRefresh:()async{retry();await future;},
+      onRefresh:()async{final refreshed=_load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(20),children:[
         Row(children:[
           Expanded(child:DropdownButtonFormField<String>(
@@ -1069,7 +1069,7 @@ class _FavoriteDriversScreenState extends State<FavoriteDriversScreen>{
   }
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes chauffeurs favoris'))),
-    body:RefreshIndicator(onRefresh:()async{reload();await future;},child:FutureBuilder<List<dynamic>>(future:future,builder:(context,s){
+    body:RefreshIndicator(onRefresh:()async{final refreshed=api.favoriteDrivers();setState(()=>future=refreshed);await refreshed;},child:FutureBuilder<List<dynamic>>(future:future,builder:(context,s){
       if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
       if(s.hasError)return ListView(children:[VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload)]);
       final items=s.data??[];
@@ -2430,6 +2430,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Map<String,dynamic>? etaInfo;
   Map<String,dynamic>? tripEtaInfo;
   DateTime? lastEtaRefresh;
+  int _etaRequest=0;
   String? error;
   bool loading=true;
 
@@ -2522,6 +2523,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   }
 
   Future<void> _refreshEta({bool force=false}) async {
+    final request=++_etaRequest;
     final live=location;
     final booking=bookingMap;
     if(booking==null)return;
@@ -2578,7 +2580,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       loadActiveLeg(),
       loadTrip(),
     ]);
-    if(!mounted)return;
+    if(!mounted||request!=_etaRequest)return;
     setState((){
       etaInfo=results[0];
       tripEtaInfo=results[1];
@@ -3195,8 +3197,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
     ),
     body:RefreshIndicator(
       onRefresh:()async{
-        reload();
-        await future;
+        final refreshed=api.notifications(page:page);
+        setState(()=>future=refreshed);
+        await refreshed;
       },
       child:FutureBuilder<List<dynamic>>(
         future:future,
