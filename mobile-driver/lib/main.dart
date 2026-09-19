@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart' show FilePicker, FileType;
+import 'package:file_picker/file_picker.dart' as picker show FilePicker, FileType;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';

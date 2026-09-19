@@ -106,6 +106,31 @@ class Api {
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);
   }
 
+  Future<void> loginWithFirebase(String idToken) async {
+    _me=null;
+    final r=await dio.post('/api/v1/auth/firebase',data:{
+      'idToken':idToken,
+      'role':'DRIVER',
+      'deviceName':'driver-mobile',
+    });
+    await storage.write(key:'accessToken',value:r.data['accessToken']);
+    await storage.write(key:'refreshToken',value:r.data['refreshToken']);
+  }
+
+  Future<Map<String,dynamic>> updateProfile({
+    required String firstName,
+    String? lastName,
+    String? phone,
+  }) async {
+    final r=await dio.patch('/api/v1/me',data:{
+      'firstName':firstName.trim(),
+      'lastName':lastName?.trim(),
+      'phone':phone?.trim(),
+    });
+    _me=Map<String,dynamic>.from(r.data);
+    return _me!;
+  }
+
   // Gap identifié pendant l'audit LOT 4 : contrairement à l'app client,
   // aucune méthode logout() n'existait côté driver -- il n'y avait donc
   // aucun moyen propre de se déconnecter (invalidation de la session
@@ -129,6 +154,7 @@ class Api {
   }
 
   Future<List<dynamic>> opportunities({
+    int page=0,
     String sort='date',
     String? categoryId,
     DateTime? from,
@@ -137,7 +163,7 @@ class Api {
     String? pickupQuery,
     String? destinationQuery,
   }) async {
-    final query=<String,dynamic>{'sort':sort};
+    final query=<String,dynamic>{'page':page,'sort':sort};
     if(categoryId!=null&&categoryId.isNotEmpty)query['categoryId']=categoryId;
     if(from!=null)query['from']=from.toUtc().toIso8601String();
     if(to!=null)query['to']=to.toUtc().toIso8601String();
@@ -150,8 +176,8 @@ class Api {
   Future<Map<String,dynamic>> opportunityDetail(String bookingId) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/opportunities/$bookingId')).data);
 
-  Future<List<dynamic>> driverOffers({String scope='active'}) async =>
-      List<dynamic>.from((await dio.get('/api/v1/driver/offers',queryParameters:{'scope':scope})).data);
+  Future<List<dynamic>> driverOffers({String scope='active',int page=0}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/driver/offers',queryParameters:{'scope':scope,'page':page})).data);
 
   Future<Map<String,dynamic>> offer(String bookingId,int amountMinor) async {
     final r=await dio.post('/api/v1/driver/opportunities/$bookingId/offers',
@@ -159,14 +185,29 @@ class Api {
     return Map<String,dynamic>.from(r.data);
   }
 
+  Future<void> withdrawOffer(String offerId) async =>
+      dio.delete('/api/v1/driver/offers/$offerId');
+
   Future<Map<String,dynamic>> updateOffer(String bookingId,int amountMinor) async {
     final r=await dio.patch('/api/v1/driver/opportunities/$bookingId/offers',
       data:{'amountMinor':amountMinor,'currency':'EUR'});
     return Map<String,dynamic>.from(r.data);
   }
 
-  Future<List<dynamic>> bookings({String scope='upcoming'}) async =>
-      List<dynamic>.from((await dio.get('/api/v1/driver/bookings',queryParameters:{'scope':scope})).data);
+  Future<List<dynamic>> bookings({
+    String scope='upcoming',
+    int page=0,
+    String? status,
+    String sort='asc',
+  }) async => List<dynamic>.from((await dio.get(
+    '/api/v1/driver/bookings',
+    queryParameters:{
+      'scope':scope,
+      'page':page,
+      'sort':sort,
+      if(status!=null&&status.isNotEmpty)'status':status,
+    },
+  )).data);
 
   Future<Map<String,dynamic>> bookingDetail(String id) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/bookings/$id')).data);
@@ -174,8 +215,8 @@ class Api {
   Future<Map<String,dynamic>> wallet() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/wallet')).data);
 
-  Future<List<dynamic>> walletTransactions() async =>
-      List<dynamic>.from((await dio.get('/api/v1/driver/wallet/transactions')).data);
+  Future<List<dynamic>> walletTransactions({int page=0}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/driver/wallet/transactions',queryParameters:{'page':page})).data);
 
   Future<Map<String,dynamic>> createProfile() async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/driver/profile')).data);
@@ -284,8 +325,8 @@ class Api {
     });
   }
 
-  Future<List<dynamic>> notifications() async =>
-      List<dynamic>.from((await dio.get('/api/v1/notifications')).data);
+  Future<List<dynamic>> notifications({int page=0}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/notifications',queryParameters:{'page':page})).data);
 
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);
