@@ -2085,7 +2085,7 @@ class _RideScreenState extends State<RideScreen>{
                         ]),
                   )),
                 const SizedBox(height:12),
-                if(status=='DRIVER_EN_ROUTE'&&pickupLat!=null&&pickupLng!=null)
+                if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status)&&pickupLat!=null&&pickupLng!=null)
                   OutlinedButton.icon(
                     onPressed:()=>launchUrl(
                       Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$pickupLat,$pickupLng&travelmode=driving'),
