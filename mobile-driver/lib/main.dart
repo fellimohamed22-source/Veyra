@@ -1421,53 +1421,59 @@ class _AgendaScreenState extends State<AgendaScreen>{
     body:RefreshIndicator(
       onRefresh:()async{_refresh();await future;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
-        Row(children:[
-          Expanded(child:DropdownButtonFormField<String>(
-            key:ValueKey('booking-status-$status'),
-            initialValue:status,
-            isExpanded:true,
-            decoration:InputDecoration(labelText:t('État')),
-            items:[
-              DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
-              DropdownMenuItem(value:'CONFIRMED',child:Text(t('Confirmée'))),
-              DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('En route'))),
-              DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Arrivé'))),
-              DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
-              DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
-              DropdownMenuItem(value:'CLOSED',child:Text(t('Clôturée'))),
-              DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
-              DropdownMenuItem(value:'DRIVER_CANCELLED',child:Text(t('Annulée par le chauffeur'))),
-              DropdownMenuItem(value:'CUSTOMER_NO_SHOW',child:Text(t('Client absent'))),
-            ],
-            onChanged:(v){
-              if(v==null)return;
-              setState((){
-                status=v;
-                page=0;
-                future=_load();
-              });
-            },
-          )),
-          const SizedBox(width:10),
-          Expanded(child:DropdownButtonFormField<String>(
-            key:ValueKey('booking-sort-$sort'),
-            initialValue:sort,
-            isExpanded:true,
-            decoration:InputDecoration(labelText:t('Date')),
-            items:[
-              DropdownMenuItem(value:'asc',child:Text(t('Plus proches'))),
-              DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
-            ],
-            onChanged:(v){
-              if(v==null)return;
-              setState((){
-                sort=v;
-                page=0;
-                future=_load();
-              });
-            },
-          )),
-        ]),
+        LayoutBuilder(builder:(context,constraints){
+          final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
+          return Wrap(spacing:10,runSpacing:10,children:[
+            SizedBox(width:w,child:DropdownButtonFormField<String>(
+                key:ValueKey('booking-status-$status'),
+                initialValue:status,
+                isExpanded:true,
+                decoration:InputDecoration(labelText:t('État')),
+                items:[
+                  DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
+                  DropdownMenuItem(value:'CONFIRMED',child:Text(t('Confirmée'))),
+                  DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('En route'))),
+                  DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Arrivé'))),
+                  DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
+                  DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
+                  DropdownMenuItem(value:'CLOSED',child:Text(t('Clôturée'))),
+                  DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
+                  DropdownMenuItem(value:'DRIVER_CANCELLED',child:Text(t('Annulée par le chauffeur'))),
+                  DropdownMenuItem(value:'CUSTOMER_NO_SHOW',child:Text(t('Client absent'))),
+                ],
+                onChanged:(v){
+                  if(v==null)return;
+                  setState((){
+                    status=v;
+                    page=0;
+                    future=_load();
+                  });
+                },
+              )),),
+            SizedBox(width:w,child:DropdownButtonFormField<String>(
+                key:ValueKey('booking-sort-$sort'),
+                initialValue:sort,
+                isExpanded:true,
+                decoration:InputDecoration(labelText:t('Date')),
+                items:[
+                  DropdownMenuItem(value:'asc',child:Text(t('Plus proches'))),
+                  DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
+                ],
+                onChanged:(v){
+                  if(v==null)return;
+                  setState((){
+                    sort=v;
+                    page=0;
+                    future=_load();
+                  });
+                },
+              )),),
+          ]);
+        }),
+        if(status!='ALL'||sort!='asc')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
+          const Icon(Icons.filter_alt_outlined,size:18),const SizedBox(width:6),Expanded(child:Text(t('Filtres actifs'))),
+          TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser'))),
+        ])),
         const SizedBox(height:14),
         FutureBuilder<List<dynamic>>(
           future:future,
@@ -1484,7 +1490,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
             if(items.isEmpty){
               return Center(child:Padding(
                 padding:const EdgeInsets.all(32),
-                child:Text(t('Aucune course confirmée.')),
+                child:Column(mainAxisSize:MainAxisSize.min,children:[Text(status=='ALL'?t('Aucune course pour le moment.'):t('Aucune course ne correspond aux filtres.')),if(status!='ALL'||sort!='asc')TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser les filtres')))]),
               ));
             }
             return Column(children:[
