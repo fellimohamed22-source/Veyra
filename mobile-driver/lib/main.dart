@@ -1087,7 +1087,15 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
               return Card(
                 margin:const EdgeInsets.only(bottom:10),
                 child:InkWell(
-                  onTap:bookingId==null?null:(){if(isWon)context.push('/ride/'+bookingId);else context.push('/request/'+bookingId);},
+                  onTap:bookingId==null?null:(){
+                    if(isWon){
+                      context.push('/ride/'+bookingId);
+                    }else if(scope=='active'){
+                      context.push('/request/'+bookingId);
+                    }else{
+                      context.push('/ride/'+bookingId);
+                    }
+                  },
                   child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                     Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
                       Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w600))),
