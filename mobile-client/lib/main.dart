@@ -2161,8 +2161,21 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
               onPressed:driverPhone==null||driverPhone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:driverPhone)),
               icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler le chauffeur'))),
           ],
-          if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))
-            FilledButton.icon(onPressed:()=>context.push('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:Text(t('Suivre la course'))),
+          if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))...[
+            if(x['liveTrackingFresh']==false)
+              Padding(
+                padding:const EdgeInsets.only(bottom:8),
+                child:Text(
+                  t('La dernière position du chauffeur n’est plus à jour. Le suivi se reconnecte automatiquement.'),
+                  style:const TextStyle(color:Colors.black54,fontSize:12),
+                ),
+              ),
+            FilledButton.icon(
+              onPressed:()=>context.push('/live/'+widget.bookingId),
+              icon:const Icon(Icons.map_outlined),
+              label:Text(x['liveTrackingFresh']==false?t('Ouvrir le suivi'):t('Suivre la course')),
+            ),
+          ],
           if(status=='DRIVER_ARRIVED')
             Card(color:const Color(0xFF16A34A),child:Padding(padding:const EdgeInsets.all(16),child:Row(children:[
               const Icon(Icons.directions_car,color:Colors.white,size:28),
