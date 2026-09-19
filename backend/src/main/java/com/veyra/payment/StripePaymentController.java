@@ -54,13 +54,21 @@ public class StripePaymentController {
     if (!existing.isEmpty()) {
       Map<String, Object> p = existing.getFirst();
       PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
-      return Map.of(
-          "paymentId", p.get("id"),
-          "paymentIntentId", pi.getId(),
-          "clientSecret", pi.getClientSecret(),
-          "status", p.get("status"),
-          "amountMinor", p.get("amount_minor"),
-          "currency", p.get("currency"));
+      return paymentResponse(p, pi);
+    }
+
+    // A retry after an app restart can legitimately arrive with a new
+    // Idempotency-Key. Reuse the booking's still-active Stripe payment
+    // instead of creating a second PaymentIntent for the same ride.
+    List<Map<String, Object>> bookingPayment = db.queryForList(
+        "select id,provider_payment_id,status,amount_minor,currency from payments " +
+        "where booking_id=? and payer_user_id=? and method='ONLINE' and status in ('PENDING','CAPTURED') " +
+        "order by created_at desc limit 1",
+        bookingId, CurrentUser.id());
+    if (!bookingPayment.isEmpty()) {
+      Map<String, Object> p = bookingPayment.getFirst();
+      PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
+      return paymentResponse(p, pi);
     }
 
     long amount = ((Number) booking.get("customer_total_amount_minor")).longValue();
@@ -80,6 +88,16 @@ public class StripePaymentController {
         "status", "PENDING",
         "amountMinor", amount,
         "currency", currency);
+  }
+
+  private Map<String, Object> paymentResponse(Map<String, Object> p, PaymentIntent pi) {
+    return Map.of(
+        "paymentId", p.get("id"),
+        "paymentIntentId", pi.getId(),
+        "clientSecret", pi.getClientSecret(),
+        "status", p.get("status"),
+        "amountMinor", p.get("amount_minor"),
+        "currency", p.get("currency"));
   }
 
   @GetMapping("/bookings/{bookingId}")

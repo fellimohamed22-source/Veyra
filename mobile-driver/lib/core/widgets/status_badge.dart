@@ -7,6 +7,7 @@ import '../formatters/status_labels.dart';
 /// la duplication écran par écran.
 Color _bookingStatusColor(String? status) {
   const map = {
+    'DRAFT': VeyraColors.neutral,
     'OPEN_FOR_OFFERS': VeyraColors.warning,
     'OFFERS_RECEIVED': VeyraColors.warning,
     'CONFIRMED': VeyraColors.info,
@@ -18,7 +19,9 @@ Color _bookingStatusColor(String? status) {
     'CANCELLED': VeyraColors.danger,
     'CANCELLED_BY_CLIENT': VeyraColors.danger,
     'CANCELLED_BY_DRIVER': VeyraColors.danger,
+    'DRIVER_CANCELLED': VeyraColors.danger,
     'CUSTOMER_NO_SHOW': VeyraColors.danger,
+    'INCIDENT': VeyraColors.danger,
     'EXPIRED': VeyraColors.neutral,
     'NO_OFFER': VeyraColors.neutral,
     'NO_DRIVER': VeyraColors.neutral,

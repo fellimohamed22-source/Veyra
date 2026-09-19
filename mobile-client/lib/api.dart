@@ -205,6 +205,19 @@ class Api {
   Future<Map<String,dynamic>> bookingDetail(String id) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/scheduled-bookings/$id')).data);
 
+  Future<Map<String,dynamic>> favoriteDriver(String bookingId) async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings/$bookingId/favorite-driver')).data);
+
+  Future<Map<String,dynamic>> repeatDriver(String bookingId) async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings/$bookingId/repeat-driver')).data);
+
+  Future<List<dynamic>> favoriteDrivers() async =>
+      List<dynamic>.from((await dio.get('/api/v1/favorite-drivers')).data);
+
+  Future<void> unfavoriteDriver(String driverId) async {
+    await dio.delete('/api/v1/favorite-drivers/$driverId');
+  }
+
   Future<Map<String,dynamic>> createBooking(Map<String,dynamic> body) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings',data:body)).data);
 

@@ -24,7 +24,10 @@ public class DriverOpportunityController {
 
     List<Map<String,Object>> rows=db.queryForList(
         "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.offer_window_ends_at," +
-        "sb.category_id,vc.display_name as category_name,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.offer_visibility_mode " +
+        "sb.category_id,vc.display_name as category_name,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.offer_visibility_mode," +
+        "ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng," +
+        "ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng," +
+        "round(ST_Distance(sb.pickup,sb.dropoff))::bigint as trip_distance_meters " +
         "from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id " +
         "where sb.id=? and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and sb.offer_window_ends_at>now()",
         bookingId);
@@ -33,20 +36,60 @@ public class DriverOpportunityController {
     }
 
     Map<String,Object> result=new LinkedHashMap<>(rows.getFirst());
+    putCanonical(result,"pickupLat","pickup_lat");
+    putCanonical(result,"pickupLng","pickup_lng");
+    putCanonical(result,"dropoffLat","dropoff_lat");
+    putCanonical(result,"dropoffLng","dropoff_lng");
+    putCanonical(result,"tripDistanceMeters","trip_distance_meters");
+
+    // Objective economics for the driver's own job. current_driver_locations
+    // stores latitude/longitude as scalar columns, so build a geography point
+    // from the latest fix instead of assuming a non-existent geometry column.
+    // Only a recent fix is used: stale GPS must not be presented as precise
+    // approach economics.
+    List<Map<String,Object>> approach=db.queryForList(
+        "select round(ST_Distance(ST_SetSRID(ST_MakePoint(cdl.lng,cdl.lat),4326)::geography,sb.pickup))::bigint as approach_distance_meters," +
+        "cdl.recorded_at as driver_location_recorded_at " +
+        "from current_driver_locations cdl cross join scheduled_bookings sb " +
+        "where sb.id=? and cdl.driver_id=? and cdl.recorded_at>now()-interval '10 minutes'",
+        bookingId,driverId);
+    if(!approach.isEmpty()){
+      result.putAll(approach.getFirst());
+      putCanonical(result,"approachDistanceMeters","approach_distance_meters");
+      putCanonical(result,"driverLocationRecordedAt","driver_location_recorded_at");
+    }
+
     List<Map<String,Object>> ownOffers=db.queryForList(
         "select proposed_amount_minor from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",
         bookingId,driverId);
     result.put("hasActiveOffer",!ownOffers.isEmpty());
     if(!ownOffers.isEmpty())result.put("ownActiveOfferAmountMinor",ownOffers.getFirst().get("proposed_amount_minor"));
-    if("BEST_VISIBLE".equals(result.get("offer_visibility_mode"))){
-      // Same rule as at submission time: lowest price among the OTHER
-      // drivers' active offers only, never an identity, never blocking.
-      Long bestOthers=db.queryForObject(
-          "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",
-          Long.class,bookingId,driverId);
-      result.put("currentBestOtherOfferMinor",bestOthers);
-    }
+
+    // Marketplace transparency: benchmark the current lowest ACTIVE price
+    // from another driver, never the requesting driver's own offer. The
+    // benchmark complements the job economics above; it never dictates what
+    // this driver must propose. Null means there is no competing offer yet.
+    Long bestOthers=db.queryForObject(
+        "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",
+        Long.class,bookingId,driverId);
+    result.put("currentBestOtherOfferMinor",bestOthers);
+    result.put("competitorBenchmarkVisible",true);
+    result.put("pricingDecisionOwner","DRIVER");
+    result.put("pricingGuidance","MARKET_BENCHMARK_AND_JOB_ECONOMICS");
+
     return result;
+  }
+
+  private void putCanonical(Map<String,Object> result,String canonical,String alias){
+    if(result.containsKey(canonical)) return;
+    Object value=null;
+    boolean found=false;
+    for(Map.Entry<String,Object> e:new ArrayList<>(result.entrySet())){
+      if(e.getKey().equalsIgnoreCase(alias)||e.getKey().equalsIgnoreCase(canonical)){
+        value=e.getValue(); found=true; break;
+      }
+    }
+    if(found) result.put(canonical,value);
   }
 
   private UUID driverId(){

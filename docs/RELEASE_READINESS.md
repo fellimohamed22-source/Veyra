@@ -7,7 +7,7 @@ Réservation programmée, offres privées chauffeur, visibilité de toutes les o
 Client et Chauffeur possèdent les parcours principaux, ainsi que les états génériques loading/empty/error/offline documentés. Le web Partner/Admin/Finance/Support est responsive.
 
 ## Sécurité
-Email/password/JWT, refresh rotation, BCrypt, RBAC, object authorization, WebSocket JWT CONNECT, documents privés, PIN hashé + chiffré, secrets par environnement, paramètres SQL, idempotence paiement, aucune offre concurrente exposée aux chauffeurs.
+Email/password/JWT, refresh rotation, BCrypt, RBAC, object authorization, WebSocket JWT CONNECT, documents privés, PIN hashé + chiffré, secrets par environnement, paramètres SQL, idempotence paiement, benchmark du meilleur prix concurrent actif exposé aux chauffeurs uniquement en mode BEST_VISIBLE, sans contrainte sur leur propre prix.
 
 ## Pilote public
 Nécessite des credentials réels pour paiement online, push mobile, SMTP production, éventuellement SMS, ainsi qu'une capacité cartographie/routing adaptée au volume. Les CGU, politique de confidentialité, règles VTC et rétention doivent être validées juridiquement avant production.

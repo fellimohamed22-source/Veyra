@@ -1,9 +1,10 @@
 name: android-apk
+# Trigger V3 APK build and refresh latest-v3-build release.
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/product-marketplace-v3]
     paths:
       - 'mobile-client/**'
       - 'mobile-driver/**'
@@ -176,10 +177,10 @@ jobs:
           # latest debug build" is more useful here than accumulating
           # one release per push. --prerelease marks it clearly as such
           # rather than a real release.
-          gh release delete latest-debug-build-maps-live-tracking-v2 --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest-debug-build-maps-live-tracking-v2 \
+          gh release delete latest-v3-build --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-v3-build \
             veyra-client-debug.apk veyra-driver-debug.apk \
-            --title "Derniers APK de debug (mis à jour automatiquement)" \
+            --title "Veyra V3 latest debug APKs" \
             --notes "Générés automatiquement à chaque push. Non signés pour la Play Store -- build de debug uniquement." \
             --prerelease \
             --target "${{ github.sha }}"

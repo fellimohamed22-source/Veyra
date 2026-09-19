@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
+
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart' as picker;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -37,9 +38,17 @@ void openDriverPush(RemoteMessage message){
   final template=message.data['templateCode'];
   if(template=='NEW_BOOKING'){
     router.go('/request/'+bookingId);
-  }else{
-    router.go('/ride/'+bookingId);
+    return;
   }
+  if(template=='OFFER_ACCEPTED'||template=='BOOKING_REMINDER_24H'||
+     template=='BOOKING_REMINDER_2H'||template=='BOOKING_REMINDER_1H'||
+     template=='BOOKING_REMINDER_15M'||template=='DRIVER_BOOKING_REMINDER'){
+    router.go('/ride/'+bookingId);
+    return;
+  }
+  // Unknown booking-related templates still land on the authoritative
+  // ride detail instead of silently doing nothing.
+  router.go('/ride/'+bookingId);
 }
 
 /// Voir RefreshBus côté client (même fichier main.dart, app soeur) pour
@@ -226,6 +235,12 @@ class _LoginScreenState extends State<LoginScreen>{
     // profile explicitly instead of collapsing that onboarding state into
     // an INTERNAL_ERROR, so technical failures remain retryable here.
     WidgetsBinding.instance.addPostFrameCallback((_)=>_restoreSession());
+  }
+
+  @override void dispose(){
+    email.dispose();
+    password.dispose();
+    super.dispose();
   }
 
   Future<void> _restoreSession()async{
@@ -537,6 +552,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>{
   bool loading=false;
   String? message;
 
+  @override void dispose(){
+    email.dispose();
+    super.dispose();
+  }
+
   Future<void> submit()async{
     setState((){loading=true;message=null;});
     try{
@@ -578,6 +598,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>{
   bool loading=false;
   bool success=false;
   String? error;
+
+  @override void dispose(){
+    token.dispose();
+    newPassword.dispose();
+    super.dispose();
+  }
 
   Future<void> submit()async{
     if(token.text.trim().isEmpty){
@@ -660,6 +686,13 @@ class _KycScreenState extends State<KycScreen>{
     categories=api.vehicleCategories();
   }
 
+  @override void dispose(){
+    for(final controller in [legalName,siren,siret,registrationNumber,cardNumber,brand,model,year,plate,color]){
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> saveProfessionalData()async{
     if(legalName.text.trim().isEmpty||registrationNumber.text.trim().isEmpty||
        cardNumber.text.trim().isEmpty||brand.text.trim().isEmpty||
@@ -700,8 +733,8 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   Future<void> upload(String type)async{
-    final result=await FilePicker.platform.pickFiles(
-      type:FileType.custom,
+    final result=await picker.FilePicker.platform.pickFiles(
+      type:picker.FileType.custom,
       allowedExtensions:['pdf','jpg','jpeg','png'],
     );
     if(result==null||result.files.single.path==null)return;
@@ -777,14 +810,27 @@ class _KycScreenState extends State<KycScreen>{
             ('DRIVING_LICENSE','Permis de conduire'),
             ('INSURANCE','Assurance professionnelle / véhicule'),
             ('VEHICLE_REGISTRATION','Carte grise du véhicule'),
-          ])
-            Card(child:ListTile(
+          ])Builder(builder:(context){
+            final docs=(status['documents'] as List? ?? const []).whereType<Map>().where((d)=>d['type']?.toString()==item.$1).toList();
+            final doc=docs.isEmpty?null:docs.first;
+            final docStatus=doc?['status']?.toString();
+            final rejected=docStatus=='REJECTED';
+            final reason=doc?['rejection_reason_code']?.toString();
+            final sentAt=doc?['created_at'];
+            return Card(child:ListTile(
+              leading:Icon(docStatus=='APPROVED'?Icons.verified_outlined:rejected?Icons.error_outline:docStatus==null?Icons.description_outlined:Icons.schedule_outlined),
               title:Text(item.$2),
-              subtitle:Text(t('PDF, JPG ou PNG — 10 Mo max')),
+              subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(docStatus==null?t('À compléter'):docStatus=='APPROVED'?t('Validé'):rejected?t('Refusé'):t('En vérification')),
+                if(sentAt!=null)Text(t('Envoyé le')+' '+VeyraDateFormatter.dateTime(sentAt),style:const TextStyle(fontSize:12)),
+                if(rejected&&reason!=null)Text(t('Motif')+' : '+reason,style:TextStyle(color:Theme.of(context).colorScheme.error)),
+                if(docStatus==null)Text(t('PDF, JPG ou PNG — 10 Mo max'),style:const TextStyle(fontSize:12)),
+              ]),
               trailing:uploadingType==item.$1
                 ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2))
-                :IconButton(onPressed:()=>upload(item.$1),tooltip:t('Téléverser'),icon:const Icon(Icons.upload_file)),
-            )),
+                :IconButton(onPressed:()=>upload(item.$1),tooltip:t(rejected?'Remplacer':'Téléverser'),icon:Icon(rejected?Icons.refresh:Icons.upload_file)),
+            ));
+          }),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
           if(approved)FilledButton(onPressed:()=>context.go('/home'),child:Text(t('Accéder aux demandes'))),
           if(!approved)Text(
@@ -821,6 +867,8 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   @override void dispose(){
     routeObserver.unsubscribe(this);
     RefreshBus.tick.removeListener(reload);
+    pickupFilter.dispose();
+    destinationFilter.dispose();
     super.dispose();
   }
   // Real gap fixed here: returning from submitting an offer, or from
@@ -848,7 +896,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
       IconButton(onPressed:()=>context.push('/notifications'),tooltip:t('Notifications'),icon:const Icon(Icons.notifications_outlined)),
     ]),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{final refreshed=load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         DropdownButtonFormField<String>(
           initialValue:sort,
@@ -868,7 +916,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
         const SizedBox(height:10),
         ExpansionTile(
           tilePadding:EdgeInsets.zero,
-          title:Text(t('Filtres')),
+          title:Row(children:[Expanded(child:Text(t('Filtres'))),if(pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null)const Icon(Icons.filter_alt,size:18)]),
           children:[
             TextField(controller:pickupFilter,decoration:InputDecoration(labelText:t('Lieu de départ contient'))),
             const SizedBox(height:8),
@@ -901,7 +949,6 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             ]),
           ],
         ),
-        Text(t('Aucun tri par proximité. Les chauffeurs ne voient jamais les prix concurrents.')),
         const SizedBox(height:16),
         FutureBuilder<List<dynamic>>(
           future:future,
@@ -911,18 +958,44 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               ?VeyraOfflineBanner(onRetry:reload)
               :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
             final items=s.data??[];
-            if(items.isEmpty)return Card(child:ListTile(
-              leading:Icon(Icons.inbox_outlined),title:Text(t('Aucune demande ouverte')),
-              subtitle:Text(t('Les nouvelles demandes apparaîtront ici.')),
-            ));
+            if(items.isEmpty){
+              final filtered=pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null;
+              return Card(child:ListTile(
+                leading:const Icon(Icons.inbox_outlined),
+                title:Text(filtered?t('Aucune demande ne correspond aux filtres.'):t('Aucune demande ouverte')),
+                subtitle:Text(filtered?t('Modifiez ou réinitialisez les filtres pour élargir la recherche.'):t('Les nouvelles demandes apparaîtront ici.')),
+                trailing:filtered?TextButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState((){minPassengers=null;page=0;future=load();});},child:Text(t('Réinitialiser'))):null,
+              ));
+            }
             return Column(children:[
               ...items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
               final id=x['id'].toString();
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-              return Card(child:ListTile(
-                title:Text(title),subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                trailing:const Icon(Icons.chevron_right),onTap:()=>context.push('/request/'+id),
+              final tripMeters=(x['trip_distance_meters']??x['tripDistanceMeters']) as num?;
+              final approachMeters=(x['approach_distance_meters']??x['approachDistanceMeters']) as num?;
+              final ownOffer=x['own_offer_amount_minor']??x['ownOfferAmountMinor'];
+              final category=(x['category_name']??x['vehicle_category_name'])?.toString();
+              final passengers=x['passenger_count'];
+              final baggage=x['baggage_count'];
+              String distance(num? meters)=>meters==null?t('Indisponible'):(meters.toDouble()/1000).toStringAsFixed(meters<10000?1:0)+' km';
+              return Card(child:InkWell(
+                borderRadius:BorderRadius.circular(12),
+                onTap:()=>context.push('/request/'+id),
+                child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Row(crossAxisAlignment:CrossAxisAlignment.start,children:[Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w700))),const Icon(Icons.chevron_right)]),
+                  const SizedBox(height:8),
+                  Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                  const SizedBox(height:8),
+                  Wrap(spacing:8,runSpacing:6,children:[
+                    if(category!=null&&category.isNotEmpty)Chip(label:Text(category)),
+                    if(passengers!=null)Chip(avatar:const Icon(Icons.people_outline,size:16),label:Text('$passengers '+t('passager(s)'))),
+                    if(baggage!=null)Chip(avatar:const Icon(Icons.luggage_outlined,size:16),label:Text('$baggage '+t('bagage(s)'))),
+                  ]),
+                  const SizedBox(height:6),
+                  Text(t('Course')+' : '+distance(tripMeters)+' • '+t('Approche')+' : '+distance(approachMeters),style:const TextStyle(color:Colors.black54)),
+                  if(ownOffer!=null)Padding(padding:const EdgeInsets.only(top:6),child:Text(t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(ownOffer),style:const TextStyle(fontWeight:FontWeight.w700))),
+                ])),
               ));
             }).toList(),
               VeyraPaginationBar(
@@ -999,7 +1072,14 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
     required int page,
   }){
     return RefreshIndicator(
-      onRefresh:()async{setState(_load);await future;},
+      onRefresh:()async{
+        late Future<List<dynamic>> refreshed;
+        setState((){
+          _load();
+          refreshed=scope=='active'?active:scope=='won'?won:closed;
+        });
+        await refreshed;
+      },
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
@@ -1033,33 +1113,53 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
               final x=Map<String,dynamic>.from(items[i] as Map);
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               final bookingId=x['booking_id']?.toString();
+              final offerId=x['offer_id']?.toString();
+              final expires=x['expires_at'];
+              final bookingStatus=x['booking_status']?.toString();
+              Future<void> withdraw()async{
+                if(offerId==null)return;
+                final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
+                  title:Text(t('Retirer cette offre ?')),
+                  content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
+                  actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
+                ));
+                if(ok!=true)return;
+                try{await api.withdrawOffer(offerId);if(mounted){setState(_load);ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Offre retirée.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+              }
               return Card(
                 margin:const EdgeInsets.only(bottom:10),
-                child:ListTile(
-                  contentPadding:const EdgeInsets.all(14),
-                  title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
-                  subtitle:Padding(
-                    padding:const EdgeInsets.only(top:6),
-                    child:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                  ),
-                  trailing:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.end,children:[
-                    Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
-                    const SizedBox(height:4),
-                    Text(VeyraStatusLabels.offerStatus(x['status']?.toString()),style:const TextStyle(fontSize:12,color:Colors.black54)),
-                  ]),
+                child:InkWell(
                   onTap:bookingId==null?null:(){
-                    // Fiche D18 : "Offre gagnante -> D19" (réservation
-                    // attribuée), "Demande encore ouverte -> D15" (détail
-                    // demande, où l'offre déjà soumise est visible).
                     if(isWon){
                       context.push('/ride/'+bookingId);
-                    }else{
+                    }else if(scope=='active'){
                       context.push('/request/'+bookingId);
+                    }else{
+                      context.push('/ride/'+bookingId);
                     }
                   },
+                  child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w600))),
+                      const SizedBox(width:8),
+                      Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
+                    ]),
+                    const SizedBox(height:6),
+                    Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54)),
+                    const SizedBox(height:6),
+                    Wrap(spacing:8,runSpacing:6,children:[
+                      Chip(label:Text(VeyraStatusLabels.offerStatus(x['status']?.toString()))),
+                      if(bookingStatus!=null&&bookingStatus.isNotEmpty) VeyraStatusBadge(status:bookingStatus),
+                    ]),
+                    if(expires!=null)Padding(padding:const EdgeInsets.only(top:4),child:Text(t('Expiration')+' : '+VeyraDateFormatter.dateTime(expires),style:const TextStyle(fontSize:12,color:Colors.black54))),
+                    if(scope=='active')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
+                      Expanded(child:OutlinedButton.icon(onPressed:bookingId==null?null:()=>context.push('/request/'+bookingId),icon:const Icon(Icons.edit_outlined),label:Text(t('Modifier')))),
+                      const SizedBox(width:8),
+                      Expanded(child:TextButton.icon(onPressed:offerId==null?null:withdraw,icon:const Icon(Icons.delete_outline),label:Text(t('Retirer')))),
+                    ])),
+                  ])),
                 ),
-              );
-            },
+              );            },
           );
         },
       ),
@@ -1095,10 +1195,55 @@ class _RequestScreenState extends State<RequestScreen>{
   String? error;
   bool isAdjusting=false;
   bool _prefilled=false;
+  Position? _currentPosition;
+  String? _locationEconomicsMessage;
 
   @override void initState(){
     super.initState();
+    amount.addListener(_refreshEconomics);
     detail=api.opportunityDetail(widget.bookingId);
+    _loadEconomicsPosition();
+  }
+
+  void _refreshEconomics(){if(mounted)setState((){});}
+
+  Future<void> _loadEconomicsPosition() async {
+    try{
+      if(!await Geolocator.isLocationServiceEnabled()){
+        if(mounted)setState(()=>_locationEconomicsMessage=t('Activez la localisation pour calculer votre approche.'));
+        return;
+      }
+      var permission=await Geolocator.checkPermission();
+      if(permission==LocationPermission.denied)permission=await Geolocator.requestPermission();
+      if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever){
+        if(mounted)setState(()=>_locationEconomicsMessage=t('Autorisez la localisation pour calculer votre approche.'));
+        return;
+      }
+      final p=await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:10)));
+      if(mounted)setState((){_currentPosition=p;_locationEconomicsMessage=null;});
+    }catch(_){
+      if(mounted)setState(()=>_locationEconomicsMessage=t('Position actuelle indisponible. Touchez Actualiser pour réessayer.'));
+    }
+  }
+
+  dynamic _field(Map<String,dynamic> x,String snake,String camel){
+    if(x.containsKey(snake))return x[snake];
+    if(x.containsKey(camel))return x[camel];
+    final wanted={snake.toLowerCase(),camel.toLowerCase()};
+    for(final e in x.entries){if(wanted.contains(e.key.toLowerCase()))return e.value;}
+    return null;
+  }
+
+  double? _number(dynamic value){
+    if(value is num)return value.toDouble();
+    if(value==null)return null;
+    return double.tryParse(value.toString());
+  }
+
+  @override void dispose(){
+    amount.removeListener(_refreshEconomics);
+    amount.dispose();
+    super.dispose();
   }
 
   Future<void> submit()async{
@@ -1175,22 +1320,63 @@ class _RequestScreenState extends State<RequestScreen>{
           if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
           if(s.hasError)return const SizedBox.shrink();
           final x=s.data??{};
-          final mode=(x['offer_visibility_mode']??'PRIVATE').toString();
-          if(mode=='BEST_VISIBLE'){
-            final bestMinor=x['currentBestOtherOfferMinor'];
-            final subtitle=bestMinor==null
-              ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
-              :t('Meilleure offre actuelle des autres chauffeurs')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor);
-            return Card(child:ListTile(
-              leading:const Icon(Icons.visibility_outlined),
-              title:Text(t('Meilleure offre visible')),
-              subtitle:Text(subtitle),
-            ));
-          }
-          return Card(child:ListTile(
-            leading:const Icon(Icons.visibility_off_outlined),title:Text(t('Offre privée')),
-            subtitle:Text(t('Les offres des autres chauffeurs et le meilleur prix ne sont jamais affichés.')),
-          ));
+          final bestMinor=x['currentBestOtherOfferMinor'];
+          final apiTripMeters=_number(_field(x,'trip_distance_meters','tripDistanceMeters'));
+          final pickupLat=_number(_field(x,'pickup_lat','pickupLat'));
+          final pickupLng=_number(_field(x,'pickup_lng','pickupLng'));
+          final dropoffLat=_number(_field(x,'dropoff_lat','dropoffLat'));
+          final dropoffLng=_number(_field(x,'dropoff_lng','dropoffLng'));
+          final tripMeters=apiTripMeters??(
+            pickupLat!=null&&pickupLng!=null&&dropoffLat!=null&&dropoffLng!=null
+              ?const Distance().as(LengthUnit.Meter,LatLng(pickupLat,pickupLng),LatLng(dropoffLat,dropoffLng))
+              :null);
+          final backendApproachMeters=_number(_field(x,'approach_distance_meters','approachDistanceMeters'));
+          final localApproachMeters=pickupLat!=null&&pickupLng!=null&&_currentPosition!=null
+            ?const Distance().as(LengthUnit.Meter,LatLng(_currentPosition!.latitude,_currentPosition!.longitude),LatLng(pickupLat,pickupLng))
+            :null;
+          final approachMeters=backendApproachMeters??localApproachMeters;
+          final totalMeters=(tripMeters??0)+(approachMeters??0);
+          final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
+          final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
+          final netEuros=typedEuros??(ownMinor==null?null:ownMinor.toDouble()/100);
+          final netPerKm=(netEuros!=null&&totalMeters>0)?netEuros/(totalMeters/1000):null;
+          return Column(children:[
+            Card(child:ListTile(
+              leading:const Icon(Icons.price_check_outlined),
+              title:Text(t('Repère du marché')),
+              subtitle:Text(bestMinor==null
+                ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
+                :t('Prix le plus bas proposé par un autre chauffeur')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor)),
+            )),
+            Card(child:Padding(
+              padding:const EdgeInsets.all(16),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Row(children:[
+                  const Icon(Icons.analytics_outlined),
+                  const SizedBox(width:8),
+                  Text(t('Économie de votre course'),style:const TextStyle(fontWeight:FontWeight.bold)),
+                ]),
+                const SizedBox(height:10),
+                Text(tripMeters==null
+                  ?t('Distance de la course indisponible')
+                  :t('Course')+' : '+VeyraMoneyFormatter.distance(tripMeters)),
+                Text(approachMeters==null
+                  ?(_locationEconomicsMessage??t('Approche : position chauffeur récente indisponible'))
+                  :t('Approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
+                if(approachMeters==null)Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:_loadEconomicsPosition,icon:const Icon(Icons.my_location),label:Text(t('Actualiser ma position')))),
+                if(tripMeters!=null)
+                  Text(t('Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
+                Text(netPerKm==null
+                  ?t('Saisissez votre prix net pour calculer votre net par km.')
+                  :t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
+                const SizedBox(height:6),
+                Text(
+                  t('Ces données et le prix concurrent sont des repères. Vous choisissez librement le montant de votre offre.'),
+                  style:const TextStyle(color:Colors.black54,fontSize:12),
+                ),
+              ]),
+            )),
+          ]);
         },
       ),
       FutureBuilder<Map<String,dynamic>>(
@@ -1277,12 +1463,20 @@ class _AgendaScreenState extends State<AgendaScreen>{
     RefreshBus.tick.addListener(_refresh);
   }
 
-  Future<List<dynamic>> _load()=>api.bookings(
-    scope:'all',
-    page:page,
-    status:status=='ALL'?null:status,
-    sort:sort,
-  );
+  Future<List<dynamic>> _load() async {
+    final rows=await api.bookings(scope:'all',page:page,status:status=='ALL'?null:status,sort:sort);
+    var filtered=rows;
+    if(status!='ALL'){
+      filtered=filtered.where((raw)=>(raw as Map)['status']?.toString().toUpperCase()==status).toList();
+    }
+    filtered.sort((a,b){
+      final ad=DateTime.tryParse(((a as Map)['scheduled_at']??'').toString());
+      final bd=DateTime.tryParse(((b as Map)['scheduled_at']??'').toString());
+      final cmp=(ad==null||bd==null)?0:ad.compareTo(bd);
+      return sort=='desc'?-cmp:cmp;
+    });
+    return filtered;
+  }
   @override void dispose(){
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
@@ -1292,51 +1486,61 @@ class _AgendaScreenState extends State<AgendaScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes courses'))),
     body:RefreshIndicator(
-      onRefresh:()async{_refresh();await future;},
+      onRefresh:()async{final refreshed=_load();setState(()=>future=refreshed);await refreshed;},
       child:ListView(padding:const EdgeInsets.all(16),children:[
-        Row(children:[
-          Expanded(child:DropdownButtonFormField<String>(
-            initialValue:status,
-            decoration:InputDecoration(labelText:t('État')),
-            items:[
-              DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
-              DropdownMenuItem(value:'CONFIRMED',child:Text(t('Confirmée'))),
-              DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('En route'))),
-              DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Arrivé'))),
-              DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
-              DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
-              DropdownMenuItem(value:'CLOSED',child:Text(t('Clôturée'))),
-              DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
-              DropdownMenuItem(value:'DRIVER_CANCELLED',child:Text(t('Annulée par le chauffeur'))),
-              DropdownMenuItem(value:'CUSTOMER_NO_SHOW',child:Text(t('Client absent'))),
-            ],
-            onChanged:(v){
-              if(v==null)return;
-              setState((){
-                status=v;
-                page=0;
-                future=_load();
-              });
-            },
-          )),
-          const SizedBox(width:10),
-          Expanded(child:DropdownButtonFormField<String>(
-            initialValue:sort,
-            decoration:InputDecoration(labelText:t('Date')),
-            items:[
-              DropdownMenuItem(value:'asc',child:Text(t('Plus proches'))),
-              DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
-            ],
-            onChanged:(v){
-              if(v==null)return;
-              setState((){
-                sort=v;
-                page=0;
-                future=_load();
-              });
-            },
-          )),
-        ]),
+        LayoutBuilder(builder:(context,constraints){
+          final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
+          return Wrap(spacing:10,runSpacing:10,children:[
+            SizedBox(width:w,child:DropdownButtonFormField<String>(
+                key:ValueKey('booking-status-$status'),
+                initialValue:status,
+                isExpanded:true,
+                decoration:InputDecoration(labelText:t('État')),
+                items:[
+                  DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
+                  DropdownMenuItem(value:'CONFIRMED',child:Text(t('Confirmée'))),
+                  DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('En route'))),
+                  DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Arrivé'))),
+                  DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
+                  DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
+                  DropdownMenuItem(value:'CLOSED',child:Text(t('Clôturée'))),
+                  DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
+                  DropdownMenuItem(value:'DRIVER_CANCELLED',child:Text(t('Annulée par le chauffeur'))),
+                  DropdownMenuItem(value:'CUSTOMER_NO_SHOW',child:Text(t('Client absent'))),
+                ],
+                onChanged:(v){
+                  if(v==null)return;
+                  setState((){
+                    status=v;
+                    page=0;
+                    future=_load();
+                  });
+                },
+              )),
+            SizedBox(width:w,child:DropdownButtonFormField<String>(
+                key:ValueKey('booking-sort-$sort'),
+                initialValue:sort,
+                isExpanded:true,
+                decoration:InputDecoration(labelText:t('Date')),
+                items:[
+                  DropdownMenuItem(value:'asc',child:Text(t('Plus proches'))),
+                  DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
+                ],
+                onChanged:(v){
+                  if(v==null)return;
+                  setState((){
+                    sort=v;
+                    page=0;
+                    future=_load();
+                  });
+                },
+              )),
+          ]);
+        }),
+        if(status!='ALL'||sort!='asc')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
+          const Icon(Icons.filter_alt_outlined,size:18),const SizedBox(width:6),Expanded(child:Text(t('Filtres actifs'))),
+          TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser'))),
+        ])),
         const SizedBox(height:14),
         FutureBuilder<List<dynamic>>(
           future:future,
@@ -1353,7 +1557,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
             if(items.isEmpty){
               return Center(child:Padding(
                 padding:const EdgeInsets.all(32),
-                child:Text(t('Aucune course confirmée.')),
+                child:Column(mainAxisSize:MainAxisSize.min,children:[Text(status=='ALL'?t('Aucune course pour le moment.'):t('Aucune course ne correspond aux filtres.')),if(status!='ALL'||sort!='asc')TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser les filtres')))]),
               ));
             }
             return Column(children:[
@@ -1374,6 +1578,8 @@ class _AgendaScreenState extends State<AgendaScreen>{
                       Row(children:[
                         VeyraStatusBadge(status:(x['status']??'').toString()),
                         const Spacer(),
+                        Flexible(child:Text((x['status']??'')=='CONFIRMED'?t('Démarrer l’approche'):(x['status']??'')=='DRIVER_EN_ROUTE'?t('Continuer vers le client'):(x['status']??'')=='DRIVER_ARRIVED'?t('Démarrer la course'):(x['status']??'')=='IN_PROGRESS'?t('Continuer la course'):t('Voir le détail'),textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w600,fontSize:12))),
+                        const SizedBox(width:4),
                         const Icon(Icons.chevron_right,color:Colors.black38),
                       ]),
                     ]),
@@ -1422,6 +1628,7 @@ class _RideScreenState extends State<RideScreen>{
   Map<String,dynamic>? etaInfo;
   Map<String,dynamic>? tripEtaInfo;
   DateTime? lastEtaRefresh;
+  int _etaRequest=0;
   int ratingScore=0;
   bool ratingSubmitting=false;
   bool ratingSubmitted=false;
@@ -1528,6 +1735,7 @@ class _RideScreenState extends State<RideScreen>{
   }
 
   Future<void> _refreshEta(Position p) async {
+    final request=++_etaRequest;
     try{
       final booking=await api.bookingDetail(widget.bookingId);
       final status=(booking['status']??'').toString();
@@ -1568,7 +1776,7 @@ class _RideScreenState extends State<RideScreen>{
         activeLeg(),
         customerTrip(),
       ]);
-      if(mounted){
+      if(mounted&&request==_etaRequest){
         setState((){
           etaInfo=results[0];
           tripEtaInfo=results[1];
@@ -1577,7 +1785,7 @@ class _RideScreenState extends State<RideScreen>{
     }catch(_){
       // Route provider failures must not turn into a persistent generic
       // course error. GPS sync and course data remain usable independently.
-      if(mounted){
+      if(mounted&&request==_etaRequest){
         setState((){
           etaInfo=null;
           tripEtaInfo=null;
@@ -1929,7 +2137,7 @@ class _RideScreenState extends State<RideScreen>{
                         ]),
                   )),
                 const SizedBox(height:12),
-                if(status=='DRIVER_EN_ROUTE'&&pickupLat!=null&&pickupLng!=null)
+                if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status)&&pickupLat!=null&&pickupLng!=null)
                   OutlinedButton.icon(
                     onPressed:()=>launchUrl(
                       Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$pickupLat,$pickupLng&travelmode=driving'),
@@ -2060,14 +2268,13 @@ class _WalletScreenState extends State<WalletScreen>{
                     'CUSTOMER_CASH_DEBT_PAID',
                   }.contains(eventType);
                   final amount=VeyraMoneyFormatter.fromMinor(tx['amount_minor']);
+                  final bookingId=tx['booking_id']?.toString();
                   return Card(child:ListTile(
                     leading:Icon(isPositive?Icons.add_circle_outline:Icons.remove_circle_outline,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
                     title:Text(VeyraStatusLabels.ledgerEvent(eventType)),
                     subtitle:Text(VeyraDateFormatter.dateTime(tx['created_at'])),
-                    trailing:Text(
-                      (isPositive?'+ ':'- ')+amount,
-                      style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626)),
-                    ),
+                    trailing:Row(mainAxisSize:MainAxisSize.min,children:[Text((isPositive?'+ ':'- ')+amount,style:TextStyle(fontWeight:FontWeight.bold,color:isPositive?const Color(0xFF16A34A):const Color(0xFFDC2626))),if(bookingId!=null)...[const SizedBox(width:4),const Icon(Icons.chevron_right,size:18)]]),
+                    onTap:bookingId==null?null:()=>context.push('/ride/'+bookingId),
                   ));
                 }),
                 VeyraPaginationBar(
@@ -2522,7 +2729,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{final refreshed=api.notifications(page:page);setState(()=>future=refreshed);await refreshed;},
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){

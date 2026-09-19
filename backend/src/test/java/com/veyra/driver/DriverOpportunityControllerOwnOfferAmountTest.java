@@ -70,8 +70,12 @@ class DriverOpportunityControllerOwnOfferAmountTest {
     asDriver();
     stubEligibleDriver();
     stubBookingRow();
+    when(db.queryForList(contains("ST_MakePoint(cdl.lng,cdl.lat)"), eq(bookingId), eq(driverId)))
+        .thenReturn(List.of());
     when(db.queryForList(contains("select proposed_amount_minor from driver_offers"), eq(bookingId), eq(driverId)))
         .thenReturn(List.of(Map.of("proposed_amount_minor", 5500L)));
+    when(db.queryForObject(contains("select min(proposed_amount_minor)"), eq(Long.class), eq(bookingId), eq(driverId)))
+        .thenReturn(null);
 
     Map<String, Object> result = controller().detail(bookingId);
 
@@ -84,8 +88,12 @@ class DriverOpportunityControllerOwnOfferAmountTest {
     asDriver();
     stubEligibleDriver();
     stubBookingRow();
+    when(db.queryForList(contains("ST_MakePoint(cdl.lng,cdl.lat)"), eq(bookingId), eq(driverId)))
+        .thenReturn(List.of());
     when(db.queryForList(contains("select proposed_amount_minor from driver_offers"), eq(bookingId), eq(driverId)))
         .thenReturn(List.of());
+    when(db.queryForObject(contains("select min(proposed_amount_minor)"), eq(Long.class), eq(bookingId), eq(driverId)))
+        .thenReturn(null);
 
     Map<String, Object> result = controller().detail(bookingId);
 

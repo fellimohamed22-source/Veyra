@@ -53,9 +53,16 @@ public class DriverOnboardingController {
   @GetMapping("/status")
   Map<String, Object> status() {
     UUID driverId = driver();
-    return db.queryForMap(
+    Map<String,Object> result=new LinkedHashMap<>(db.queryForMap(
         "select status,kyc_status,marketplace_enabled,rating from drivers where id=?",
-        driverId);
+        driverId));
+    result.put("documents",db.queryForList(
+        "select id,type,status,original_filename,expires_at,rejection_reason_code,created_at from driver_documents where driver_id=? order by created_at desc",
+        driverId));
+    result.put("vehicles",db.queryForList(
+        "select id,brand,model,year,plate_number,color,status from vehicles where driver_id=? order by created_at desc",
+        driverId));
+    return result;
   }
 
   private UUID driver() {

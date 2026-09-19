@@ -185,6 +185,9 @@ class Api {
     return Map<String,dynamic>.from(r.data);
   }
 
+  Future<void> withdrawOffer(String offerId) async =>
+      dio.delete('/api/v1/driver/offers/$offerId');
+
   Future<Map<String,dynamic>> updateOffer(String bookingId,int amountMinor) async {
     final r=await dio.patch('/api/v1/driver/opportunities/$bookingId/offers',
       data:{'amountMinor':amountMinor,'currency':'EUR'});

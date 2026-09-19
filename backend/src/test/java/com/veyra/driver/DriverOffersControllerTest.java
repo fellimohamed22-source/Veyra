@@ -90,4 +90,12 @@ class DriverOffersControllerTest {
 
     assertThrows(ApiException.class, () -> controller().list("active",0));
   }
+  @Test
+  void rejectsNegativePagesBeforeQueryingDriverData() {
+    ApiException ex=assertThrows(ApiException.class, () -> controller().list("active",-1));
+
+    assertEquals("INVALID_PAGE",ex.code());
+    verify(db,never()).queryForList(anyString(), any(Object[].class));
+  }
+
 }
