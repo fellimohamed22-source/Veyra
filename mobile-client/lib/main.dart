@@ -29,15 +29,17 @@ String t(String french) => AppLocale.t(french);
 
 bool pushHandlersConfigured=false;
 
+String clientNotificationRoute(String bookingId,String? template,Map<String,dynamic> data){
+  if(template=='NEW_OFFER')return '/offers/$bookingId';
+  final status=(data['status']??data['bookingStatus']??'').toString();
+  if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))return '/live/$bookingId';
+  if(template=='PAYMENT_REQUIRED'||status=='PAYMENT_PENDING')return '/payment/$bookingId';
+  return '/booking/$bookingId';
+}
 void openPush(RemoteMessage message){
-  final bookingId=message.data['bookingId'];
-  if(bookingId==null)return;
-  final template=message.data['templateCode'];
-  if(template=='NEW_OFFER'){
-    router.go('/offers/'+bookingId);
-  }else{
-    router.go('/booking/'+bookingId);
-  }
+  final bookingId=message.data['bookingId']?.toString();
+  if(bookingId==null||bookingId.isEmpty)return;
+  router.go(clientNotificationRoute(bookingId,message.data['templateCode']?.toString(),Map<String,dynamic>.from(message.data)));
 }
 
 /// Section 19 (mission UX/fonctionnelle) : "Do not rely on RouteObserver
@@ -369,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
           future:future,
           builder:(context,s){
             if(s.connectionState!=ConnectionState.done){
-              return const Padding(padding:EdgeInsets.all(24),child:Center(child:CircularProgressIndicator()));
+              return const Padding(padding:EdgeInsets.symmetric(vertical:48),child:VeyraLoadingView());
             }
             if(s.hasError){
               final offline=VeyraErrorMessages.isOffline(s.error!);
@@ -390,27 +392,38 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               final scheduled=VeyraDateFormatter.relativeDay(x['scheduled_at']);
               final status=(x['status']??'').toString();
+              final offerPhase={'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status);
               return Card(
-                margin:const EdgeInsets.only(bottom:10),
-                shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),
-                child:ListTile(
-                  contentPadding:const EdgeInsets.all(14),
-                  title:Text(title,style:const TextStyle(fontWeight:FontWeight.w600)),
-                  subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Row(children:[
-                    Expanded(child:Text(scheduled,style:const TextStyle(color:Colors.black54,fontSize:13))),
-                    VeyraStatusBadge(status:status),
-                  ])),
-                  isThreeLine:false,
-                  trailing:const Icon(Icons.chevron_right),
+                margin:const EdgeInsets.only(bottom:12),
+                child:InkWell(
+                  borderRadius:BorderRadius.circular(VeyraRadius.card),
                   onTap:(){
                     final id=x['id']?.toString();
                     if(id==null)return;
-                    if(x['status']=='OPEN_FOR_OFFERS'||x['status']=='OFFERS_RECEIVED'){
-                      context.push('/offers/'+id);
-                    }else{
-                      context.push('/booking/'+id);
-                    }
+                    context.push(offerPhase?'/offers/$id':'/booking/$id');
                   },
+                  child:Padding(
+                    padding:const EdgeInsets.all(18),
+                    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Container(width:42,height:42,decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(12)),child:const Icon(Icons.route_outlined,color:VeyraColors.primary)),
+                        const SizedBox(width:12),
+                        Expanded(child:Text(title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16,height:1.25,color:VeyraColors.textPrimary))),
+                      ]),
+                      const SizedBox(height:14),
+                      Row(children:[
+                        const Icon(Icons.schedule,size:17,color:VeyraColors.textSecondary),
+                        const SizedBox(width:6),
+                        Expanded(child:Text(scheduled,style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
+                        VeyraStatusBadge(status:status),
+                      ]),
+                      const SizedBox(height:14),
+                      Row(mainAxisAlignment:MainAxisAlignment.end,children:[
+                        Text(offerPhase?t('Voir les offres'):t('Voir la réservation'),style:const TextStyle(color:VeyraColors.primary,fontWeight:FontWeight.w800)),
+                        const SizedBox(width:4),const Icon(Icons.arrow_forward_rounded,size:18,color:VeyraColors.primary),
+                      ]),
+                    ]),
+                  ),
                 ),
               );
             }).toList());
@@ -2139,10 +2152,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
                 title:Text(VeyraStatusLabels.notificationTemplate(template)),
                 subtitle:Text(VeyraDateFormatter.dateTime(x['created_at'])),
                 trailing:bookingId==null?null:const Icon(Icons.chevron_right),
-                onTap:bookingId==null?null:(){
-                  if(template=='NEW_OFFER')context.push('/offers/'+bookingId);
-                  else context.push('/booking/'+bookingId);
-                },
+                onTap:bookingId==null?null:()=>context.push(clientNotificationRoute(bookingId,template,data)),
               ));
             },
           );

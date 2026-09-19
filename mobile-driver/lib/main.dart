@@ -32,23 +32,14 @@ String t(String french) => AppLocale.t(french);
 
 bool driverPushHandlersConfigured=false;
 
+String driverNotificationRoute(String bookingId,String? template,Map<String,dynamic> data){
+  if(template=='NEW_BOOKING')return '/request/$bookingId';
+  return '/ride/$bookingId';
+}
 void openDriverPush(RemoteMessage message){
-  final bookingId=message.data['bookingId'];
-  if(bookingId==null)return;
-  final template=message.data['templateCode'];
-  if(template=='NEW_BOOKING'){
-    router.go('/request/'+bookingId);
-    return;
-  }
-  if(template=='OFFER_ACCEPTED'||template=='BOOKING_REMINDER_24H'||
-     template=='BOOKING_REMINDER_2H'||template=='BOOKING_REMINDER_1H'||
-     template=='BOOKING_REMINDER_15M'||template=='DRIVER_BOOKING_REMINDER'){
-    router.go('/ride/'+bookingId);
-    return;
-  }
-  // Unknown booking-related templates still land on the authoritative
-  // ride detail instead of silently doing nothing.
-  router.go('/ride/'+bookingId);
+  final bookingId=message.data['bookingId']?.toString();
+  if(bookingId==null||bookingId.isEmpty)return;
+  router.go(driverNotificationRoute(bookingId,message.data['templateCode']?.toString(),Map<String,dynamic>.from(message.data)));
 }
 
 /// Voir RefreshBus côté client (même fichier main.dart, app soeur) pour
@@ -2738,11 +2729,11 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
             return ListView(children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
           }
           if(s.hasError){
+            final offline=VeyraErrorMessages.isOffline(s.error!);
             return ListView(children:[
               const SizedBox(height:160),
-              const Icon(Icons.cloud_off,size:48),
-              Center(child:Text(t('Notifications indisponibles.'))),
-              Center(child:TextButton(onPressed:reload,child:Text(t('Réessayer')))),
+              if(offline) VeyraOfflineBanner(onRetry:reload)
+              else VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload),
             ]);
           }
           final items=s.data??[];
@@ -2785,10 +2776,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
                 title:Text(VeyraStatusLabels.notificationTemplate(template)),
                 subtitle:Text(VeyraDateFormatter.dateTime(x['created_at'])),
                 trailing:bookingId==null?null:const Icon(Icons.chevron_right),
-                onTap:bookingId==null?null:(){
-                  if(template=='NEW_BOOKING')context.push('/request/'+bookingId);
-                  else context.push('/ride/'+bookingId);
-                },
+                onTap:bookingId==null?null:()=>context.push(driverNotificationRoute(bookingId,template,data)),
               ));
             },
           );

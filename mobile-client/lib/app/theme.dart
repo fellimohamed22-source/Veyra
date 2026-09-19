@@ -54,6 +54,7 @@ class VeyraSpacing {
   static const lg = 16.0;
   static const xl = 20.0;
   static const xxl = 24.0;
+  static const xxxl = 32.0;
 }
 
 /// Rayons déjà utilisés : cartes 12-16, pills/CTA 20-24.
@@ -63,6 +64,7 @@ class VeyraRadius {
   static const md = 12.0;
   static const lg = 16.0;
   static const pill = 24.0;
+  static const card = 20.0;
 }
 
 class VeyraShadows {
@@ -78,21 +80,40 @@ ThemeData veyraTheme() {
     colorSchemeSeed: VeyraColors.primary,
     scaffoldBackgroundColor: VeyraColors.background,
     fontFamily: null, // système par défaut — aucune police custom n'était utilisée avant ce lot.
+    appBarTheme: const AppBarTheme(
+      backgroundColor: VeyraColors.background,
+      foregroundColor: VeyraColors.textPrimary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: TextStyle(color: VeyraColors.primaryDark,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:-0.2),
+    ),
     cardTheme: CardThemeData(
       color: VeyraColors.surface,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(VeyraRadius.lg)),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(VeyraRadius.card),side: const BorderSide(color: VeyraColors.border)),
       margin: EdgeInsets.zero,
     ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: VeyraColors.primary,
-        foregroundColor: Colors.white,
-        minimumSize: const Size.fromHeight(52),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(VeyraRadius.pill)),
-        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-      ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: VeyraColors.surface,
+      indicatorColor: VeyraColors.infoBackground,
+      elevation: 0,
+      height: 68,
+      labelTextStyle: WidgetStateProperty.resolveWith((states)=>TextStyle(color:states.contains(WidgetState.selected)?VeyraColors.primary:VeyraColors.textSecondary,fontSize:12,fontWeight:states.contains(WidgetState.selected)?FontWeight.w800:FontWeight.w600)),
+      iconTheme: WidgetStateProperty.resolveWith((states)=>IconThemeData(color:states.contains(WidgetState.selected)?VeyraColors.primary:VeyraColors.textSecondary)),
     ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(backgroundColor:VeyraColors.primary,foregroundColor:Colors.white,disabledBackgroundColor:VeyraColors.border,disabledForegroundColor:VeyraColors.textTertiary,minimumSize:const Size.fromHeight(54),elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(VeyraRadius.md)),textStyle:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(backgroundColor:VeyraColors.primary,foregroundColor:Colors.white,minimumSize:const Size.fromHeight(52),elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(VeyraRadius.md)),textStyle:const TextStyle(fontWeight:FontWeight.w800,fontSize:15)),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(foregroundColor:VeyraColors.primary,minimumSize:const Size.fromHeight(50),side:const BorderSide(color:VeyraColors.border),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(VeyraRadius.md)),textStyle:const TextStyle(fontWeight:FontWeight.w700,fontSize:15)),
+    ),
+    snackBarTheme: SnackBarThemeData(behavior:SnackBarBehavior.floating,backgroundColor:VeyraColors.textPrimary,contentTextStyle:const TextStyle(color:Colors.white,fontWeight:FontWeight.w600),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(VeyraRadius.md))),
+    dividerTheme:const DividerThemeData(color:VeyraColors.border,space:1),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: VeyraColors.surface,
