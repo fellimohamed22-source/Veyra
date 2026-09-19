@@ -6,15 +6,22 @@ workflows:
     working_directory: mobile-client
     environment:
       flutter: stable
-      # Secrets à configurer dans Codemagic (App settings > Environment
-      # variables), pas dans ce fichier -- même séparation que les
-      # secrets GitHub Actions déjà en place pour ce projet.
-      # GOOGLE_SERVICES_JSON : contenu complet du fichier Firebase Android
-      #   pour com.veyra.client (marquer "Secure" dans Codemagic).
-      # VEYRA_API_BASE_URL : URL du backend (ex: https://veyra-wr6p.onrender.com)
-      # STRIPE_PUBLISHABLE_KEY : clé publique Stripe (marquer "Secure").
+      # Seul GOOGLE_SERVICES_JSON reste à configurer manuellement dans
+      # Codemagic (App settings > Environment variables, marquer "Secure")
+      # -- contenu complet du fichier Firebase Android pour com.veyra.client.
+      # VEYRA_API_BASE_URL et STRIPE_PUBLISHABLE_KEY sont déjà codées en dur
+      # ci-dessous : ni l'une ni l'autre n'est un vrai secret (URL publique
+      # du backend ; clé Stripe PUBLIABLE, conçue pour être visible côté
+      # client) -- choix explicite de l'utilisateur, dépôt privé à usage
+      # personnel.
       vars:
         PACKAGE_NAME: "com.veyra.client"
+        VEYRA_API_BASE_URL: "https://veyra-wr6p.onrender.com"
+        # Clé Stripe PUBLIABLE (pk_test_...) -- conçue par Stripe pour être
+        # embarquée côté client, contrairement à la clé secrète (sk_...).
+        # Codée en dur ici à la demande explicite de l'utilisateur, dépôt
+        # privé à usage personnel.
+        STRIPE_PUBLISHABLE_KEY: "pk_test_51UCQcEIPCTAADW4Ta8UzVc1bYrF9hbyA5re4iAg4bwrncb3bDHdfJnigBuOgqGZLdVz2d8jze040tjd3X8gijgef00No8YQ2b9"
     scripts:
       - name: Use a fixed debug keystore across builds
         script: |
@@ -77,11 +84,13 @@ workflows:
       flutter: stable
       # GOOGLE_SERVICES_JSON ici est le fichier Firebase pour
       # com.veyra.driver -- différent de celui du workflow client
-      # ci-dessus (deux apps Firebase distinctes). VEYRA_API_BASE_URL et
-      # STRIPE_PUBLISHABLE_KEY peuvent être partagées entre les deux
-      # workflows via un groupe de variables Codemagic.
+      # ci-dessus (deux apps Firebase distinctes, à configurer séparément
+      # dans Codemagic). VEYRA_API_BASE_URL et STRIPE_PUBLISHABLE_KEY sont
+      # déjà codées en dur ci-dessous, mêmes valeurs que côté client.
       vars:
         PACKAGE_NAME: "com.veyra.driver"
+        VEYRA_API_BASE_URL: "https://veyra-wr6p.onrender.com"
+        STRIPE_PUBLISHABLE_KEY: "pk_test_51UCQcEIPCTAADW4Ta8UzVc1bYrF9hbyA5re4iAg4bwrncb3bDHdfJnigBuOgqGZLdVz2d8jze040tjd3X8gijgef00No8YQ2b9"
     scripts:
       - name: Use a fixed debug keystore across builds
         script: |
