@@ -1639,7 +1639,18 @@ class _OffersScreenState extends State<OffersScreen>{
     bookingFuture=api.bookingDetail(widget.bookingId);
   }
 
-  Future<void> chooseOffer(String offerId)async{
+  Future<void> chooseOffer(String offerId,{required String driverName,required String vehicle,required dynamic totalMinor})async{
+    final confirmed=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
+      title:Text(t('Confirmer ce chauffeur ?')),
+      content:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text(driverName,style:const TextStyle(fontWeight:FontWeight.bold)),
+        if(vehicle.isNotEmpty)Padding(padding:const EdgeInsets.only(top:6),child:Text(vehicle)),
+        const SizedBox(height:12),
+        Text(t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(totalMinor),style:const TextStyle(fontWeight:FontWeight.bold)),
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Retour'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Choisir ce chauffeur')))],
+    ));
+    if(confirmed!=true)return;
     setState((){acceptingOfferId=offerId;error=null;});
     try{
       await api.accept(widget.bookingId,offerId);
@@ -1731,7 +1742,7 @@ class _OffersScreenState extends State<OffersScreen>{
                 const SizedBox(height:12),
                 SizedBox(width:double.infinity,child:FilledButton(
                   style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-                  onPressed:acceptingOfferId!=null?null:()=>chooseOffer(x['offerId'].toString()),
+                  onPressed:acceptingOfferId!=null?null:()=>chooseOffer(x['offerId'].toString(),driverName:driverName,vehicle:vehicle,totalMinor:x['totalMinor']),
                   child:acceptingOfferId==x['offerId'].toString()
                     ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
                     :Text(t('Choisir')),
