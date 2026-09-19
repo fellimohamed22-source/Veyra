@@ -1630,7 +1630,7 @@ class _RideScreenState extends State<RideScreen>{
     super.dispose();
   }
 
-  void reload()=>setState(()=>future=api.bookingDetail(widget.bookingId));
+  void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
 
   Future<void> submitRating() async {
     if(ratingScore<1)return;
