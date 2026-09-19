@@ -1,4 +1,5 @@
 name: android-apk
+# Trigger V3 APK build and refresh latest-v3-build release.
 
 on:
   workflow_dispatch:
