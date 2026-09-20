@@ -481,16 +481,18 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
   // Le RefreshIndicator (pull-to-refresh) ci-dessous reste disponible en
   // filet de sécurité manuel dans tous les cas. À vérifier/durcir sur un
   // vrai appareil avant mise en production.
-  @override void didChangeDependencies(){
-    super.didChangeDependencies();
-    routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
-  }
+  // This screen lives inside a StatefulShellRoute. Subscribing its
+  // ModalRoute to the root RouteObserver is unsafe: on a real device the
+  // shell can expose a route type/lifecycle that is not the root
+  // PageRoute, and a synchronous exception here leaves the branch with a
+  // blank body even though flutter analyze/tests are green. RefreshBus is
+  // already the explicit cross-navigator refresh mechanism used after a
+  // booking mutation, so keep the home lifecycle independent from the
+  // root observer.
   @override void dispose(){
-    routeObserver.unsubscribe(this);
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
   }
-  @override void didPopNext(){setState(_load);}
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
