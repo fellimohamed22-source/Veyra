@@ -1578,8 +1578,16 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     try{
       final value=await api.pin(widget.bookingId);
       if(mounted)setState(()=>pin=value);
-    }catch(_){
-      if(mounted)setState(()=>message=t('Le PIN sera disponible à H-1.'));
+    }on DioException catch(e){
+      final code=e.response?.data is Map?(e.response?.data as Map)['code']?.toString():null;
+      final text=code=='PIN_NOT_YET_AVAILABLE'
+        ?t('Le PIN sera disponible à H-1.')
+        :code=='PIN_NOT_CREATED'
+          ?t('Le PIN sera créé dès qu’un chauffeur aura été confirmé.')
+          :VeyraErrorMessages.forException(e);
+      if(mounted)setState(()=>message=text);
+    }catch(e){
+      if(mounted)setState(()=>message=t('Impossible de récupérer le PIN pour le moment.'));
     }
   }
 
@@ -1970,7 +1978,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       if(mounted)setState((){location=value;error=null;});
       await refreshEta();
     }catch(_){
-      if(mounted)setState(()=>error=t('Position en cours de mise à jour.'));
+      if(mounted)setState(()=>error=t('La position du chauffeur est momentanément indisponible. Le suivi reprendra automatiquement dès sa prochaine position GPS.'));
     }
   }
 

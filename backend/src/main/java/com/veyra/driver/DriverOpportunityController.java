@@ -24,7 +24,8 @@ public class DriverOpportunityController {
 
     List<Map<String,Object>> rows=db.queryForList(
         "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.offer_window_ends_at," +
-        "sb.category_id,vc.display_name as category_name,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.offer_visibility_mode " +
+        "sb.category_id,vc.display_name as category_name,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.offer_visibility_mode," +
+        "ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng " +
         "from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id " +
         "where sb.id=? and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and sb.offer_window_ends_at>now()",
         bookingId);
