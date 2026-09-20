@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
@@ -1416,6 +1417,7 @@ class _RequestScreenState extends State<RequestScreen>{
               TextField(
                 controller:amount,
                 keyboardType:const TextInputType.numberWithOptions(decimal:true),
+                onChanged:(_)=>setState((){}),
                 decoration:InputDecoration(
                   labelText:t('Votre prix net (€)'),
                   helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
@@ -1430,6 +1432,7 @@ class _RequestScreenState extends State<RequestScreen>{
             TextField(
               controller:amount,
               keyboardType:const TextInputType.numberWithOptions(decimal:true),
+              onChanged:(_)=>setState((){}),
               decoration:InputDecoration(
                 labelText:t('Votre prix net (€)'),
                 helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
@@ -2676,7 +2679,12 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
                 );
               }
               final x=Map<String,dynamic>.from(items[index] as Map);
-              final data=x['data'] is Map?Map<String,dynamic>.from(x['data'] as Map):<String,dynamic>{};
+              final rawData=x['data'];
+              final data=rawData is Map
+                ?Map<String,dynamic>.from(rawData)
+                :rawData is String&&rawData.isNotEmpty
+                  ?(()=>{try{return Map<String,dynamic>.from(jsonDecode(rawData) as Map);}catch(_){return <String,dynamic>{};}})()
+                  :<String,dynamic>{};
               final bookingId=data['bookingId']?.toString();
               final template=(x['template_code']??'').toString();
               final pickup=(x['pickup_address']??'').toString(),dropoff=(x['dropoff_address']??'').toString(),scheduled=x['scheduled_at'];

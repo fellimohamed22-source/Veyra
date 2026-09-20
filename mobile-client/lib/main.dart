@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -2317,7 +2318,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
             separatorBuilder:(_,__)=>const SizedBox(height:8),
             itemBuilder:(context,index){
               final x=Map<String,dynamic>.from(items[index] as Map);
-              final data=x['data'] is Map?Map<String,dynamic>.from(x['data'] as Map):<String,dynamic>{};
+              final rawData=x['data'];
+              final data=rawData is Map
+                ?Map<String,dynamic>.from(rawData)
+                :rawData is String&&rawData.isNotEmpty
+                  ?(()=>{try{return Map<String,dynamic>.from(jsonDecode(rawData) as Map);}catch(_){return <String,dynamic>{};}})()
+                  :<String,dynamic>{};
               final bookingId=data['bookingId']?.toString();
               final template=(x['template_code']??'').toString();
               final pickup=(x['pickup_address']??'').toString(),dropoff=(x['dropoff_address']??'').toString(),scheduled=x['scheduled_at'];
