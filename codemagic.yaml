@@ -42,6 +42,9 @@ workflows:
           flutter create . --platforms=android --project-name veyra_client
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          sed -i '/compileOptions {/a\        isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
+          sed -i 's/dependencies {}/dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}/' android/app/build.gradle.kts
+          grep -q 'isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
 
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
           sed -i '/<manifest /a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
@@ -168,6 +171,9 @@ workflows:
           # résout actuellement à 34.
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          sed -i '/compileOptions {/a\        isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
+          sed -i 's/dependencies {}/dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}/' android/app/build.gradle.kts
+          grep -q 'isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
 
           sed -i 's/namespace = "com.example.veyra_driver"/namespace = "com.veyra.driver"/' android/app/build.gradle.kts
           sed -i 's/applicationId = "com.example.veyra_driver"/applicationId = "com.veyra.driver"/' android/app/build.gradle.kts
