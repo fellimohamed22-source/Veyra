@@ -2342,7 +2342,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
               final data=rawData is Map
                 ?Map<String,dynamic>.from(rawData)
                 :rawData is String&&rawData.isNotEmpty
-                  ?(()=>{try{return Map<String,dynamic>.from(jsonDecode(rawData) as Map);}catch(_){return <String,dynamic>{};}})()
+                  ?((){try{return Map<String,dynamic>.from(jsonDecode(rawData) as Map);}catch(_){return <String,dynamic>{};}})()
                   :<String,dynamic>{};
               final bookingId=data['bookingId']?.toString();
               final template=(x['template_code']??'').toString();
