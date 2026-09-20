@@ -12,6 +12,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
@@ -33,6 +34,50 @@ import 'core/maps/driver_location_tracker.dart';
 String t(String french) => AppLocale.t(french);
 
 bool driverPushHandlersConfigured=false;
+
+/// Same real gap and same fix as the client app -- see its own comment
+/// for the full explanation. A notification+data push is only delivered
+/// to onMessage while the app is foreground, and nothing listened to it.
+final FlutterLocalNotificationsPlugin _driverLocalNotifications=FlutterLocalNotificationsPlugin();
+bool _driverLocalNotificationsInitialized=false;
+
+Future<void> _ensureDriverLocalNotifications(void Function(String payload) onTap)async{
+  if(_driverLocalNotificationsInitialized)return;
+  _driverLocalNotificationsInitialized=true;
+  const androidInit=AndroidInitializationSettings('@mipmap/ic_launcher');
+  await _driverLocalNotifications.initialize(
+    const InitializationSettings(android:androidInit),
+    onDidReceiveNotificationResponse:(response){
+      final payload=response.payload;
+      if(payload!=null)onTap(payload);
+    },
+  );
+  const channel=AndroidNotificationChannel(
+    'veyra_default','Veyra',
+    description:'Notifications Veyra',
+    importance:Importance.high,
+  );
+  await _driverLocalNotifications
+    .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+    ?.createNotificationChannel(channel);
+}
+
+Future<void> _showDriverForegroundPush(RemoteMessage message)async{
+  final notification=message.notification;
+  if(notification==null)return;
+  await _driverLocalNotifications.show(
+    message.hashCode,
+    notification.title,
+    notification.body,
+    const NotificationDetails(android:AndroidNotificationDetails(
+      'veyra_default','Veyra',
+      channelDescription:'Notifications Veyra',
+      importance:Importance.high,
+      priority:Priority.high,
+    )),
+    payload:jsonEncode(message.data),
+  );
+}
 
 String driverNotificationRoute(String bookingId,String? template,Map<String,dynamic> data){
   if(template=='NEW_BOOKING')return '/request/$bookingId';
@@ -57,7 +102,23 @@ class RefreshBus {
 Future<void> configureDriverPush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
-    if(!driverPushHandlersConfigured){driverPushHandlersConfigured=true;FirebaseMessaging.onMessageOpenedApp.listen(openDriverPush);FirebaseMessaging.instance.onTokenRefresh.listen((token)async{try{await api.registerDevice(token,platform:'android');}catch(e){debugPrint('DRIVER_PUSH_TOKEN_REFRESH_FAILED: $e');}});final initial=await FirebaseMessaging.instance.getInitialMessage();if(initial!=null)WidgetsBinding.instance.addPostFrameCallback((_){openDriverPush(initial);});}
+    if(!driverPushHandlersConfigured){
+      driverPushHandlersConfigured=true;
+      FirebaseMessaging.onMessageOpenedApp.listen(openDriverPush);
+      FirebaseMessaging.instance.onTokenRefresh.listen((token)async{try{await api.registerDevice(token,platform:'android');}catch(e){debugPrint('DRIVER_PUSH_TOKEN_REFRESH_FAILED: $e');}});
+      final initial=await FirebaseMessaging.instance.getInitialMessage();
+      if(initial!=null)WidgetsBinding.instance.addPostFrameCallback((_){openDriverPush(initial);});
+      await _ensureDriverLocalNotifications((payload){
+        try{
+          final data=Map<String,dynamic>.from(jsonDecode(payload) as Map);
+          final bookingId=data['bookingId']?.toString();
+          if(bookingId!=null&&bookingId.isNotEmpty){
+            router.go(driverNotificationRoute(bookingId,data['templateCode']?.toString(),data));
+          }
+        }catch(_){}
+      });
+      FirebaseMessaging.onMessage.listen(_showDriverForegroundPush);
+    }
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
     if(token!=null)await api.registerDevice(token,platform:'android');

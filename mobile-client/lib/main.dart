@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:flutter_map/flutter_map.dart';
@@ -31,6 +32,58 @@ import 'core/widgets/pin_display.dart';
 String t(String french) => AppLocale.t(french);
 
 bool pushHandlersConfigured=false;
+
+/// Real, confirmed gap fixed here while investigating "push
+/// notifications don't work": FirebasePushProvider (backend) correctly
+/// sends a combined notification+data message, which Android's system
+/// tray auto-displays in background/terminated state -- but a message
+/// with BOTH a notification and a data payload is delivered ONLY to
+/// FirebaseMessaging.onMessage while the app is in the FOREGROUND, and
+/// nothing was ever listening to that stream. The result: with the app
+/// open (the most common state while actively testing), a push arrived
+/// completely silently -- no banner, no sound, nothing. This plugin
+/// shows a real system notification for exactly that case, so
+/// foreground behavior matches background/terminated behavior.
+final FlutterLocalNotificationsPlugin _localNotifications=FlutterLocalNotificationsPlugin();
+bool _localNotificationsInitialized=false;
+
+Future<void> _ensureLocalNotifications(void Function(String payload) onTap)async{
+  if(_localNotificationsInitialized)return;
+  _localNotificationsInitialized=true;
+  const androidInit=AndroidInitializationSettings('@mipmap/ic_launcher');
+  await _localNotifications.initialize(
+    const InitializationSettings(android:androidInit),
+    onDidReceiveNotificationResponse:(response){
+      final payload=response.payload;
+      if(payload!=null)onTap(payload);
+    },
+  );
+  const channel=AndroidNotificationChannel(
+    'veyra_default','Veyra',
+    description:'Notifications Veyra',
+    importance:Importance.high,
+  );
+  await _localNotifications
+    .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+    ?.createNotificationChannel(channel);
+}
+
+Future<void> _showForegroundPush(RemoteMessage message)async{
+  final notification=message.notification;
+  if(notification==null)return;
+  await _localNotifications.show(
+    message.hashCode,
+    notification.title,
+    notification.body,
+    const NotificationDetails(android:AndroidNotificationDetails(
+      'veyra_default','Veyra',
+      channelDescription:'Notifications Veyra',
+      importance:Importance.high,
+      priority:Priority.high,
+    )),
+    payload:jsonEncode(message.data),
+  );
+}
 
 String clientNotificationRoute(String bookingId,String? template,Map<String,dynamic> data){
   if(template=='NEW_OFFER')return '/offers/$bookingId';
@@ -66,7 +119,23 @@ class RefreshBus {
 Future<void> configurePush() async {
   try{
     if(Firebase.apps.isEmpty)await Firebase.initializeApp();
-    if(!pushHandlersConfigured){pushHandlersConfigured=true;FirebaseMessaging.onMessageOpenedApp.listen(openPush);FirebaseMessaging.instance.onTokenRefresh.listen((token)async{try{await api.registerDevice(token,platform:'android');}catch(e){debugPrint('PUSH_TOKEN_REFRESH_FAILED: $e');}});final initial=await FirebaseMessaging.instance.getInitialMessage();if(initial!=null)WidgetsBinding.instance.addPostFrameCallback((_){openPush(initial);});}
+    if(!pushHandlersConfigured){
+      pushHandlersConfigured=true;
+      FirebaseMessaging.onMessageOpenedApp.listen(openPush);
+      FirebaseMessaging.instance.onTokenRefresh.listen((token)async{try{await api.registerDevice(token,platform:'android');}catch(e){debugPrint('PUSH_TOKEN_REFRESH_FAILED: $e');}});
+      final initial=await FirebaseMessaging.instance.getInitialMessage();
+      if(initial!=null)WidgetsBinding.instance.addPostFrameCallback((_){openPush(initial);});
+      await _ensureLocalNotifications((payload){
+        try{
+          final data=Map<String,dynamic>.from(jsonDecode(payload) as Map);
+          final bookingId=data['bookingId']?.toString();
+          if(bookingId!=null&&bookingId.isNotEmpty){
+            router.go(clientNotificationRoute(bookingId,data['templateCode']?.toString(),data));
+          }
+        }catch(_){}
+      });
+      FirebaseMessaging.onMessage.listen(_showForegroundPush);
+    }
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
     if(token!=null)await api.registerDevice(token,platform:'android');
