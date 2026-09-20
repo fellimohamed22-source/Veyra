@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:ui' show PlatformDispatcher;
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:geolocator/geolocator.dart';
@@ -88,43 +87,8 @@ Future<void> configurePush() async {
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
 
-// runZonedGuarded wraps the whole app startup + lifetime: the broadest,
-// most robust catch-all available in Dart for genuinely uncaught
-// exceptions that escape even FlutterError.onError/
-// PlatformDispatcher.instance.onError (e.g. an error thrown from inside
-// a zone-unaware callback). Kept minimal and separate from the existing
-// startup body below rather than restructuring it, to avoid risking a
-// mistake in code that already works correctly otherwise.
-void main() {
-  runZonedGuarded(() {
-    _mainBody();
-  },(error,stack){
-    debugPrint('UNCAUGHT_ZONE_ERROR: '+error.toString());
-    lastCrash.value='ZONE: '+error.toString();
-  });
-}
-
-Future<void> _mainBody() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Same diagnostic effort as ErrorWidget.builder below, but for the
-  // other class of uncaught exception it does NOT catch: an error
-  // thrown from an async callback (a Future's .then() with no
-  // .catchError, a PlatformException from a native plugin) rather than
-  // during a widget's own build(). Sets lastCrash (shown by App's own
-  // builder: banner, App-root-level so it is visible no matter which
-  // screen was active) in addition to debugPrint, since debugPrint
-  // alone is not visible without adb access, which is not currently
-  // available to confirm which class of exception this actually is.
-  FlutterError.onError=(details){
-    FlutterError.presentError(details);
-    debugPrint('UNCAUGHT_FLUTTER_ERROR: '+details.exceptionAsString());
-    lastCrash.value='FLUTTER: '+details.exceptionAsString();
-  };
-  PlatformDispatcher.instance.onError=(error,stack){
-    debugPrint('UNCAUGHT_PLATFORM_ERROR: '+error.toString());
-    lastCrash.value='PLATFORM: '+error.toString();
-    return true;
-  };
   // Loaded in the background, same principle as the Stripe fix just
   // above: a secure-storage read is normally fast and reliable, but
   // nothing async should ever gate the very first frame after the
@@ -146,26 +110,6 @@ Future<void> _mainBody() async {
     // the app's very first screen.
     unawaited(Stripe.instance.applySettings());
   }
-  // Diagnostic aid added while investigating a real user-reported blank
-  // screen (tapping "Planifier une réservation") with no adb access
-  // available to see the actual exception. Flutter's default
-  // ErrorWidget can render as nothing visible in some release/profile
-  // configurations rather than the red debug screen a `flutter run`
-  // session shows -- this override makes any build-time exception
-  // visible and readable directly on the device, so the next occurrence
-  // can be diagnosed from a screenshot alone. Temporary: remove once the
-  // actual root cause is found and confirmed fixed, not meant to stay
-  // long-term as the app's real error UI.
-  ErrorWidget.builder=(details){
-    lastCrash.value='BUILD: '+details.exceptionAsString();
-    return Material(child:SafeArea(child:SingleChildScrollView(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      const Text('ERREUR DE RENDU (diagnostic temporaire)',style:TextStyle(color:Colors.red,fontWeight:FontWeight.bold,fontSize:16)),
-      const SizedBox(height:12),
-      SelectableText(details.exceptionAsString(),style:const TextStyle(fontSize:13)),
-      const SizedBox(height:12),
-      SelectableText(details.stack?.toString()??'',style:const TextStyle(fontSize:10,color:Colors.black54)),
-    ]))));
-  };
   runApp(const App());
 }
 
@@ -194,8 +138,6 @@ class LanguageSwitch extends StatelessWidget{
 // catches but the normal widget-build error path does not reach
 // (e.g. inside a route transition callback), this is the fallback that
 // still surfaces it visibly.
-final lastCrash=ValueNotifier<String?>(null);
-
 class App extends StatelessWidget{
   const App({super.key});
   @override Widget build(BuildContext context)=>ValueListenableBuilder<String>(
@@ -211,17 +153,6 @@ class App extends StatelessWidget{
         GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig:router,
-      builder:(context,child)=>ValueListenableBuilder<String?>(
-        valueListenable:lastCrash,
-        builder:(context,crash,_)=>Stack(children:[
-          if(child!=null)child,
-          if(crash!=null)Positioned(top:0,left:0,right:0,child:Material(color:Colors.red.shade900,child:SafeArea(bottom:false,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[
-            const Text('ERREUR CAPTURÉE (diagnostic temporaire)',style:TextStyle(color:Colors.white,fontWeight:FontWeight.bold)),
-            const SizedBox(height:6),
-            SelectableText(crash,style:const TextStyle(color:Colors.white,fontSize:12)),
-          ]))))),
-        ]),
-      ),
     ),
   );
 }

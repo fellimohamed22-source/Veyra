@@ -99,6 +99,24 @@ jobs:
           sed -i 's/package com.example.veyra_client/package com.veyra.client/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           rm -rf android/app/src/main/kotlin/com/example
           grep -q 'package com.veyra.client' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          # REAL BUG FOUND AND FIXED, confirmed by the actual exception
+          # captured on a real device via a temporary diagnostic banner
+          # (runZonedGuarded catch, since this comes from an unawaited
+          # Future): "PlatformException(flutter_stripe initialization
+          # failed, ... Your Main Activity class
+          # com.veyra.client.MainActivity is not a subclass
+          # FlutterFragmentActivity. Please make sure you follow all the
+          # steps detailed inside the README:
+          # https://github.com/flutter-stripe/flutter_stripe#android".
+          # flutter create's default template extends plain
+          # FlutterActivity, which flutter_stripe's own Android
+          # integration explicitly does not support -- documented
+          # requirement of the plugin itself, not something flutter
+          # create has any way to know about since it has no awareness
+          # of which plugins the project actually uses.
+          sed -i 's/io.flutter.embedding.android.FlutterActivity/io.flutter.embedding.android.FlutterFragmentActivity/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          sed -i 's/: FlutterActivity()/: FlutterFragmentActivity()/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          grep -q 'FlutterFragmentActivity' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           # Google Services Gradle plugin -- required to actually process
           # google-services.json into usable Android resources; having
           # firebase_core/firebase_messaging as Dart dependencies alone

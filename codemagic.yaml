@@ -58,6 +58,15 @@ workflows:
           sed -i 's/package com.example.veyra_client/package com.veyra.client/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           rm -rf android/app/src/main/kotlin/com/example
           grep -q 'package com.veyra.client' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          # flutter_stripe requires MainActivity to extend
+          # FlutterFragmentActivity, not flutter create's default plain
+          # FlutterActivity -- confirmed by the actual exception captured
+          # on a real device: "Your Main Activity class
+          # com.veyra.client.MainActivity is not a subclass
+          # FlutterFragmentActivity". Same fix as android-apk.yml.
+          sed -i 's/io.flutter.embedding.android.FlutterActivity/io.flutter.embedding.android.FlutterFragmentActivity/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          sed -i 's/: FlutterActivity()/: FlutterFragmentActivity()/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          grep -q 'FlutterFragmentActivity' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
 
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
           grep -q 'com.google.gms.google-services' android/settings.gradle.kts
