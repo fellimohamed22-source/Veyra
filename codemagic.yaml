@@ -42,6 +42,31 @@ workflows:
           flutter create . --platforms=android --project-name veyra_client
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          # REAL, EVIDENCE-BASED CANDIDATE for the persistently-reported
+          # blank AddressScreen: the diagnostic crash banner (wired at
+          # the app's absolute root, catching runZonedGuarded/
+          # FlutterError.onError/PlatformDispatcher.onError/
+          # ErrorWidget.builder combined) showed genuinely nothing on a
+          # real device after a confirmed clean reinstall -- meaning
+          # whatever fails happens below anything Dart can catch.
+          # Flutter 3.47.x enables the Impeller rendering backend by
+          # default on Android, and Impeller has multiple current,
+          # actively-tracked upstream issues (flutter/flutter#185026,
+          # #155973, #160228, among others still open) matching this
+          # exact signature: a blank/white screen with zero Dart-level
+          # error, caused by a native C++ engine failure (Vulkan
+          # texture/surface allocation) on certain GPU/driver
+          # combinations -- a class of failure that, by construction,
+          # cannot be caught by any Dart exception handler, which is
+          # consistent with everything observed so far. Falling back to
+          # the older, far more broadly-compatible Skia renderer via
+          # this documented (though soon-deprecated) manifest flag is
+          # the standard, current mitigation
+          # (docs.flutter.dev/perf/impeller). Not yet confirmed against
+          # a real device -- the next real test is what confirms or
+          # rules this out.
+          sed -i '/android:icon="@mipmap\/ic_launcher">/a\    <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />' android/app/src/main/AndroidManifest.xml
+          grep -q 'io.flutter.embedding.android.EnableImpeller' android/app/src/main/AndroidManifest.xml
           sed -i '/compileOptions {/a\        isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
           printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n' >> android/app/build.gradle.kts
           grep -q 'isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
@@ -180,6 +205,31 @@ workflows:
           # résout actuellement à 34.
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
+          # REAL, EVIDENCE-BASED CANDIDATE for the persistently-reported
+          # blank AddressScreen: the diagnostic crash banner (wired at
+          # the app's absolute root, catching runZonedGuarded/
+          # FlutterError.onError/PlatformDispatcher.onError/
+          # ErrorWidget.builder combined) showed genuinely nothing on a
+          # real device after a confirmed clean reinstall -- meaning
+          # whatever fails happens below anything Dart can catch.
+          # Flutter 3.47.x enables the Impeller rendering backend by
+          # default on Android, and Impeller has multiple current,
+          # actively-tracked upstream issues (flutter/flutter#185026,
+          # #155973, #160228, among others still open) matching this
+          # exact signature: a blank/white screen with zero Dart-level
+          # error, caused by a native C++ engine failure (Vulkan
+          # texture/surface allocation) on certain GPU/driver
+          # combinations -- a class of failure that, by construction,
+          # cannot be caught by any Dart exception handler, which is
+          # consistent with everything observed so far. Falling back to
+          # the older, far more broadly-compatible Skia renderer via
+          # this documented (though soon-deprecated) manifest flag is
+          # the standard, current mitigation
+          # (docs.flutter.dev/perf/impeller). Not yet confirmed against
+          # a real device -- the next real test is what confirms or
+          # rules this out.
+          sed -i '/android:icon="@mipmap\/ic_launcher">/a\    <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />' android/app/src/main/AndroidManifest.xml
+          grep -q 'io.flutter.embedding.android.EnableImpeller' android/app/src/main/AndroidManifest.xml
           sed -i '/compileOptions {/a\        isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
           printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n' >> android/app/build.gradle.kts
           grep -q 'isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
