@@ -89,6 +89,23 @@ final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://1
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Same diagnostic effort as ErrorWidget.builder below, but for the
+  // other class of uncaught exception it does NOT catch: an error
+  // thrown from an async callback (a Future's .then() with no
+  // .catchError, a PlatformException from a native plugin) rather than
+  // during a widget's own build(). Logs loudly via debugPrint so it is
+  // at least visible if the app is ever run attached to any log
+  // collector, and does not rethrow/crash the isolate -- best effort
+  // given no adb access is currently available to confirm which class
+  // of exception this actually is.
+  FlutterError.onError=(details){
+    FlutterError.presentError(details);
+    debugPrint('UNCAUGHT_FLUTTER_ERROR: '+details.exceptionAsString());
+  };
+  PlatformDispatcher.instance.onError=(error,stack){
+    debugPrint('UNCAUGHT_PLATFORM_ERROR: '+error.toString());
+    return true;
+  };
   // Loaded in the background, same principle as the Stripe fix just
   // above: a secure-storage read is normally fast and reliable, but
   // nothing async should ever gate the very first frame after the
@@ -110,6 +127,25 @@ Future<void> main() async {
     // the app's very first screen.
     unawaited(Stripe.instance.applySettings());
   }
+  // Diagnostic aid added while investigating a real user-reported blank
+  // screen (tapping "Planifier une réservation") with no adb access
+  // available to see the actual exception. Flutter's default
+  // ErrorWidget can render as nothing visible in some release/profile
+  // configurations rather than the red debug screen a `flutter run`
+  // session shows -- this override makes any build-time exception
+  // visible and readable directly on the device, so the next occurrence
+  // can be diagnosed from a screenshot alone. Temporary: remove once the
+  // actual root cause is found and confirmed fixed, not meant to stay
+  // long-term as the app's real error UI.
+  ErrorWidget.builder=(details){
+    return Material(child:SafeArea(child:SingleChildScrollView(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      const Text('ERREUR DE RENDU (diagnostic temporaire)',style:TextStyle(color:Colors.red,fontWeight:FontWeight.bold,fontSize:16)),
+      const SizedBox(height:12),
+      SelectableText(details.exceptionAsString(),style:const TextStyle(fontSize:13)),
+      const SizedBox(height:12),
+      SelectableText(details.stack?.toString()??'',style:const TextStyle(fontSize:10,color:Colors.black54)),
+    ]))));
+  };
   runApp(const App());
 }
 
