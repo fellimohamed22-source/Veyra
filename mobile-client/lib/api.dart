@@ -201,7 +201,23 @@ class Api {
 
   Future<Map<String,dynamic>> updateProfile({required String firstName,String? lastName,String? phone})async{final r=await dio.patch('/api/v1/me',data:{'firstName':firstName.trim(),'lastName':lastName?.trim(),'phone':phone?.trim()});_me=Map<String,dynamic>.from(r.data);return _me!;}
   Future<void> changePassword(String old,String next)async=>dio.post('/api/v1/me/password',data:{'currentPassword':old,'newPassword':next});
-  Future<Map<String,dynamic>> uploadAvatar(String path)async{final r=await dio.post('/api/v1/me/avatar',data:FormData.fromMap({'file':await MultipartFile.fromFile(path)}));_me=Map<String,dynamic>.from(r.data);return _me!;}
+  Future<Map<String,dynamic>> uploadAvatar(String path)async{
+    // Real, confirmed bug fixed here: MultipartFile.fromFile(path) without
+    // an explicit contentType defaults to application/octet-stream (Dio's
+    // own documented behavior), which the backend's strict check
+    // (image/jpeg|image/png only) always rejected with AVATAR_IMAGE_REQUIRED.
+    final ext=path.toLowerCase().split('.').last;
+    final mediaType=switch(ext){
+      'png'=>DioMediaType('image','png'),
+      'jpg'||'jpeg'=>DioMediaType('image','jpeg'),
+      _=>DioMediaType('image','jpeg'),
+    };
+    final r=await dio.post('/api/v1/me/avatar',data:FormData.fromMap({
+      'file':await MultipartFile.fromFile(path,contentType:mediaType),
+    }));
+    _me=Map<String,dynamic>.from(r.data);
+    return _me!;
+  }
   Future<Uint8List?> avatarBytes()async{try{final r=await dio.get<List<int>>('/api/v1/me/avatar',options:Options(responseType:ResponseType.bytes));return Uint8List.fromList(r.data??const[]);}catch(_){return null;}}
   Map<String,dynamic>? _me;
   Future<Map<String,dynamic>> me() async {

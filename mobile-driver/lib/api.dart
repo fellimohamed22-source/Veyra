@@ -133,8 +133,16 @@ class Api {
   }
 
   Future<void> changePassword(String old,String next)async=>dio.post('/api/v1/me/password',data:{'currentPassword':old,'newPassword':next});
-  Future<Map<String,dynamic>> uploadAvatar(String path)async{final r=await dio.post('/api/v1/me/avatar',data:FormData.fromMap({'file':await MultipartFile.fromFile(path)}));_me=Map<String,dynamic>.from(r.data);return _me!;}
-  Future<Map<String,dynamic>> uploadAvatarBytes(Uint8List bytes,String filename)async{final r=await dio.post('/api/v1/me/avatar',data:FormData.fromMap({'file':MultipartFile.fromBytes(bytes,filename:filename)}));_me=Map<String,dynamic>.from(r.data);return _me!;}
+  DioMediaType _imageMediaType(String filename){
+    final ext=filename.toLowerCase().split('.').last;
+    return switch(ext){
+      'png'=>DioMediaType('image','png'),
+      'jpg'||'jpeg'=>DioMediaType('image','jpeg'),
+      _=>DioMediaType('image','jpeg'),
+    };
+  }
+  Future<Map<String,dynamic>> uploadAvatar(String path)async{final r=await dio.post('/api/v1/me/avatar',data:FormData.fromMap({'file':await MultipartFile.fromFile(path,contentType:_imageMediaType(path))}));_me=Map<String,dynamic>.from(r.data);return _me!;}
+  Future<Map<String,dynamic>> uploadAvatarBytes(Uint8List bytes,String filename)async{final r=await dio.post('/api/v1/me/avatar',data:FormData.fromMap({'file':MultipartFile.fromBytes(bytes,filename:filename,contentType:_imageMediaType(filename))}));_me=Map<String,dynamic>.from(r.data);return _me!;}
   Future<Uint8List?> avatarBytes()async{try{final r=await dio.get<List<int>>('/api/v1/me/avatar',options:Options(responseType:ResponseType.bytes));return Uint8List.fromList(r.data??const[]);}on DioException catch(e){if(e.response?.statusCode==404)return null;rethrow;}}
   Future<List<dynamic>> documents()async=>List<dynamic>.from((await dio.get('/api/v1/driver/documents')).data);
   // Gap identifié pendant l'audit LOT 4 : contrairement à l'app client,
