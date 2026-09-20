@@ -1526,7 +1526,27 @@ class _PaymentScreenState extends State<PaymentScreen>{
         ),
       );
       await Stripe.instance.presentPaymentSheet();
-      if(mounted)context.go('/home');
+      // Real gap fixed here, found during a UX/business audit: this
+      // used to redirect straight to /home with zero acknowledgment --
+      // someone who just paid real money got no visible confirmation
+      // that it actually went through, only silence. A person who just
+      // committed money needs to see that explicitly, not infer it from
+      // being dropped back on the home screen.
+      if(mounted){
+        await showDialog<void>(
+          context:context,
+          barrierDismissible:false,
+          builder:(dialogContext)=>AlertDialog(
+            icon:const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
+            title:Text(t('Paiement confirmé')),
+            content:Text(t('Votre paiement a bien été pris en compte. Merci !')),
+            actions:[
+              FilledButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Continuer'))),
+            ],
+          ),
+        );
+        if(mounted)context.go('/home');
+      }
     }catch(_){
       if(mounted)setState(()=>error=t('Le paiement n’a pas été finalisé.'));
     }finally{

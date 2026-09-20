@@ -63,6 +63,56 @@ public class StripePaymentController {
           "currency", p.get("currency"));
     }
 
+    // Real bug fixed here, found during a UX/business audit (no crash,
+    // no failing test -- only visible by reading what actually happens
+    // on a retry): the check just above only catches a retry that
+    // reuses the EXACT SAME idempotency key. The mobile client
+    // generates a fresh key on every single call to this endpoint
+    // ('mobile-'+bookingId+'-'+DateTime.now().microsecondsSinceEpoch),
+    // so that check could never actually fire in practice -- a genuine
+    // retry (app closed mid-flow, a network drop right after Stripe
+    // itself already captured the charge but before the app received
+    // confirmation, or simply tapping "Payer maintenant" twice) would
+    // always look like a brand new payment attempt to this endpoint,
+    // creating a second, independent Stripe PaymentIntent for the same
+    // booking. Checking by booking_id instead of only idempotency_key
+    // catches every one of those cases regardless of what key the
+    // client happens to send.
+    List<Map<String, Object>> byBooking = db.queryForList(
+        "select id,provider_payment_id,status,amount_minor,currency from payments " +
+        "where booking_id=? order by created_at desc limit 1",
+        bookingId);
+    if (!byBooking.isEmpty()) {
+      Map<String, Object> p = byBooking.getFirst();
+      String priorStatus = (String) p.get("status");
+      if ("CAPTURED".equals(priorStatus)) {
+        // Already paid for real -- never let a stale client screen
+        // hand the payment sheet a fresh intent for a booking that is
+        // already settled, which would risk a genuine second charge if
+        // the person actually completes it.
+        throw new ApiException(HttpStatus.CONFLICT, "ALREADY_PAID");
+      }
+      if ("PENDING".equals(priorStatus)) {
+        // A prior attempt is still live (awaiting confirmation, or its
+        // outcome simply isn't known yet). Hand back that SAME
+        // PaymentIntent rather than starting a competing one -- this is
+        // also exactly what Stripe's own client SDK expects: resume
+        // confirming the existing intent, don't create a second one
+        // for the same charge.
+        PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
+        return Map.of(
+            "paymentId", p.get("id"),
+            "paymentIntentId", pi.getId(),
+            "clientSecret", pi.getClientSecret(),
+            "status", priorStatus,
+            "amountMinor", p.get("amount_minor"),
+            "currency", p.get("currency"));
+      }
+      // FAILED or CANCELED: genuinely dead, a fresh attempt below is
+      // correct and expected (e.g. the card was declined and the
+      // person wants to try a different one).
+    }
+
     long amount = ((Number) booking.get("customer_total_amount_minor")).longValue();
     String currency = (String) booking.get("currency");
     PaymentIntent pi = stripe.create(amount, currency, bookingId.toString(), idempotencyKey);
