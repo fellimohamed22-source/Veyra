@@ -851,27 +851,24 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
     future=load();
     RefreshBus.tick.addListener(reload);
   }
-  @override void didChangeDependencies(){
-    super.didChangeDependencies();
-    routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
-  }
+  // Even risk, same fix as mobile-client's AccueilScreen/HomeScreen
+  // (137f30f "prevent blank booking navigation screen"): subscribing
+  // this ModalRoute to the root RouteObserver is unsafe inside a
+  // StatefulShellRoute -- the shell's nested navigator can expose a
+  // route type/lifecycle that is not the root PageRoute, and the
+  // `as PageRoute` cast throws a synchronous exception that leaves this
+  // branch with a blank body on a real device, invisible to
+  // flutter analyze/tests since mocked widget tests never exercise the
+  // real shell's nested Navigator. RefreshBus (already wired above) is
+  // the explicit cross-navigator refresh mechanism used after
+  // submitting/withdrawing an offer, so keep this screen's lifecycle
+  // independent from the root observer.
   @override void dispose(){
-    routeObserver.unsubscribe(this);
     RefreshBus.tick.removeListener(reload);
     pickupFilter.dispose();
     destinationFilter.dispose();
     super.dispose();
   }
-  // Real gap fixed here: returning from submitting an offer, or from
-  // anywhere else, never refreshed the request list -- same stale
-  // Future stayed in place until the app was fully closed and reopened.
-  // ATTENTION -- non vérifié sur appareil réel depuis l'introduction du
-  // shell de navigation (LOT 4) : cet écran vit désormais dans le
-  // Navigator imbriqué de sa branche, potentiellement différent du
-  // Navigator racine où /request/:id est réellement poussé/dépilé.
-  // Pull-to-refresh (RefreshIndicator ailleurs) et reload() manuel
-  // restent le filet de sécurité si ce callback ne se déclenche plus.
-  @override void didPopNext(){setState((){future=load();});}
   Future<List<dynamic>> load()=>api.opportunities(
     page:page,
     sort:sort,

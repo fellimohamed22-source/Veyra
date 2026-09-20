@@ -333,28 +333,23 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
   }
   void retry()=>setState((){future=api.bookings();});
 
-  @override void didChangeDependencies(){
-    super.didChangeDependencies();
-    routeObserver.subscribe(this,ModalRoute.of(context) as PageRoute);
-  }
+  // This screen lives inside a StatefulShellRoute, same as AccueilScreen
+  // (see the identical fix there, 137f30f "prevent blank booking
+  // navigation screen"): subscribing its ModalRoute to the root
+  // RouteObserver is unsafe on a real device, where the shell's nested
+  // navigator can expose a route type/lifecycle that is not the root
+  // PageRoute -- the `as PageRoute` cast throws a synchronous exception
+  // that leaves the branch with a blank body, even though
+  // flutter analyze/tests stay green throughout (mocked navigation in
+  // widget tests never exercises the real shell's nested Navigator).
+  // RefreshBus (already wired above) is the explicit cross-navigator
+  // refresh mechanism used after a booking mutation, so keep this
+  // screen's lifecycle independent from the root observer, same as
+  // AccueilScreen.
   @override void dispose(){
-    routeObserver.unsubscribe(this);
     RefreshBus.tick.removeListener(retry);
     super.dispose();
   }
-  // Real gap fixed here: returning to Home after creating a booking,
-  // accepting an offer, or completing a payment never refreshed the
-  // list -- the same stale Future stayed in place until the whole app
-  // was closed and reopened. didPopNext fires precisely when a screen
-  // pushed on top of this one is popped back to it.
-  //
-  // ATTENTION -- même réserve que AccueilScreen depuis l'introduction du
-  // shell de navigation (LOT 4) : cet écran vit désormais dans le
-  // Navigator imbriqué de sa branche, potentiellement différent du
-  // Navigator racine où /addresses, /offers/:id etc. sont réellement
-  // poussés/dépilés. Non vérifié sur appareil réel. RefreshIndicator
-  // reste le filet de sécurité manuel.
-  @override void didPopNext(){retry();}
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
