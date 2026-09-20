@@ -126,6 +126,33 @@ jobs:
           sed -i 's/io.flutter.embedding.android.FlutterActivity/io.flutter.embedding.android.FlutterFragmentActivity/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           sed -i 's/: FlutterActivity()/: FlutterFragmentActivity()/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           grep -q 'FlutterFragmentActivity' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
+          # REAL BUG FOUND AND FIXED, confirmed by the actual exception
+          # captured on a real device (same diagnostic banner as above):
+          # "PlatformException(flutter_stripe initialization failed, The
+          # plugin failed to initialize: Your theme isn't set to use
+          # Theme.AppCompat or Theme.MaterialComponents. ...". This is
+          # the actual real root cause of the reported blank screen --
+          # confirmed via multiple official flutter_stripe sources
+          # (README, troubleshooting docs, several closed issues with
+          # this exact message) that both LaunchTheme and NormalTheme in
+          # every styles.xml variant flutter create generates
+          # (values/, values-night/, and values-v31/ if present -- the
+          # v31 variant exists specifically because it silently
+          # overrides the other two on Android 12+ if left unfixed,
+          # a real gotcha called out directly in flutter_stripe's own
+          # issue tracker) must inherit from Theme.AppCompat or
+          # Theme.MaterialComponents, which flutter create's default
+          # template never does on its own. Matches on the style NAME
+          # rather than the exact current parent value so this stays
+          # correct regardless of which Flutter version's default theme
+          # string is generated.
+          for f in android/app/src/main/res/values/styles.xml android/app/src/main/res/values-night/styles.xml android/app/src/main/res/values-v31/styles.xml; do
+            if [ -f "$f" ]; then
+              sed -i 's#<style name="LaunchTheme" parent="[^"]*">#<style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">#' "$f"
+              sed -i 's#<style name="NormalTheme" parent="[^"]*">#<style name="NormalTheme" parent="Theme.MaterialComponents">#' "$f"
+            fi
+          done
+          grep -q 'Theme.MaterialComponents' android/app/src/main/res/values/styles.xml
           # Google Services Gradle plugin -- required to actually process
           # google-services.json into usable Android resources; having
           # firebase_core/firebase_messaging as Dart dependencies alone
