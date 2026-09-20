@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' show PlatformDispatcher;
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:geolocator/geolocator.dart';
@@ -156,8 +157,29 @@ Future<void> configurePush() async {
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
 
-Future<void> main() async {
+final lastCrash=ValueNotifier<String?>(null);
+
+void main() {
+  runZonedGuarded(() {
+    _mainBody();
+  },(error,stack){
+    debugPrint('UNCAUGHT_ZONE_ERROR: '+error.toString());
+    lastCrash.value='ZONE: '+error.toString();
+  });
+}
+
+Future<void> _mainBody() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError=(details){
+    FlutterError.presentError(details);
+    debugPrint('UNCAUGHT_FLUTTER_ERROR: '+details.exceptionAsString());
+    lastCrash.value='FLUTTER: '+details.exceptionAsString();
+  };
+  PlatformDispatcher.instance.onError=(error,stack){
+    debugPrint('UNCAUGHT_PLATFORM_ERROR: '+error.toString());
+    lastCrash.value='PLATFORM: '+error.toString();
+    return true;
+  };
   // Loaded in the background, same principle as the Stripe fix just
   // above: a secure-storage read is normally fast and reliable, but
   // nothing async should ever gate the very first frame after the
@@ -179,6 +201,23 @@ Future<void> main() async {
     // the app's very first screen.
     unawaited(Stripe.instance.applySettings());
   }
+  // Diagnostic aid, re-added: the blank AddressScreen was reported as
+  // STILL happening after the confirmed, real FlutterFragmentActivity
+  // fix (a2c3919) -- meaning there is a second, separate bug, and this
+  // banner is needed again to see it. Learned from prematurely removing
+  // it last time before the user had fully confirmed the fix worked
+  // end to end: keeping this in place until they explicitly confirm
+  // success this time, not removing it speculatively again.
+  ErrorWidget.builder=(details){
+    lastCrash.value='BUILD: '+details.exceptionAsString();
+    return Material(child:SafeArea(child:SingleChildScrollView(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      const Text('ERREUR DE RENDU (diagnostic temporaire)',style:TextStyle(color:Colors.red,fontWeight:FontWeight.bold,fontSize:16)),
+      const SizedBox(height:12),
+      SelectableText(details.exceptionAsString(),style:const TextStyle(fontSize:13)),
+      const SizedBox(height:12),
+      SelectableText(details.stack?.toString()??'',style:const TextStyle(fontSize:10,color:Colors.black54)),
+    ]))));
+  };
   runApp(const App());
 }
 
@@ -222,6 +261,17 @@ class App extends StatelessWidget{
         GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig:router,
+      builder:(context,child)=>ValueListenableBuilder<String?>(
+        valueListenable:lastCrash,
+        builder:(context,crash,_)=>Stack(children:[
+          if(child!=null)child,
+          if(crash!=null)Positioned(top:0,left:0,right:0,child:Material(color:Colors.red.shade900,child:SafeArea(bottom:false,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[
+            const Text('ERREUR CAPTURÉE (diagnostic temporaire)',style:TextStyle(color:Colors.white,fontWeight:FontWeight.bold)),
+            const SizedBox(height:6),
+            SelectableText(crash,style:const TextStyle(color:Colors.white,fontSize:12)),
+          ]))))),
+        ]),
+      ),
     ),
   );
 }
