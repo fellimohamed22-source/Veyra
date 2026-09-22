@@ -1,9 +1,7 @@
 package com.veyra.auth;
 
-import com.veyra.security.CurrentUser;
 import com.veyra.shared.ApiException;
 import com.veyra.storage.FileStorageProvider;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -11,12 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -30,6 +23,14 @@ import static org.mockito.Mockito.*;
  * -- FilesystemStorageProvider.store() throws a plain
  * IllegalArgumentException, which ApiExceptionHandler had no dedicated
  * handler for, so it fell through to the generic 500 path.
+ *
+ * Neither scenario below ever reaches CurrentUser.id() -- both
+ * rejections (wrong content type, storage-level size/type validation)
+ * happen before that call in avatar()'s own code, so no
+ * SecurityContext stubbing is set up here at all: an earlier draft did
+ * stub it and hit Mockito's strict-stubbing check
+ * (UnnecessaryStubbingException) since the stub was never actually
+ * used by either test path -- removed rather than worked around.
  */
 @ExtendWith(MockitoExtension.class)
 class MeControllerTest {
@@ -42,22 +43,8 @@ class MeControllerTest {
     return new MeController(db, encoder, storage);
   }
 
-  @AfterEach
-  void clearSecurityContext() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private void stubCurrentUser(UUID id) {
-    SecurityContext ctx = mock(SecurityContext.class);
-    when(ctx.getAuthentication()).thenReturn(
-        new UsernamePasswordAuthenticationToken(id, null, java.util.List.of()));
-    SecurityContextHolder.setContext(ctx);
-  }
-
   @Test
   void anOversizedAvatarReturnsACleanBadRequestNotAnOpaqueServerError() throws Exception {
-    UUID userId = UUID.randomUUID();
-    stubCurrentUser(userId);
     MockMultipartFile file = new MockMultipartFile(
         "file", "photo.jpg", "image/jpeg", "not the real bytes, size is what matters here".getBytes());
     // The real storage provider throws IllegalArgumentException for an
@@ -78,8 +65,6 @@ class MeControllerTest {
 
   @Test
   void aWrongContentTypeIsRejectedBeforeEverTouchingStorage() {
-    UUID userId = UUID.randomUUID();
-    stubCurrentUser(userId);
     MockMultipartFile file = new MockMultipartFile(
         "file", "doc.pdf", "application/pdf", "not an image".getBytes());
 
