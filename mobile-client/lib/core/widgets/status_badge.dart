@@ -18,6 +18,7 @@ Color _bookingStatusColor(String? status) {
     'CANCELLED': VeyraColors.danger,
     'CANCELLED_BY_CLIENT': VeyraColors.danger,
     'CANCELLED_BY_DRIVER': VeyraColors.danger,
+    'DRIVER_CANCELLED': VeyraColors.danger,
     'CUSTOMER_NO_SHOW': VeyraColors.danger,
     'EXPIRED': VeyraColors.neutral,
     'NO_OFFER': VeyraColors.neutral,

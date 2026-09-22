@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.time.OffsetDateTime;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -79,13 +80,20 @@ public class FinanceController {
   // never the platform's own counter-entry on the same transaction
   // (PLATFORM_REVENUE, PAYMENT_PROCESSOR_CLEARING, PARTNER_RECEIVABLE),
   // which is none of this driver's business to see.
+  public List<Map<String,Object>> transactions(){return transactions(null,null,null);}
+  public List<Map<String,Object>> transactions(Integer page){return transactions(page,null,null);}
   @GetMapping("/driver/wallet/transactions")
-  public List<Map<String,Object>> transactions() {
+  public List<Map<String,Object>> transactions(@RequestParam(required=false) Integer page,
+      @RequestParam(required=false) OffsetDateTime from,@RequestParam(required=false) OffsetDateTime to) {
     UUID driverId = db.queryForObject(
         "select id from drivers where user_id=?",
         UUID.class,
         CurrentUser.id());
 
+    List<Object> args=new ArrayList<>();args.add(driverId);
+    String period="";
+    if(from!=null){period+=" and lt.created_at>=?";args.add(from);}
+    if(to!=null){period+=" and lt.created_at<=?";args.add(to);}
     return db.queryForList(
         "select lt.id,lt.event_type,lt.description,lt.booking_id,lt.created_at," +
         "le.direction,le.amount_minor,le.currency,a.code as account_code " +
@@ -94,7 +102,7 @@ public class FinanceController {
         "join ledger_accounts a on a.id=le.account_id " +
         "join scheduled_bookings sb on sb.id=lt.booking_id " +
         "where sb.selected_driver_id=? and a.code in ('DRIVER_PAYABLE','DRIVER_PLATFORM_DEBT') " +
-        "order by lt.created_at desc limit 200",
-        driverId);
+        period+" order by lt.created_at desc,lt.id"+(page==null?" limit 200":" limit 10 offset "+(Math.max(0,Math.min(page,100000))*10)),
+        args.toArray());
   }
 }

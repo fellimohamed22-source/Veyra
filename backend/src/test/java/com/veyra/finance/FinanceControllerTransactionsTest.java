@@ -59,6 +59,13 @@ class FinanceControllerTransactionsTest {
     return new FinanceController(db);
   }
 
+  @Test void filtersPeriodBeforeApplyingPagination(){
+    var from=java.time.OffsetDateTime.parse("2026-09-01T00:00:00Z");
+    var to=from.plusDays(7);
+    controller().transactions(2,from,to);
+    verify(db).queryForList(argThat((String sql)->sql.contains("lt.created_at>=?")&&sql.contains("lt.created_at<=?")&&sql.contains("limit 10 offset 20")),eq(driverId),eq(from),eq(to));
+  }
+
   @Test
   void scopesStrictlyToTheCallingDriverAndTheirTwoOwnAccounts() {
     when(db.queryForList(anyString(), eq(driverId)))

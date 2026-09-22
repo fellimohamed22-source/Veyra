@@ -59,7 +59,7 @@ class NoShowControllerTest {
 
   private void stubBooking(UUID selectedDriverId, String status, OffsetDateTime scheduledAt) {
     when(db.queryForMap(contains("from scheduled_bookings where id=? for update"), eq(bookingId)))
-        .thenReturn(Map.of("selected_driver_id", selectedDriverId, "status", status, "scheduled_at", scheduledAt));
+        .thenReturn(Map.of("selected_driver_id", selectedDriverId, "status", status, "scheduled_at", scheduledAt,"arrived_at",scheduledAt));
   }
 
   @Test
@@ -98,6 +98,15 @@ class NoShowControllerTest {
     assertEquals(HttpStatus.TOO_EARLY, ex.status());
     // The fee/compensation split must never be computed for a rejected
     // attempt -- calling it here would be premature at best.
+    verifyNoInteractions(cancellationFinance);
+  }
+
+  @Test
+  void lateArrivalStillRequiresFifteenMinutesOfActualWaiting() {
+    when(db.queryForMap(contains("from scheduled_bookings where id=? for update"),eq(bookingId)))
+        .thenReturn(Map.of("selected_driver_id",driverId,"status","DRIVER_ARRIVED",
+            "scheduled_at",OffsetDateTime.now().minusHours(1),"arrived_at",OffsetDateTime.now().minusMinutes(2)));
+    assertEquals("WAIT_PERIOD_NOT_FINISHED",assertThrows(ApiException.class,()->controller().noShow(bookingId)).code());
     verifyNoInteractions(cancellationFinance);
   }
 

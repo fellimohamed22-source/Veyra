@@ -50,6 +50,7 @@ class BookingControllerOfferVisibilityOverrideTest {
     // ST_Covers branch entirely so this test stays focused on the
     // override logic, not geofencing.
     when(db.queryForObject(contains("from service_zone_versions"), eq(Integer.class))).thenReturn(0);
+    when(db.queryForList(contains("select capacity"),eq(Integer.class),any(UUID.class))).thenReturn(java.util.List.of(4));
   }
 
   @AfterEach

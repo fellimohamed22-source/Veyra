@@ -6,6 +6,7 @@ import com.veyra.shared.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -21,6 +22,7 @@ public class StripePaymentController {
   }
 
   @PostMapping("/bookings/{bookingId}/intent")
+  @Transactional(rollbackFor=Exception.class)
   public Map<String, Object> createIntent(
       @PathVariable UUID bookingId,
       @RequestHeader("Idempotency-Key") String idempotencyKey) throws Exception {
@@ -31,7 +33,7 @@ public class StripePaymentController {
 
     List<Map<String, Object>> rows = db.queryForList(
         "select sb.creator_user_id,sb.payment_method,sb.status,bfs.customer_total_amount_minor,bfs.currency " +
-        "from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=?",
+        "from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=? for update of sb",
         bookingId);
     if (rows.isEmpty()) {
       throw new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND");
@@ -49,11 +51,16 @@ public class StripePaymentController {
     }
 
     List<Map<String, Object>> existing = db.queryForList(
-        "select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?",
+        "select id,booking_id,payer_user_id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?",
         idempotencyKey);
     if (!existing.isEmpty()) {
       Map<String, Object> p = existing.getFirst();
+      if(!bookingId.equals(p.get("booking_id")) || !CurrentUser.id().equals(p.get("payer_user_id")))
+        throw new ApiException(HttpStatus.CONFLICT,"IDEMPOTENCY_KEY_CONFLICT");
+      if("CAPTURED".equals(p.get("status")))throw new ApiException(HttpStatus.CONFLICT,"ALREADY_PAID");
       PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
+      if("succeeded".equals(pi.getStatus()))throw new ApiException(HttpStatus.CONFLICT,"ALREADY_PAID");
+      if("canceled".equals(pi.getStatus()))throw new ApiException(HttpStatus.CONFLICT,"PAYMENT_CANCELED");
       return Map.of(
           "paymentId", p.get("id"),
           "paymentIntentId", pi.getId(),
@@ -92,7 +99,7 @@ public class StripePaymentController {
         // the person actually completes it.
         throw new ApiException(HttpStatus.CONFLICT, "ALREADY_PAID");
       }
-      if ("PENDING".equals(priorStatus)) {
+      if ("PENDING".equals(priorStatus) || "FAILED".equals(priorStatus)) {
         // A prior attempt is still live (awaiting confirmation, or its
         // outcome simply isn't known yet). Hand back that SAME
         // PaymentIntent rather than starting a competing one -- this is
@@ -100,6 +107,8 @@ public class StripePaymentController {
         // confirming the existing intent, don't create a second one
         // for the same charge.
         PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
+        if("succeeded".equals(pi.getStatus()))throw new ApiException(HttpStatus.CONFLICT,"ALREADY_PAID");
+        if(!"canceled".equals(pi.getStatus())){
         return Map.of(
             "paymentId", p.get("id"),
             "paymentIntentId", pi.getId(),
@@ -107,15 +116,15 @@ public class StripePaymentController {
             "status", priorStatus,
             "amountMinor", p.get("amount_minor"),
             "currency", p.get("currency"));
+        }
       }
-      // FAILED or CANCELED: genuinely dead, a fresh attempt below is
-      // correct and expected (e.g. the card was declined and the
-      // person wants to try a different one).
+      // Only a canceled intent cannot be retried. A declined card leaves
+      // the intent reusable with a different payment method.
     }
 
     long amount = ((Number) booking.get("customer_total_amount_minor")).longValue();
     String currency = (String) booking.get("currency");
-    PaymentIntent pi = stripe.create(amount, currency, bookingId.toString(), idempotencyKey);
+    PaymentIntent pi = stripe.create(amount, currency, bookingId.toString(), "booking-"+bookingId+"-after-"+(byBooking.isEmpty()?"initial":byBooking.getFirst().get("id")));
     UUID paymentId = UUID.randomUUID();
 
     db.update(

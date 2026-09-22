@@ -117,7 +117,7 @@ Future<void> configureDriverPush() async {
           }
         }catch(_){}
       });
-      FirebaseMessaging.onMessage.listen(_showDriverForegroundPush);
+      FirebaseMessaging.onMessage.listen((message){RefreshBus.bump();_showDriverForegroundPush(message);});
     }
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
@@ -731,13 +731,28 @@ class _KycScreenState extends State<KycScreen>{
   String? uploadingType;
   String? message;
   bool saving=false;
+  bool prefilled=false;
+  bool hasVehicle=false;
 
   @override void initState(){
     super.initState();
-    future=api.onboardingStatus();
+    future=loadDossier();
     categories=api.vehicleCategories();
   }
 
+  Future<Map<String,dynamic>> loadDossier()async{
+    final result=await api.onboardingStatus();
+    if(!prefilled&&mounted){
+      final companies=(result['company'] as List? ??[]).whereType<Map>();
+      final registrations=(result['registration'] as List? ??[]).whereType<Map>();
+      if(companies.isNotEmpty){final c=companies.first;legalName.text=(c['legal_name']??'').toString();siren.text=(c['siren']??'').toString();siret.text=(c['siret']??'').toString();}
+      if(registrations.isNotEmpty){final c=registrations.first;registrationNumber.text=(c['registration_number']??'').toString();cardNumber.text=(c['card_number']??'').toString();}
+      final vehicles=(result['vehicles'] as List? ??[]).whereType<Map>();
+      if(vehicles.isNotEmpty){final v=vehicles.first;hasVehicle=true;categoryId=v['category_id']?.toString();brand.text=v['brand'].toString();model.text=v['model'].toString();year.text=v['year'].toString();plate.text=v['plate_number'].toString();color.text=(v['color']??'').toString();}
+      prefilled=true;
+    }
+    return result;
+  }
   @override void dispose(){
     for(final controller in [legalName,siren,siret,registrationNumber,cardNumber,brand,model,year,plate,color]){
       controller.dispose();
@@ -746,6 +761,7 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   Future<void> saveProfessionalData()async{
+    if(saving)return;
     if(legalName.text.trim().isEmpty||registrationNumber.text.trim().isEmpty||
        cardNumber.text.trim().isEmpty||brand.text.trim().isEmpty||
        model.text.trim().isEmpty||plate.text.trim().isEmpty||categoryId==null){
@@ -768,7 +784,7 @@ class _KycScreenState extends State<KycScreen>{
         registrationNumber:registrationNumber.text.trim(),
         cardNumber:cardNumber.text.trim(),
       );
-      await api.addVehicle(
+      if(!hasVehicle){await api.addVehicle(
         categoryId:categoryId!,
         brand:brand.text.trim(),
         model:model.text.trim(),
@@ -776,6 +792,7 @@ class _KycScreenState extends State<KycScreen>{
         plateNumber:plate.text.trim(),
         color:color.text.trim(),
       );
+      hasVehicle=true;}
       if(mounted)setState(()=>message=t('Informations professionnelles enregistrées.'));
     }catch(e){
       if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
@@ -810,15 +827,19 @@ class _KycScreenState extends State<KycScreen>{
       future:future,
       builder:(context,s){
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+        if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=loadDossier();}));
         final status=s.data??{};
         final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
 
         return ListView(padding:const EdgeInsets.all(20),children:[
           Card(child:ListTile(
             leading:Icon(approved?Icons.verified:Icons.pending_actions),
-            title:Text(approved?t('Dossier approuvé'):t('Vérification en cours')),
+            title:Text(VeyraStatusLabels.kycStatus(status['kyc_status']?.toString())),
             subtitle:Text(t('Statut du dossier')+' : '+VeyraStatusLabels.kycStatus(status['kyc_status']?.toString())),
           )),
+          if(!approved)Text(t('L’accès aux demandes nécessite un dossier et un véhicule approuvés. Complétez les informations et remplacez les documents refusés.')),
+          for(final v in (status['vehicles'] as List? ??[]).whereType<Map>())Card(child:ListTile(title:Text([v['brand'],v['model'],v['plate_number']].join(' • ')),subtitle:Text([v['color'],v['category_name'],v['status']=='APPROVED'?t('Véhicule validé'):t('Véhicule en attente de validation')].where((x)=>x!=null).join(' • ')))),
+          if(hasVehicle)Text(t('Véhicule enregistré. Contactez le support pour modifier un véhicule soumis à validation.')),
           const SizedBox(height:16),
           const Text('Informations professionnelles',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
           TextField(controller:legalName,decoration:InputDecoration(labelText:t('Raison sociale'))),
@@ -832,9 +853,11 @@ class _KycScreenState extends State<KycScreen>{
             future:categories,
             builder:(context,cs){
               if(cs.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
+              if(cs.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(cs.error!),onRetry:()=>setState((){categories=api.vehicleCategories();}));
               final items=cs.data??[];
               return DropdownButtonFormField<String>(
                 initialValue:categoryId,
+                isExpanded:true,
                 decoration:InputDecoration(labelText:t('Catégorie')),
                 items:items.map((raw){
                   final x=Map<String,dynamic>.from(raw as Map);
@@ -843,15 +866,15 @@ class _KycScreenState extends State<KycScreen>{
                     child:Text((x['display_name']??x['code']).toString()),
                   );
                 }).toList(),
-                onChanged:(v)=>setState(()=>categoryId=v),
+                onChanged:hasVehicle?null:(v)=>setState(()=>categoryId=v),
               );
             },
           ),
-          TextField(controller:brand,decoration:InputDecoration(labelText:t('Marque'))),
-          TextField(controller:model,decoration:InputDecoration(labelText:t('Modèle'))),
-          TextField(controller:year,keyboardType:TextInputType.number,decoration:InputDecoration(labelText:t('Année'))),
-          TextField(controller:plate,decoration:InputDecoration(labelText:t('Immatriculation'))),
-          TextField(controller:color,decoration:InputDecoration(labelText:t('Couleur'))),
+          TextField(enabled:!hasVehicle,controller:brand,decoration:InputDecoration(labelText:t('Marque'))),
+          TextField(enabled:!hasVehicle,controller:model,decoration:InputDecoration(labelText:t('Modèle'))),
+          TextField(enabled:!hasVehicle,controller:year,keyboardType:TextInputType.number,decoration:InputDecoration(labelText:t('Année'))),
+          TextField(enabled:!hasVehicle,controller:plate,decoration:InputDecoration(labelText:t('Immatriculation'))),
+          TextField(enabled:!hasVehicle,controller:color,decoration:InputDecoration(labelText:t('Couleur'))),
           const SizedBox(height:12),
           FilledButton(onPressed:saving?null:saveProfessionalData,child:Text(saving?t('Enregistrement…'):t('Enregistrer les informations'))),
           const SizedBox(height:24),
@@ -901,6 +924,9 @@ class OpportunitiesScreen extends StatefulWidget{
 }
 class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAware{
   String sort='date';
+  String? categoryId;
+  DateTimeRange? dates;
+  late Future<List<dynamic>> categories;
   int page=0;
   final pickupFilter=TextEditingController();
   final destinationFilter=TextEditingController();
@@ -910,6 +936,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   @override void initState(){
     super.initState();
     future=load();
+    categories=api.vehicleCategories();
     RefreshBus.tick.addListener(reload);
   }
   // Even risk, same fix as mobile-client's AccueilScreen/HomeScreen
@@ -936,6 +963,9 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
     pickupQuery:pickupFilter.text,
     destinationQuery:destinationFilter.text,
     minPassengers:minPassengers,
+    categoryId:categoryId,
+    from:dates?.start,
+    to:dates==null?null:dates!.end.add(const Duration(days:1)).subtract(const Duration(microseconds:1)),
   );
   void reload()=>setState((){future=load();});
 
@@ -962,6 +992,8 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
         ),
         const SizedBox(height:14),
         DropdownButtonFormField<String>(
+          key:ValueKey(sort),
+          isExpanded:true,
           initialValue:sort,
           decoration:InputDecoration(labelText:t('Trier les demandes')),
           items:[
@@ -979,13 +1011,25 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
         const SizedBox(height:10),
         ExpansionTile(
           tilePadding:EdgeInsets.zero,
-          title:Row(children:[Expanded(child:Text(t('Filtres'))),if(pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null)const Icon(Icons.filter_alt,size:18)]),
+          title:Row(children:[Expanded(child:Text(t('Filtres'))),if(pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null||categoryId!=null||dates!=null)const Icon(Icons.filter_alt,size:18)]),
           children:[
+            FutureBuilder<List<dynamic>>(future:categories,builder:(context,s){
+              if(s.hasError)return TextButton(onPressed:()=>setState((){categories=api.vehicleCategories();}),child:Text(t('Réessayer le chargement des catégories')));
+              return DropdownButtonFormField<String>(key:ValueKey(categoryId),initialValue:categoryId,isExpanded:true,
+                decoration:InputDecoration(labelText:t('Catégorie')),
+                items:[DropdownMenuItem<String>(value:null,child:Text(t('Toutes'))),...(s.data??[]).map((x)=>DropdownMenuItem<String>(value:x['id'].toString(),child:Text(x['display_name'].toString())))],
+                onChanged:(v)=>setState((){categoryId=v;page=0;future=load();}));
+            }),
+            OutlinedButton.icon(icon:const Icon(Icons.date_range),label:Text(dates==null?t('Toutes les dates'):VeyraDateFormatter.dateTime(dates!.start.toIso8601String())+' – '+VeyraDateFormatter.dateTime(dates!.end.toIso8601String())),onPressed:()async{
+              final chosen=await showDateRangePicker(context:context,firstDate:DateTime.now().subtract(const Duration(days:1)),lastDate:DateTime.now().add(const Duration(days:730)),initialDateRange:dates);
+              if(chosen!=null&&mounted)setState((){dates=chosen;page=0;future=load();});
+            }),
             TextField(controller:pickupFilter,decoration:InputDecoration(labelText:t('Lieu de départ contient'))),
             const SizedBox(height:8),
             TextField(controller:destinationFilter,decoration:InputDecoration(labelText:t('Destination contient'))),
             const SizedBox(height:8),
             DropdownButtonFormField<int?>(
+              key:ValueKey(minPassengers),
               initialValue:minPassengers,
               decoration:InputDecoration(labelText:t('Minimum passagers')),
               items:[DropdownMenuItem<int?>(value:null,child:Text(t('Tous'))), ...List.generate(8,(i)=>DropdownMenuItem<int?>(value:i+1,child:Text('${i+1}+')))],
@@ -997,7 +1041,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
                 pickupFilter.clear();
                 destinationFilter.clear();
                 setState((){
-                  minPassengers=null;
+                  minPassengers=null;sort='date';categoryId=null;dates=null;
                   page=0;
                   future=load();
                 });
@@ -1022,12 +1066,12 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
             final items=s.data??[];
             if(items.isEmpty){
-              final filtered=pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null;
+              final filtered=pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null||categoryId!=null||dates!=null;
               return Card(child:ListTile(
                 leading:const Icon(Icons.inbox_outlined),
                 title:Text(filtered?t('Aucune demande ne correspond aux filtres.'):t('Aucune demande ouverte')),
                 subtitle:Text(filtered?t('Modifiez ou réinitialisez les filtres pour élargir la recherche.'):t('Les nouvelles demandes apparaîtront ici.')),
-                trailing:filtered?TextButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState((){minPassengers=null;page=0;future=load();});},child:Text(t('Réinitialiser'))):null,
+                trailing:filtered?TextButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState((){minPassengers=null;sort='date';categoryId=null;dates=null;page=0;future=load();});},child:Text(t('Réinitialiser'))):null,
               ));
             }
             return Column(children:[
@@ -1113,7 +1157,10 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
     super.initState();
     tabController=TabController(length:3,vsync:this);
     _load();
+    RefreshBus.tick.addListener(refreshOffers);
   }
+
+  void refreshOffers(){if(mounted)setState(_load);}
 
   void _load(){
     active=api.driverOffers(scope:'active',page:activePage);
@@ -1131,6 +1178,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
   }
 
   @override void dispose(){
+    RefreshBus.tick.removeListener(refreshOffers);
     tabController.dispose();
     super.dispose();
   }
@@ -1205,7 +1253,15 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                     }else if(scope=='active'){
                       context.push('/request/'+bookingId);
                     }else{
-                      context.push('/ride/'+bookingId);
+                      showDialog<void>(context:context,builder:(d)=>AlertDialog(
+                        title:Text(t('Détail de mon offre')),
+                        content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                          Text(title),Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                          Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor'])),
+                          Text(VeyraStatusLabels.offerStatus(x['status']?.toString())),
+                        ])),
+                        actions:[TextButton(onPressed:()=>Navigator.pop(d),child:Text(t('Fermer')))],
+                      ));
                     }
                   },
                   child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -1267,12 +1323,31 @@ class _RequestScreenState extends State<RequestScreen>{
   bool _prefilled=false;
   Map<String,dynamic>? _tripEconomics;
   bool _tripEconomicsLoading=false;
+  Map<String,dynamic>? approach;
+  String? approachError;
+  bool approachLoading=false;
+  Future<void> loadApproach({bool requestPermission=false})async{
+    if(approachLoading)return;setState(()=>approachLoading=true);
+    try{
+      if(!await Geolocator.isLocationServiceEnabled())throw StateError('gps');
+      var permission=await Geolocator.checkPermission();
+      if(permission==LocationPermission.denied&&requestPermission)permission=await Geolocator.requestPermission();
+      if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever)throw StateError('permission');
+      final position=await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:15)));
+      final x=await detail;
+      final lat=(x['pickup_lat'] as num?)?.toDouble(),lng=(x['pickup_lng'] as num?)?.toDouble();
+      if(lat==null||lng==null)throw StateError('coordinates');
+      final estimate=await api.routeEstimate(fromLat:position.latitude,fromLng:position.longitude,toLat:lat,toLng:lng);
+      if(mounted)setState((){approach=estimate;approachError=null;});
+    }catch(e){if(mounted)setState((){approach=null;approachError=t('Approche non calculée. Activez et autorisez la localisation, puis réessayez.');});}
+    finally{if(mounted)setState(()=>approachLoading=false);}
+  }
 
   @override void initState(){
     super.initState();
     amount.addListener(_refreshEconomics);
     detail=api.opportunityDetail(widget.bookingId);
-    detail.then(_loadTripEconomics).catchError((_){ });
+    detail.then((x){_loadTripEconomics(x);loadApproach();}).catchError((_){ });
   }
 
   void _refreshEconomics(){if(!mounted)return;setState((){});}
@@ -1300,8 +1375,9 @@ class _RequestScreenState extends State<RequestScreen>{
   }
 
   Future<void> submit()async{
+    if(sending)return;
     final euros=double.tryParse(amount.text.replaceAll(',','.'));
-    if(euros==null||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
+    if(euros==null||!euros.isFinite||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
     setState((){sending=true;error=null;});
     try{
       final amountMinor=(euros*100).round();
@@ -1375,17 +1451,10 @@ class _RequestScreenState extends State<RequestScreen>{
           final x=s.data??{};
           final bestMinor=x['currentBestOtherOfferMinor'];
           final apiTripMeters=_number(_field(x,'trip_distance_meters','tripDistanceMeters'));
-          final pickupLat=_number(_field(x,'pickup_lat','pickupLat'));
-          final pickupLng=_number(_field(x,'pickup_lng','pickupLng'));
-          final dropoffLat=_number(_field(x,'dropoff_lat','dropoffLat'));
-          final dropoffLng=_number(_field(x,'dropoff_lng','dropoffLng'));
-          final tripMeters=apiTripMeters??(
-            pickupLat!=null&&pickupLng!=null&&dropoffLat!=null&&dropoffLng!=null
-              ?const Distance().as(LengthUnit.Meter,LatLng(pickupLat,pickupLng),LatLng(dropoffLat,dropoffLng))
-              :null);
-          final courseMeters=_number(_tripEconomics?['distanceMeters'])??tripMeters;
+          final courseMeters=_number(_tripEconomics?['distanceMeters'])??apiTripMeters;
           final routeSeconds=_number(_tripEconomics?['durationSeconds']);
-          final totalMeters=courseMeters??0;
+          final approachMeters=_number(approach?['distanceMeters']);
+          final totalMeters=courseMeters==null?0:courseMeters+(approachMeters??0);
           final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
           final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
           final netEuros=typedEuros??(ownMinor==null?null:ownMinor.toDouble()/100);
@@ -1410,7 +1479,12 @@ class _RequestScreenState extends State<RequestScreen>{
                 if(_tripEconomicsLoading)const LinearProgressIndicator(),
                 Text(courseMeters==null?t('Distance de la course indisponible'):t('Distance départ → destination')+' : '+VeyraMoneyFormatter.distance(courseMeters)),
                 if(routeSeconds!=null)Text(t('Durée routière estimée')+' : '+VeyraMoneyFormatter.duration(routeSeconds)),
-                Text(t('Calcul basé sur les adresses de départ et d’arrivée, sans utiliser votre position actuelle.'),style:const TextStyle(color:Colors.black54,fontSize:12)),
+                if(approachMeters!=null)Text(t('Distance d’approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
+                if(courseMeters!=null&&approachMeters!=null)Text(t('Distance totale')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
+                if(approachError!=null)Text(approachError!),
+                TextButton.icon(onPressed:approachLoading?null:()=>loadApproach(requestPermission:true),icon:const Icon(Icons.my_location),label:Text(approachLoading?t('Localisation…'):t('Actualiser ma position'))),
+                if(courseMeters==null)TextButton(onPressed:()=>detail.then(_loadTripEconomics),child:Text(t('Réessayer le calcul du trajet'))),
+                if(approachMeters==null)Text(t('Le revenu par km ci-dessous exclut l’approche tant qu’elle ne peut pas être calculée.')),
                 Text(netPerKm==null
                   ?t('Saisissez votre prix net pour calculer votre net par km.')
                   :t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
@@ -1680,6 +1754,8 @@ class _RideScreenState extends State<RideScreen>{
   late final DriverLocationTracker tracker;
   final pin=TextEditingController();
 
+  Timer? statusTimer;
+  bool refreshing=false;
   bool busy=false;
   String? error;
   bool locationSyncError=false;
@@ -1698,14 +1774,27 @@ class _RideScreenState extends State<RideScreen>{
     super.initState();
     future=api.bookingDetail(widget.bookingId);
     tracker=DriverLocationTracker(api:api);
+    statusTimer=Timer.periodic(const Duration(seconds:8),(_)=>refreshStatus());
   }
 
   @override void dispose(){
+    statusTimer?.cancel();
     tracker.dispose();
     pin.dispose();
     super.dispose();
   }
 
+  Future<void> refreshStatus()async{
+    if(refreshing||busy)return;refreshing=true;
+    try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState(()=>future=Future.value(value));}
+    catch(e){if(mounted)setState(()=>error=t('Actualisation interrompue. Réessayez pour vérifier le statut.'));}
+    finally{refreshing=false;}
+  }
+  Future<void> confirmNoShow()async{
+    if(busy)return;
+    final confirmed=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Déclarer le client absent ?')),content:Text(t('Attendez au moins 15 minutes après votre arrivée et l’heure prévue. Appelez ou contactez le client avant de confirmer. Cette déclaration clôture la course et peut entraîner des frais pour le client.')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Continuer à attendre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Client contacté, confirmer son absence')))]));
+    if(confirmed==true&&mounted)await action(()=>api.noShow(widget.bookingId),stopGps:true);
+  }
   void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
 
   Future<void> submitRating() async {
@@ -1882,6 +1971,7 @@ class _RideScreenState extends State<RideScreen>{
     bool startGps=false,
     bool stopGps=false,
   }) async {
+    if(busy)return;
     setState((){
       busy=true;
       error=null;
@@ -2031,6 +2121,10 @@ class _RideScreenState extends State<RideScreen>{
                     (x['dropoff_address']??'Destination').toString(),
                   style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600),
                 ),
+                Text(t('Prise en charge prévue')+' : '+VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
+                if((x['customer_notes']??'').toString().isNotEmpty)Text(t('Remarques')+' : '+x['customer_notes'].toString()),
+                if(status=='DRIVER_ARRIVED')Text(t('Vous êtes arrivé au point de prise en charge. Contactez le client avant toute déclaration d’absence.')),
                 const SizedBox(height:12),
                 Row(children:[
                   Expanded(child:_DriverEtaCard(
@@ -2074,7 +2168,7 @@ class _RideScreenState extends State<RideScreen>{
                 if(paymentMethod=='ONLINE')Card(child:ListTile(
                   leading:const Icon(Icons.credit_card),
                   title:Text(t('Paiement en ligne • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
-                  subtitle:Text(t('Le paiement doit être capturé avant le démarrage de la course.')),
+                  subtitle:Text(x['payment_status']=='CAPTURED'?t('Payé en ligne'):x['payment_status']=='REFUNDED'?t('Remboursé'):t('Paiement non confirmé. Il doit être réglé avant le démarrage.')),
                 )),
                 if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
                   leading:const Icon(Icons.receipt_long),
@@ -2137,8 +2231,8 @@ class _RideScreenState extends State<RideScreen>{
                     child:Text(t('Démarrer la course')),
                   ),
                   TextButton(
-                    onPressed:busy?null:()=>action(()=>api.noShow(widget.bookingId),stopGps:true),
-                    child:Text(t('Signaler un no-show')),
+                    onPressed:busy?null:confirmNoShow,
+                    child:Text(t('Déclarer le client absent')),
                   ),
                 ],
                 if(status=='IN_PROGRESS')
@@ -2247,11 +2341,13 @@ class _WalletScreenState extends State<WalletScreen>{
   late Future<Map<String,dynamic>> future;
   late Future<List<dynamic>> transactionsFuture;
   int transactionsPage=0;
+  DateTimeRange? transactionDates;
+  Future<List<dynamic>> loadTransactions()=>api.walletTransactions(page:transactionsPage,from:transactionDates?.start,to:transactionDates==null?null:transactionDates!.end.add(const Duration(days:1)).subtract(const Duration(microseconds:1)));
 
   @override void initState(){
     super.initState();
     future=api.wallet();
-    transactionsFuture=api.walletTransactions(page:transactionsPage);
+    transactionsFuture=loadTransactions();
     RefreshBus.tick.addListener(_refresh);
   }
   @override void dispose(){
@@ -2260,7 +2356,7 @@ class _WalletScreenState extends State<WalletScreen>{
   }
   void _refresh()=>setState((){
     future=api.wallet();
-    transactionsFuture=api.walletTransactions(page:transactionsPage);
+    transactionsFuture=loadTransactions();
   });
 
   @override Widget build(BuildContext context)=>Scaffold(
@@ -2291,7 +2387,7 @@ class _WalletScreenState extends State<WalletScreen>{
             const Icon(Icons.account_balance_wallet_outlined,color:Color(0xFF16A34A),size:28),
             const SizedBox(width:14),
             Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('À recevoir (ONLINE)'),style:const TextStyle(color:Colors.black54,fontSize:13)),
+              Text(t('Paiements en ligne à recevoir'),style:const TextStyle(color:Colors.black54,fontSize:13)),
               const SizedBox(height:2),
               Text(VeyraMoneyFormatter.fromMinor(x['onlinePayableMinor']),style:const TextStyle(color:Color(0xFF16A34A),fontSize:22,fontWeight:FontWeight.w900)),
             ])),
@@ -2301,7 +2397,7 @@ class _WalletScreenState extends State<WalletScreen>{
             const Icon(Icons.warning_amber_rounded,color:Color(0xFFDC2626),size:28),
             const SizedBox(width:14),
             Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Dette commission CASH'),style:const TextStyle(color:Colors.black54,fontSize:13)),
+              Text(t('Commissions espèces à reverser'),style:const TextStyle(color:Colors.black54,fontSize:13)),
               const SizedBox(height:2),
               Text(VeyraMoneyFormatter.fromMinor(x['cashDebtMinor']),style:const TextStyle(color:Color(0xFFDC2626),fontSize:22,fontWeight:FontWeight.w900)),
             ])),
@@ -2316,6 +2412,11 @@ class _WalletScreenState extends State<WalletScreen>{
           )),
           const SizedBox(height:20),
           Text(t('Transactions'),style:const TextStyle(fontSize:16,fontWeight:FontWeight.w600)),
+          OutlinedButton.icon(icon:const Icon(Icons.date_range),label:Text(transactionDates==null?t('Toutes les dates'):VeyraDateFormatter.dateTime(transactionDates!.start.toIso8601String())+' – '+VeyraDateFormatter.dateTime(transactionDates!.end.toIso8601String())),onPressed:()async{
+            final chosen=await showDateRangePicker(context:context,firstDate:DateTime(2020),lastDate:DateTime.now(),initialDateRange:transactionDates);
+            if(chosen!=null&&mounted)setState((){transactionDates=chosen;transactionsPage=0;transactionsFuture=loadTransactions();});
+          }),
+          if(transactionDates!=null)TextButton(onPressed:()=>setState((){transactionDates=null;transactionsPage=0;transactionsFuture=loadTransactions();}),child:Text(t('Réinitialiser la période'))),
           const SizedBox(height:8),
           FutureBuilder<List<dynamic>>(
             future:transactionsFuture,
@@ -2327,7 +2428,7 @@ class _WalletScreenState extends State<WalletScreen>{
                 return Card(child:ListTile(
                   leading:const Icon(Icons.cloud_off),
                   title:Text(t('Historique indisponible')),
-                  trailing:TextButton(onPressed:()=>setState((){transactionsFuture=api.walletTransactions(page:transactionsPage);}),child:Text(t('Réessayer'))),
+                  trailing:TextButton(onPressed:()=>setState((){transactionsFuture=loadTransactions();}),child:Text(t('Réessayer'))),
                 ));
               }
               final items=ts.data??[];
@@ -2372,13 +2473,13 @@ class _WalletScreenState extends State<WalletScreen>{
                   onPrevious:(){
                     setState((){
                       transactionsPage--;
-                      transactionsFuture=api.walletTransactions(page:transactionsPage);
+                      transactionsFuture=loadTransactions();
                     });
                   },
                   onNext:(){
                     setState((){
                       transactionsPage++;
-                      transactionsFuture=api.walletTransactions(page:transactionsPage);
+                      transactionsFuture=loadTransactions();
                     });
                   },
                 ),
@@ -2545,6 +2646,8 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
   final scrollController=ScrollController();
   final List<Map<String,dynamic>> messages=[];
   String? myUserId;
+  Map<String,dynamic>? chatBooking;
+  Future<void> loadChatBooking()async{try{final b=await api.bookingDetail(widget.bookingId);if(mounted)setState(()=>chatBooking=b);}catch(_){}}
   bool loading=true;
   bool loadError=false;
   bool sending=false;
@@ -2555,11 +2658,13 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
   @override void initState(){
     super.initState();
     _load();
+    loadChatBooking();
     fallbackPoller=Timer.periodic(const Duration(seconds:5),(_)=>_pollForNewMessages());
   }
 
   Future<void> _pollForNewMessages()async{
     if(!mounted)return;
+    loadChatBooking();
     try{
       final history=await api.chatMessages(widget.bookingId);
       if(!mounted)return;
@@ -2656,6 +2761,11 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
       backgroundColor:const Color(0xFFF2F6FB),
       appBar:AppBar(title:Text(t('Chat Veyra'))),
       body:Column(children:[
+        if(chatBooking!=null)ListTile(
+          title:Text((chatBooking?['customer_name']??t('Votre interlocuteur')).toString()),
+          subtitle:Text((chatBooking?['pickup_address']??'').toString()+' → '+(chatBooking?['dropoff_address']??'').toString()),
+          trailing:VeyraStatusBadge(status:chatBooking?['status']?.toString()??''),
+        ),
         Expanded(child:
           loading?const Center(child:CircularProgressIndicator())
           :loadError?Center(child:FilledButton(onPressed:_load,child:Text(t('Réessayer'))))

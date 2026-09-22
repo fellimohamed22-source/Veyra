@@ -3,6 +3,11 @@ package com.veyra.driver;import com.veyra.security.CurrentUser;import org.spring
  @PutMapping("/company")void company(@RequestBody Company c){UUID d=driver();db.update("insert into driver_companies(driver_id,siren,siret,legal_name) values (?,?,?,?) on conflict(driver_id) do update set siren=excluded.siren,siret=excluded.siret,legal_name=excluded.legal_name",d,c.siren(),c.siret(),c.legalName());}
  @PutMapping("/vtc")void vtc(@RequestBody Vtc v){UUID d=driver();db.update("insert into driver_vtc_registrations(driver_id,registration_number,card_number,issued_at,expires_at) values (?,?,?,?,?) on conflict(driver_id) do update set registration_number=excluded.registration_number,card_number=excluded.card_number,issued_at=excluded.issued_at,expires_at=excluded.expires_at",d,v.registrationNumber(),v.cardNumber(),v.issuedAt(),v.expiresAt());}
  @PostMapping("/vehicles")Map<String,UUID>vehicle(@RequestBody Vehicle v){UUID id=UUID.randomUUID();db.update("insert into vehicles(id,driver_id,category_id,brand,model,year,plate_number,color) values (?,?,?,?,?,?,?,?)",id,driver(),v.categoryId(),v.brand(),v.model(),v.year(),v.plateNumber(),v.color());return Map.of("vehicleId",id);}
- @GetMapping("/status")Map<String,Object>status(){UUID d=driver();return db.queryForMap("select status,kyc_status,marketplace_enabled,rating from drivers where id=?",d);}
+ @GetMapping("/status")Map<String,Object>status(){UUID d=driver();Map<String,Object> result=new LinkedHashMap<>(db.queryForMap("select status,kyc_status,marketplace_enabled,rating from drivers where id=?",d));
+ result.put("documents",db.queryForList("select id,type,status,rejection_reason_code,created_at,expires_at from driver_documents where driver_id=? and status<>'SUPERSEDED' order by created_at desc",d));
+ result.put("vehicles",db.queryForList("select v.id,v.category_id,v.brand,v.model,v.year,v.plate_number,v.color,v.status,vc.display_name as category_name from vehicles v join vehicle_categories vc on vc.id=v.category_id where v.driver_id=? order by case when v.status='APPROVED' then 0 else 1 end,v.id",d));
+ result.put("company",db.queryForList("select legal_name,siren,siret,status from driver_companies where driver_id=?",d));
+ result.put("registration",db.queryForList("select registration_number,card_number from driver_vtc_registrations where driver_id=?",d));
+ return result;}
  private UUID driver(){return db.queryForObject("select id from drivers where user_id=?",UUID.class,CurrentUser.id());}
 }

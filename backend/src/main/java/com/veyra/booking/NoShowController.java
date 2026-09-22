@@ -36,7 +36,7 @@ public class NoShowController {
         UUID.class,CurrentUser.id());
 
     Map<String,Object> booking=db.queryForMap(
-        "select selected_driver_id,status,scheduled_at from scheduled_bookings where id=? for update",
+        "select selected_driver_id,status,scheduled_at,(select max(created_at) from booking_status_history where booking_id=scheduled_bookings.id and to_status='DRIVER_ARRIVED') as arrived_at from scheduled_bookings where id=? for update",
         id);
 
     if(!driverId.equals(booking.get("selected_driver_id")) ||
@@ -44,8 +44,11 @@ public class NoShowController {
       throw new ApiException(HttpStatus.FORBIDDEN,"NO_SHOW_NOT_ALLOWED");
     }
 
-    if(OffsetDateTime.now().isBefore(
-        DbTime.toOffsetDateTime(booking.get("scheduled_at")).plusMinutes(15))){
+    OffsetDateTime scheduled=DbTime.toOffsetDateTime(booking.get("scheduled_at"));
+    OffsetDateTime arrived=DbTime.toOffsetDateTime(booking.get("arrived_at"));
+    if(arrived==null)throw new ApiException(HttpStatus.CONFLICT,"ARRIVAL_TIME_UNAVAILABLE");
+    OffsetDateTime waitFrom=arrived.isAfter(scheduled)?arrived:scheduled;
+    if(OffsetDateTime.now().isBefore(waitFrom.plusMinutes(15))){
       throw new ApiException(HttpStatus.TOO_EARLY,"WAIT_PERIOD_NOT_FINISHED");
     }
 

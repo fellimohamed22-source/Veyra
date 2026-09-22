@@ -48,6 +48,31 @@ class DriverOffersControllerTest {
     return new DriverOffersController(db);
   }
 
+  @Test void withdrawalRejectsAnOfferOwnedByAnotherDriver(){
+    UUID offer=UUID.randomUUID();
+    assertEquals("OFFER_NOT_FOUND",assertThrows(ApiException.class,()->controller().withdraw(offer)).code());
+    verify(db,never()).update(anyString(),any(Object[].class));
+  }
+
+  @Test void withdrawalCannotUndoAnAcceptedOffer(){
+    UUID offer=UUID.randomUUID(),booking=UUID.randomUUID();
+    when(db.queryForList(contains("select booking_id"),eq(UUID.class),eq(offer),eq(driverId))).thenReturn(List.of(booking));
+    when(db.queryForList(contains("select status"),eq(String.class),eq(offer),eq(driverId))).thenReturn(List.of("ACCEPTED"));
+    when(db.queryForList(eq("select id from scheduled_bookings where id=? for update"),eq(booking))).thenReturn(List.of(Map.of("id",booking)));
+    assertEquals("OFFER_NOT_ACTIVE",assertThrows(ApiException.class,()->controller().withdraw(offer)).code());
+    verify(db,never()).update(anyString(),any(Object[].class));
+  }
+
+  @Test void withdrawalIsSafeToReplayAfterALostResponse(){
+    UUID offer=UUID.randomUUID(),booking=UUID.randomUUID();
+    when(db.queryForList(contains("select booking_id"),eq(UUID.class),eq(offer),eq(driverId))).thenReturn(List.of(booking));
+    when(db.queryForList(contains("select status"),eq(String.class),eq(offer),eq(driverId))).thenReturn(List.of("ACTIVE"),List.of("WITHDRAWN"));
+    when(db.queryForList(eq("select id from scheduled_bookings where id=? for update"),eq(booking))).thenReturn(List.of(Map.of("id",booking)));
+    controller().withdraw(offer);
+    controller().withdraw(offer);
+    verify(db,times(1)).update(contains("set status='WITHDRAWN'"),eq(offer),eq(driverId));
+  }
+
   @Test
   void activeScopeFiltersByStatusActiveAndTheCallingDriverOnly() {
     when(db.queryForList(contains("o.status='ACTIVE'"), eq(driverId)))

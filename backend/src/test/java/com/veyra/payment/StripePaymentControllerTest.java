@@ -127,10 +127,11 @@ class StripePaymentControllerTest {
   @Test
   void replayingTheSameIdempotencyKeyNeverCreatesASecondPaymentIntent() throws Exception {
     stubPayableBooking("ONLINE", "CONFIRMED");
-    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-1")))
+    when(db.queryForList(eq("select id,booking_id,payer_user_id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-1")))
         .thenReturn(List.of(Map.of(
             "id", UUID.randomUUID(),
             "provider_payment_id", "pi_existing",
+            "booking_id",bookingId,"payer_user_id",userId,
             "status", "PENDING",
             "amount_minor", 11000L,
             "currency", "EUR")));
@@ -149,7 +150,7 @@ class StripePaymentControllerTest {
   @Test
   void freshRequestCreatesAPaymentIntentAndPersistsAPendingPayment() throws Exception {
     stubPayableBooking("ONLINE", "CONFIRMED");
-    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-1")))
+    when(db.queryForList(eq("select id,booking_id,payer_user_id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-1")))
         .thenReturn(List.of());
     // Real gap this closes: the booking_id-scoped query added alongside
     // the ALREADY_PAID / resume-pending fix below is a SEPARATE
@@ -161,7 +162,7 @@ class StripePaymentControllerTest {
     // scenario under test, so an empty list is the correct stub.
     when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where booking_id=? order by created_at desc limit 1"), eq(bookingId)))
         .thenReturn(List.of());
-    when(stripe.create(11000L, "EUR", bookingId.toString(), "key-1")).thenReturn(paymentIntent);
+    when(stripe.create(11000L, "EUR", bookingId.toString(), "booking-"+bookingId+"-after-initial")).thenReturn(paymentIntent);
     when(paymentIntent.getId()).thenReturn("pi_new");
     when(paymentIntent.getClientSecret()).thenReturn("secret_new");
 
@@ -182,7 +183,7 @@ class StripePaymentControllerTest {
     // is the scenario that mattered most -- a real retry, with a
     // different key, against a booking that was already paid for.
     stubPayableBooking("ONLINE", "CONFIRMED");
-    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-2-a-different-key")))
+    when(db.queryForList(eq("select id,booking_id,payer_user_id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-2-a-different-key")))
         .thenReturn(List.of());
     when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where booking_id=? order by created_at desc limit 1"), eq(bookingId)))
         .thenReturn(List.of(Map.of(
@@ -206,7 +207,7 @@ class StripePaymentControllerTest {
     // expects (resume confirming the existing intent), rather than
     // create a second, independent one for the same charge.
     stubPayableBooking("ONLINE", "CONFIRMED");
-    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-2-a-different-key")))
+    when(db.queryForList(eq("select id,booking_id,payer_user_id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-2-a-different-key")))
         .thenReturn(List.of());
     when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where booking_id=? order by created_at desc limit 1"), eq(bookingId)))
         .thenReturn(List.of(Map.of(
@@ -228,12 +229,9 @@ class StripePaymentControllerTest {
   }
 
   @Test
-  void aPriorFailedAttemptDoesNotBlockATrulyFreshOne() throws Exception {
-    // A declined card, for example, is genuinely dead -- the person
-    // trying again (possibly with a different card) must be allowed to,
-    // not permanently blocked because some earlier attempt exists.
+  void aDeclinedCardResumesTheExistingIntentWithAnotherPaymentMethod() throws Exception {
     stubPayableBooking("ONLINE", "CONFIRMED");
-    when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-3")))
+    when(db.queryForList(eq("select id,booking_id,payer_user_id,provider_payment_id,status,amount_minor,currency from payments where idempotency_key=?"), eq("key-3")))
         .thenReturn(List.of());
     when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where booking_id=? order by created_at desc limit 1"), eq(bookingId)))
         .thenReturn(List.of(Map.of(
@@ -242,14 +240,25 @@ class StripePaymentControllerTest {
             "status", "FAILED",
             "amount_minor", 11000L,
             "currency", "EUR")));
-    when(stripe.create(11000L, "EUR", bookingId.toString(), "key-3")).thenReturn(paymentIntent);
-    when(paymentIntent.getId()).thenReturn("pi_fresh_attempt");
-    when(paymentIntent.getClientSecret()).thenReturn("secret_fresh_attempt");
+    when(stripe.retrieve("pi_declined")).thenReturn(paymentIntent);
+    when(paymentIntent.getStatus()).thenReturn("requires_payment_method");
+    when(paymentIntent.getId()).thenReturn("pi_declined");
+    when(paymentIntent.getClientSecret()).thenReturn("secret_retry");
 
     Map<String, Object> result = controller().createIntent(bookingId, "key-3");
 
-    assertEquals("pi_fresh_attempt", result.get("paymentIntentId"));
-    verify(stripe).create(11000L, "EUR", bookingId.toString(), "key-3");
+    assertEquals("pi_declined", result.get("paymentIntentId"));
+    verify(stripe,never()).create(anyLong(),anyString(),anyString(),anyString());
+    verify(db,never()).update(anyString(),any(Object[].class));
+  }
+
+  @Test
+  void anIdempotencyKeyFromAnotherBookingCannotExposeItsClientSecret() {
+    stubPayableBooking("ONLINE","CONFIRMED");
+    when(db.queryForList(contains("from payments where idempotency_key=?"),eq("foreign-key")))
+        .thenReturn(List.of(Map.of("booking_id",UUID.randomUUID(),"payer_user_id",userId)));
+    assertEquals("IDEMPOTENCY_KEY_CONFLICT",assertThrows(ApiException.class,()->controller().createIntent(bookingId,"foreign-key")).code());
+    verifyNoInteractions(stripe);
   }
 
   @Test

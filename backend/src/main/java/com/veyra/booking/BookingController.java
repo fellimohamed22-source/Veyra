@@ -49,7 +49,23 @@ import java.util.*;
         shortClose=f;
         history=h;
     }
-    @PostMapping("/scheduled-bookings") @Transactional ResponseEntity<Map<String,Object>> create(@Valid@RequestBody Create r){
+    @PostMapping("/scheduled-bookings") @Transactional
+    ResponseEntity<Map<String,Object>> createIdempotently(@Valid@RequestBody Create r,@RequestHeader(value="Idempotency-Key",required=false) String key){
+        if(key==null)return create(r);
+        if(key.isBlank()||key.length()>128)throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_IDEMPOTENCY_KEY");
+        UUID user=CurrentUser.id();
+        // Serialize retries, including two first requests arriving simultaneously.
+        db.queryForList("select pg_advisory_xact_lock(hashtextextended(?,0))",user+":"+key);
+        List<Map<String,Object>> prior=db.queryForList("select request_body,booking_id from booking_creation_requests where user_id=? and request_key=?",user,key);
+        if(!prior.isEmpty()){
+            if(!r.toString().equals(prior.getFirst().get("request_body")))throw new ApiException(HttpStatus.CONFLICT,"IDEMPOTENCY_KEY_CONFLICT");
+            return ResponseEntity.ok(Map.of("id",prior.getFirst().get("booking_id")));
+        }
+        var response=create(r);
+        db.update("insert into booking_creation_requests(user_id,request_key,request_body,booking_id) values (?,?,?,?)",user,key,r.toString(),response.getBody().get("id"));
+        return response;
+    }
+    @Transactional ResponseEntity<Map<String,Object>> create(Create r){
         UUID u=CurrentUser.id();
         long mins=Duration.between(OffsetDateTime.now(),r.scheduledAt()).toMinutes();
         if(mins<minLead)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"LEAD_TIME_TOO_SHORT");
@@ -64,6 +80,9 @@ import java.util.*;
         UUID id=UUID.randomUUID();
         int passengerCount=r.passengerCount()==null?1:r.passengerCount();
         int baggageCount=r.baggageCount()==null?0:r.baggageCount();
+        List<Integer> capacities=db.queryForList("select capacity from vehicle_categories where id=? and active=true",Integer.class,r.categoryId());
+        if(capacities.isEmpty())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"CATEGORY_UNAVAILABLE");
+        if(passengerCount>capacities.getFirst())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"CATEGORY_CAPACITY_EXCEEDED");
         String offerVisibilityMode=db.queryForObject("select mode from offer_visibility_policy_versions where status='ACTIVE' order by version_no desc limit 1",String.class);
         if(r.partnerId()!=null&&r.offerVisibilityMode()!=null){
             // Membership on r.partnerId() already validated above by
@@ -75,6 +94,11 @@ import java.util.*;
             offerVisibilityMode=r.offerVisibilityMode();
         }
         db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,partner_id,beneficiary_name_snapshot,beneficiary_phone_snapshot,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,passenger_count,baggage_count,customer_notes,status,offer_window_ends_at,offer_visibility_mode) values (?,?,?,?,?,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,?,?,?,?,?,?,?,'OPEN_FOR_OFFERS',?,?)",id,r.partnerId()==null?"CLIENT":"PARTNER",u,r.partnerId(),r.beneficiaryName(),r.beneficiaryPhone(),r.pickup().lng(),r.pickup().lat(),r.pickup().address(),r.dropoff().lng(),r.dropoff().lat(),r.dropoff().address(),r.scheduledAt(),r.categoryId(),r.paymentMethod(),r.payerType(),passengerCount,baggageCount,r.customerNotes(),close,offerVisibilityMode);
+        if(r.preferredDriverId()!=null){
+            Integer favorite=db.queryForObject("select count(*) from customer_favorite_drivers where user_id=? and driver_id=?",Integer.class,u,r.preferredDriverId());
+            if(favorite==null||favorite==0)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"FAVORITE_DRIVER_REQUIRED");
+            db.update("update scheduled_bookings set preferred_driver_id=? where id=?",r.preferredDriverId(),id);
+        }
         event(id,"booking.published");
             return ResponseEntity.status(201).body(Map.of("id",
             id,
@@ -83,10 +107,14 @@ import java.util.*;
             "offerWindowEndsAt",
         close));
     }
-    @GetMapping("/scheduled-bookings") List<Map<String,Object>> mine(){
-        return db.queryForList("select id,creator_type,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id from scheduled_bookings where creator_user_id=? order by scheduled_at desc",CurrentUser.id());
+    @GetMapping("/scheduled-bookings") List<Map<String,Object>> mine(
+        @RequestParam(required=false) String status,@RequestParam(defaultValue="desc") String sort,@RequestParam(required=false) Integer page){
+        List<Object> args=new ArrayList<>();args.add(CurrentUser.id());
+        String filter="";if(status!=null&&!status.isBlank()){filter=" and sb.status=?";args.add(status);}
+        String paging=page==null?"":" limit 10 offset "+(Math.max(0,Math.min(page,100000))*10);
+        return db.queryForList("select sb.id,sb.creator_type,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.payment_method,sb.selected_driver_id,sb.passenger_count,sb.baggage_count,vc.display_name as category_name,bfs.customer_total_amount_minor,concat(u.first_name,' ',u.last_name) as driver_name,(select count(*) from driver_offers o where o.booking_id=sb.id and o.status='ACTIVE' and o.expires_at>now()) as offer_count from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id left join booking_financial_snapshots bfs on bfs.booking_id=sb.id left join drivers d on d.id=sb.selected_driver_id left join users u on u.id=d.user_id where sb.creator_user_id=?"+filter+" order by sb.scheduled_at "+("asc".equals(sort)?"asc":"desc")+",sb.id"+paging,args.toArray());
     }
-    @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(    @RequestParam(defaultValue="date")String sort,    @RequestParam(required=false)UUID categoryId,    @RequestParam(required=false)OffsetDateTime from,    @RequestParam(required=false)OffsetDateTime to,    @RequestParam(required=false)Integer minPassengers,    @RequestParam(required=false)String pickupQuery,    @RequestParam(required=false)String destinationQuery){
+    @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(    @RequestParam(defaultValue="date")String sort,    @RequestParam(required=false)UUID categoryId,    @RequestParam(required=false)OffsetDateTime from,    @RequestParam(required=false)OffsetDateTime to,    @RequestParam(required=false)Integer minPassengers,    @RequestParam(required=false)String pickupQuery,    @RequestParam(required=false)String destinationQuery, @RequestParam(required=false)Integer page){
         UUID d=driver();
         eligible(d);
         String order=switch(sort){
@@ -99,8 +127,8 @@ import java.util.*;
             default->"scheduled_at asc";
         }
         ;
-        StringBuilder sql=new StringBuilder("select id,pickup_address,dropoff_address,scheduled_at,category_id,passenger_count,baggage_count,status,offer_window_ends_at from scheduled_bookings where status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now()");
-        List<Object> params=new ArrayList<>();
+        StringBuilder sql=new StringBuilder("select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.category_id,sb.passenger_count,sb.baggage_count,sb.status,sb.offer_window_ends_at,vc.display_name as category_name,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,(select proposed_amount_minor from driver_offers o where o.booking_id=sb.id and o.driver_id=? and o.status='ACTIVE' limit 1) as own_offer_amount_minor from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id where sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now()");
+        List<Object> params=new ArrayList<>();params.add(d);
         if(categoryId!=null){
             sql.append(" and category_id=?");
             params.add(categoryId);
@@ -127,7 +155,7 @@ import java.util.*;
             sql.append(" and dropoff_address ilike ?");
             params.add("%"+destinationQuery.trim()+"%");
         }
-        sql.append(" order by ").append(order).append(" limit 100");
+        sql.append(" order by ").append(order).append(",sb.id").append(page==null?" limit 100":" limit 10 offset "+(Math.max(0,Math.min(page,100000))*10));
         return db.queryForList(sql.toString(),params.toArray());
     }
     @PostMapping("/driver/opportunities/{bookingId}/offers") @Transactional ResponseEntity<Map<String,Object>> offer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
@@ -255,12 +283,13 @@ import java.util.*;
         ,bookingId);
     }
     @PostMapping("/scheduled-bookings/{bookingId}/offers/{offerId}/accept") @Transactional Map<String,Object> accept(@PathVariable UUID bookingId,@PathVariable UUID offerId){
-        Map<String,Object>b=one("select creator_user_id,partner_id,status,scheduled_at,payment_method from scheduled_bookings where id=? for update",bookingId);
+        Map<String,Object>b=one("select creator_user_id,partner_id,status,scheduled_at,payment_method,offer_window_ends_at from scheduled_bookings where id=? for update",bookingId);
         owner(b);
             if(!Set.of("OPEN_FOR_OFFERS",
         "OFFERS_RECEIVED").contains(b.get("status")))throw new ApiException(HttpStatus.CONFLICT,"BOOKING_CLOSED");
         Map<String,Object>o=one("select driver_id,proposed_amount_minor,currency,status from driver_offers where id=? and booking_id=? for update",offerId,bookingId);
         if(!"ACTIVE".equals(o.get("status")))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
+        if(b.get("offer_window_ends_at")!=null&&!DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         UUID d=(UUID)o.get("driver_id");
         conflict(d,DbTime.toOffsetDateTime(b.get("scheduled_at")));
         int rate=rate((UUID)b.get("partner_id"));
@@ -281,15 +310,15 @@ import java.util.*;
         event(bookingId,"booking.confirmed");
         return Map.of("bookingId",bookingId,"status","CONFIRMED","driverId",d,"driverNetMinor",p,"commissionMinor",c,"totalMinor",total,"currency",o.get("currency"));
     }
-    @PostMapping("/bookings/{id}/en-route") void enroute(@PathVariable UUID id){
+    @PostMapping("/bookings/{id}/en-route") @Transactional void enroute(@PathVariable UUID id){
         driverTransition(id,"CONFIRMED","DRIVER_EN_ROUTE",null);
     }
-    @PostMapping("/bookings/{id}/arrived") void arrived(@PathVariable UUID id){
+    @PostMapping("/bookings/{id}/arrived") @Transactional void arrived(@PathVariable UUID id){
         driverTransition(id,"DRIVER_EN_ROUTE","DRIVER_ARRIVED",null);
     }
     public record Pin(@Pattern(regexp="\\d{4}")String pin){
     }
-    @PostMapping("/bookings/{id}/start") void start(@PathVariable UUID id,@Valid@RequestBody Pin p){
+    @PostMapping("/bookings/{id}/start") @Transactional(noRollbackFor=ApiException.class) void start(@PathVariable UUID id,@Valid@RequestBody Pin p){
         driverTransition(id,"DRIVER_ARRIVED","IN_PROGRESS",p.pin());
     }
     @PostMapping("/bookings/{id}/complete") @Transactional void complete(@PathVariable UUID id){

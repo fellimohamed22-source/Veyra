@@ -110,7 +110,7 @@ public class OutboxPublisher {
         "booking.no_offer".equals(type) ||
         "booking.expired".equals(type) ||
         "booking.driver_cancelled".equals(type)){
-      return db.update(
+      int owner=db.update(
           "insert into notifications(user_id,event_type,channel,template_code,dedupe_key,data) " +
           "select creator_user_id,?,'PUSH','BOOKING_STATUS'," +
           "'event-'||cast(? as text)||'-owner'," +
@@ -118,6 +118,15 @@ public class OutboxPublisher {
           "from scheduled_bookings where id=? " +
           "on conflict(dedupe_key) do nothing",
           type,eventId,bookingId,type,bookingId);
+      if("booking.status.cancelled".equals(type)){
+        owner+=db.update(
+            "insert into notifications(user_id,event_type,channel,template_code,dedupe_key,data) "+
+            "select d.user_id,?,'PUSH','BOOKING_STATUS','event-'||cast(? as text)||'-driver',"+
+            "jsonb_build_object('bookingId',cast(? as text),'event',?) "+
+            "from scheduled_bookings sb join drivers d on d.id=sb.selected_driver_id where sb.id=? "+
+            "on conflict(dedupe_key) do nothing",type,eventId,bookingId,type,bookingId);
+      }
+      return owner;
     }
 
     return 0;

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -118,14 +119,31 @@ class Api {
     await storage.deleteAll();
   }
 
+  Future<List<dynamic>> savedAddresses()async=>List<dynamic>.from((await dio.get('/api/v1/me/addresses')).data);
+  Future<void> saveAddress(Map<String,dynamic> x)async{await dio.post('/api/v1/me/addresses',data:x);}
+  Future<void> updateSavedAddress(String id,Map<String,dynamic> x)async{await dio.put('/api/v1/me/addresses/$id',data:x);}
+  Future<void> deleteSavedAddress(String id)async{await dio.delete('/api/v1/me/addresses/$id');}
+  Future<List<dynamic>> favoriteDrivers()async=>List<dynamic>.from((await dio.get('/api/v1/me/favorite-drivers')).data);
+  Future<void> addFavoriteDriver(String bookingId)async{await dio.put('/api/v1/me/favorite-drivers/from-booking/$bookingId');}
+  Future<void> removeFavoriteDriver(String id)async{await dio.delete('/api/v1/me/favorite-drivers/$id');}
   Future<List<dynamic>> bookings() async =>
       List<dynamic>.from((await dio.get('/api/v1/scheduled-bookings')).data);
 
   Future<Map<String,dynamic>> bookingDetail(String id) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/scheduled-bookings/$id')).data);
 
-  Future<Map<String,dynamic>> createBooking(Map<String,dynamic> body) async =>
-      Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings',data:body)).data);
+  Future<Map<String,dynamic>> createBooking(Map<String,dynamic> body) async {
+    final signature=jsonEncode(body);
+    final previous=await storage.read(key:'bookingRequestBody');
+    var key=previous==signature?await storage.read(key:'bookingRequestKey'):null;
+    key??='client-${DateTime.now().microsecondsSinceEpoch}';
+    await storage.write(key:'bookingRequestBody',value:signature);
+    await storage.write(key:'bookingRequestKey',value:key);
+    final result=Map<String,dynamic>.from((await dio.post('/api/v1/scheduled-bookings',data:body,options:Options(headers:{'Idempotency-Key':key}))).data);
+    await storage.delete(key:'bookingRequestBody');
+    await storage.delete(key:'bookingRequestKey');
+    return result;
+  }
 
   Future<Map<String,dynamic>> updateBooking(String id,Map<String,dynamic> body) async =>
       Map<String,dynamic>.from((await dio.patch('/api/v1/scheduled-bookings/$id',data:body)).data);

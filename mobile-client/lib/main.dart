@@ -27,6 +27,8 @@ import 'core/widgets/veyra_button.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/status_badge.dart';
 import 'core/widgets/pin_display.dart';
+import 'core/widgets/pagination_bar.dart';
+part 'favorites.dart';
 
 /// Short alias used throughout this file -- AppLocale.t() everywhere
 /// would be far noisier across ~100 call sites.
@@ -88,7 +90,8 @@ Future<void> _showForegroundPush(RemoteMessage message)async{
 
 String clientNotificationRoute(String bookingId,String? template,Map<String,dynamic> data){
   if(template=='NEW_OFFER')return '/offers/$bookingId';
-  final status=(data['status']??data['bookingStatus']??'').toString();
+  final event=data['event']?.toString();
+  final status=(data['bookingStatus']??(event!=null&&event.startsWith('booking.status.')?event.substring('booking.status.'.length).toUpperCase():data['status'])??'').toString();
   if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))return '/live/$bookingId';
   if(template=='PAYMENT_REQUIRED'||status=='PAYMENT_PENDING')return '/payment/$bookingId';
   return '/booking/$bookingId';
@@ -135,7 +138,7 @@ Future<void> configurePush() async {
           }
         }catch(_){}
       });
-      FirebaseMessaging.onMessage.listen(_showForegroundPush);
+      FirebaseMessaging.onMessage.listen((message){RefreshBus.bump();_showForegroundPush(message);});
     }
     await FirebaseMessaging.instance.requestPermission();
     final token=await FirebaseMessaging.instance.getToken();
@@ -454,12 +457,21 @@ class HomeScreen extends StatefulWidget{
 }
 class _HomeScreenState extends State<HomeScreen> with RouteAware{
   late Future<List<dynamic>> future;
+  String statusFilter='ALL'; String dateSort='desc'; int page=0; bool hasNext=false;
+  Future<List<dynamic>> load()async{
+    final all=await api.bookings();
+    final rows=all.where((x)=>statusFilter=='ALL'||(x as Map)['status']==statusFilter).toList();
+    rows.sort((a,b){final cmp=(a['scheduled_at']??'').toString().compareTo((b['scheduled_at']??'').toString());return dateSort=='asc'?cmp:-cmp;});
+    hasNext=rows.length>(page+1)*10;
+    return rows.skip(page*10).take(10).toList();
+  }
+  void resetFilters(){setState((){statusFilter='ALL';dateSort='desc';page=0;future=load();});}
   @override void initState(){
     super.initState();
-    future=api.bookings();
+    future=load();
     RefreshBus.tick.addListener(retry);
   }
-  void retry()=>setState((){future=api.bookings();});
+  void retry()=>setState((){future=load();});
 
   // This screen lives inside a StatefulShellRoute, same as AccueilScreen
   // (see the identical fix there, 137f30f "prevent blank booking
@@ -487,7 +499,14 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
     ),
     body:RefreshIndicator(
       onRefresh:()async{retry();await future;},
-      child:ListView(padding:const EdgeInsets.all(20),children:[
+      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
+        DropdownButtonFormField<String>(key:ValueKey(statusFilter),initialValue:statusFilter,isExpanded:true,decoration:InputDecoration(labelText:t('État')),
+          items:[DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),for(final v in ['OPEN_FOR_OFFERS','OFFERS_RECEIVED','CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER'])DropdownMenuItem(value:v,child:Text(VeyraStatusLabels.bookingStatus(v)))],
+          onChanged:(v){if(v!=null)setState((){statusFilter=v;page=0;future=load();});}),
+        DropdownButtonFormField<String>(key:ValueKey(dateSort),initialValue:dateSort,isExpanded:true,decoration:InputDecoration(labelText:t('Date')),
+          items:[DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),DropdownMenuItem(value:'asc',child:Text(t('Plus anciennes')))],
+          onChanged:(v){if(v!=null)setState((){dateSort=v;page=0;future=load();});}),
+        if(statusFilter!='ALL'||dateSort!='desc')ListTile(title:Text(t('Filtres actifs')),trailing:TextButton(onPressed:resetFilters,child:Text(t('Réinitialiser')))),
         Container(
           padding:const EdgeInsets.all(14),
           decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
@@ -514,11 +533,12 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
             if(items.isEmpty){
               return Card(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ListTile(
                 leading:const Icon(Icons.event_available,color:Color(0xFF1565C0)),
-                title:Text(t('Aucune réservation')),
+                title:Text(statusFilter=='ALL'?t('Aucune réservation'):t('Aucune réservation ne correspond aux filtres.')),
+                onTap:resetFilters,
                 subtitle:Text(t('Votre prochain trajet apparaîtra ici.')),
               ));
             }
-            return Column(children:items.map((raw){
+            return Column(children:[...items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
               final scheduled=VeyraDateFormatter.relativeDay(x['scheduled_at']);
@@ -548,6 +568,10 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
                         Expanded(child:Text(scheduled,style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
                         VeyraStatusBadge(status:status),
                       ]),
+                      if(x['selected_driver_id']!=null)Text((x['driver_name']??'Chauffeur confirmé').toString()),
+                      if(x['customer_total_amount_minor']!=null)Text(t('Total client')+' : '+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
+                      Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
+                      if(offerPhase)Text((x['offer_count']??0).toString()+' '+t('offres reçues')),
                       const SizedBox(height:14),
                       Row(mainAxisAlignment:MainAxisAlignment.end,children:[
                         Text(offerPhase?t('Voir les offres'):t('Voir la réservation'),style:const TextStyle(color:VeyraColors.primary,fontWeight:FontWeight.w800)),
@@ -557,7 +581,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
                   ),
                 ),
               );
-            }).toList());
+            }),VeyraPaginationBar(page:page,hasNext:hasNext,onPrevious:(){setState((){page--;future=load();});},onNext:(){setState((){page++;future=load();});})]);
           },
         ),
       ]),
@@ -936,6 +960,8 @@ class _AccountScreenState extends State<AccountScreen> {
                   children: [
                     ListTile(leading: const Icon(Icons.edit), title: Text(t('Informations personnelles')), onTap: () => edit(profile)),
                     ListTile(leading: const Icon(Icons.lock), title: Text(t('Modifier mon mot de passe')), onTap: password),
+                    ListTile(leading:const Icon(Icons.place),title:Text(t('Mes adresses')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen()))),
+                    ListTile(leading:const Icon(Icons.favorite),title:Text(t('Mes chauffeurs favoris')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const FavoriteDriversScreen()))),
                   ],
                 ),
               ),
@@ -1073,6 +1099,8 @@ class AddressScreen extends StatefulWidget{
 }
 class _AddressScreenState extends State<AddressScreen>{
   final pickup=TextEditingController();
+  final notes=TextEditingController();
+  int categoryCapacity=9;
   final dropoff=TextEditingController();
   List<dynamic> pickupResults=[];
   List<dynamic> dropoffResults=[];
@@ -1085,7 +1113,7 @@ class _AddressScreenState extends State<AddressScreen>{
   String? categoryId;
   String? categoryName;
   late Future<List<dynamic>> categories;
-  String? visibilityMode;
+
   bool loadingPickup=false;
   bool loadingDropoff=false;
   bool locating=false;
@@ -1119,11 +1147,11 @@ class _AddressScreenState extends State<AddressScreen>{
     // a platform-wide policy set by an admin (not a per-booking choice),
     // but there was previously no way for anyone but an admin to even
     // see which mode is currently active.
-    api.offerVisibilityMode().then((mode){if(mounted)setState(()=>visibilityMode=mode);}).catchError((_){});
   }
 
   @override void dispose(){
     _searchDebounce?.cancel();
+    pickup.dispose();dropoff.dispose();notes.dispose();
     super.dispose();
   }
 
@@ -1178,6 +1206,18 @@ class _AddressScreenState extends State<AddressScreen>{
     }
   }
 
+  Future<void> selectSavedAddress(bool isPickup)async{
+    final value=await Navigator.push<Map<String,dynamic>>(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen(select:true)));
+    if(value!=null&&mounted)setState((){if(isPickup){pickupPlace=value;pickup.text=value['label'].toString();}else{dropoffPlace=value;dropoff.text=value['label'].toString();}});
+  }
+  Future<void> saveCurrentAddress(bool isPickup)async{
+    final place=isPickup?pickupPlace:dropoffPlace;if(place==null)return;
+    final label=TextEditingController();
+    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Enregistrer cette adresse')),content:TextField(controller:label,maxLength:80,decoration:InputDecoration(labelText:t('Maison, Travail ou autre nom'))),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Enregistrer')))]));
+    if(yes!=true||label.text.trim().isEmpty)return;
+    try{await api.saveAddress({'label':label.text.trim(),'address':place['label'],'lat':place['lat'],'lng':place['lng']});if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Adresse enregistrée.'))));}
+    catch(e){if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));}
+  }
   Widget addressField(bool isPickup){
     final controller=isPickup?pickup:dropoff;
     final results=isPickup?pickupResults:dropoffResults;
@@ -1223,6 +1263,7 @@ class _AddressScreenState extends State<AddressScreen>{
           ):IconButton(icon:const Icon(Icons.my_location),tooltip:t('Utiliser ma position actuelle'),onPressed:useMyLocation)):null,
         ),
       ),
+      Wrap(children:[TextButton.icon(onPressed:()=>selectSavedAddress(isPickup),icon:const Icon(Icons.bookmark_outline),label:Text(t('Mes adresses'))),if((isPickup?pickupPlace:dropoffPlace)!=null)TextButton(onPressed:()=>saveCurrentAddress(isPickup),child:Text(t('Enregistrer cette adresse')))]),
       for(final item in results.take(5))
         ListTile(
           dense:true,
@@ -1263,6 +1304,7 @@ class _AddressScreenState extends State<AddressScreen>{
   }
 
   Future<void> publish()async{
+    if(submitting)return;
     if(pickupPlace==null||dropoffPlace==null||scheduledAt==null||categoryId==null){
       setState(()=>error=t('Complétez le trajet, la date et la catégorie.'));
       return;
@@ -1290,6 +1332,8 @@ class _AddressScreenState extends State<AddressScreen>{
         'payerType':'CLIENT',
         'passengerCount':passengerCount,
         'baggageCount':baggageCount,
+        'customerNotes':notes.text.trim(),
+        'preferredDriverId':widget.initialBooking?['preferred_driver_id'],
       });
       if(!mounted)return;
       final newBookingId=created['id']?.toString();
@@ -1317,7 +1361,7 @@ class _AddressScreenState extends State<AddressScreen>{
             onPressed:(){
               Navigator.pop(sheetContext);
               context.go('/home');
-              context.push('/offers/'+newBookingId);
+              context.push('/booking/'+newBookingId);
             },
             child:Text(t('Voir ma demande')),
           ),
@@ -1376,12 +1420,13 @@ class _AddressScreenState extends State<AddressScreen>{
           final items=s.data??[];
           return DropdownButtonFormField<String>(
             initialValue:categoryId,
+            isExpanded:true,
             decoration:InputDecoration(labelText:t('Catégorie de véhicule')),
             items:items.map((raw){
               final x=Map<String,dynamic>.from(raw as Map);
               return DropdownMenuItem<String>(
                 value:x['id'].toString(),
-                child:Text((x['display_name']??x['code']).toString()),
+                child:Text((x['display_name']??x['code']).toString()+' • '+x['capacity'].toString()+' passagers',overflow:TextOverflow.ellipsis),
               );
             }).toList(),
             onChanged:(v){
@@ -1392,6 +1437,8 @@ class _AddressScreenState extends State<AddressScreen>{
               );
               setState((){
                 categoryId=v;
+                categoryCapacity=match==null?9:((match as Map)['capacity'] as num).toInt();
+                passengerCount=passengerCount.clamp(1,categoryCapacity);
                 categoryName=match==null?null:((match as Map)['display_name']??match['code'])?.toString();
               });
             },
@@ -1404,7 +1451,7 @@ class _AddressScreenState extends State<AddressScreen>{
           label:t('Passagers'),
           value:passengerCount,
           min:1,
-          max:8,
+          max:categoryCapacity,
           onChanged:(v)=>setState(()=>passengerCount=v),
         )),
         const SizedBox(width:12),
@@ -1417,6 +1464,7 @@ class _AddressScreenState extends State<AddressScreen>{
         )),
       ]),
       const SizedBox(height:18),
+      if(widget.initialBooking?['preferred_driver_id']!=null)Text(t('Votre chauffeur favori sera indiqué comme préférence. Son attribution dépend de sa disponibilité et de votre choix parmi les offres.')),
       const Text('Paiement',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
       DropdownButtonFormField<String>(
         initialValue:paymentMethod,
@@ -1428,19 +1476,7 @@ class _AddressScreenState extends State<AddressScreen>{
         ],
         onChanged:(v){if(v!=null)setState(()=>paymentMethod=v);},
       ),
-      if(visibilityMode!=null)Padding(
-        padding:const EdgeInsets.only(top:10),
-        child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Icon(visibilityMode=='BEST_VISIBLE'?Icons.visibility_outlined:Icons.visibility_off_outlined,size:18,color:Colors.black54),
-          const SizedBox(width:8),
-          Expanded(child:Text(
-            visibilityMode=='BEST_VISIBLE'
-              ?t('Les chauffeurs verront le meilleur prix proposé par un autre chauffeur.')
-              :t('Offre privée : les chauffeurs ne voient jamais les prix proposés par les autres.'),
-            style:const TextStyle(fontSize:12,color:Colors.black54),
-          )),
-        ]),
-      ),
+      TextField(controller:notes,maxLength:1000,maxLines:3,onChanged:(_)=>setState((){}),decoration:InputDecoration(labelText:t('Remarques pour le chauffeur (facultatif)'))),
       const SizedBox(height:18),
       // Ajouté suite à l'étude UX/navigation : rien ne permettait
       // auparavant de revoir d'un coup d'œil les choix faits dans ce
@@ -1460,6 +1496,7 @@ class _AddressScreenState extends State<AddressScreen>{
           _RecapLine(icon:Icons.directions_car_outlined,text:categoryName??t('Catégorie non choisie')),
           _RecapLine(icon:Icons.people_outline,text:'$passengerCount '+t('passager(s)')+' • $baggageCount '+t('bagage(s)')),
           _RecapLine(icon:Icons.payments_outlined,text:VeyraStatusLabels.paymentMethod(paymentMethod)),
+          if(notes.text.trim().isNotEmpty)_RecapLine(icon:Icons.notes,text:notes.text.trim()),
         ])),
       ),
       const SizedBox(height:18),
@@ -1491,8 +1528,11 @@ class _OffersScreenState extends State<OffersScreen>{
   late Future<Map<String,dynamic>> bookingFuture;
   String? error;
   String? acceptingOfferId;
+  Timer? refreshTimer;
+  bool refreshing=false;
   @override void initState(){
     super.initState();
+    refreshTimer=Timer.periodic(const Duration(seconds:10),(_)=>refreshOffers());
     future=api.offers(widget.bookingId);
     // Real gap fixed here: this screen only ever fetched the offers
     // list, never the booking's own details -- someone landing here
@@ -1503,7 +1543,20 @@ class _OffersScreenState extends State<OffersScreen>{
     bookingFuture=api.bookingDetail(widget.bookingId);
   }
 
+  Future<void> refreshOffers()async{
+    if(refreshing||acceptingOfferId!=null)return;refreshing=true;
+    try{final b=await api.bookingDetail(widget.bookingId);final values=await api.offers(widget.bookingId);if(mounted)setState((){future=Future.value(values);bookingFuture=Future.value(b);error=null;});}
+    catch(e){if(mounted)setState(()=>error=t('Actualisation interrompue. Vérifiez votre connexion.'));}
+    finally{refreshing=false;}
+  }
+  @override void dispose(){refreshTimer?.cancel();super.dispose();}
+  Future<void> confirmOffer(Map<String,dynamic> offer)async{
+    if(acceptingOfferId!=null)return;
+    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Choisir ce chauffeur ?')),content:Text([offer['driverFirstName'],offer['driverLastName'],offer['vehicleBrand'],offer['vehicleModel'],offer['vehicleColor'],offer['vehicleYear'],t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(offer['totalMinor'])].where((v)=>v!=null).join(' • ')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Comparer encore'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Confirmer mon choix')))]));
+    if(yes==true&&mounted)await chooseOffer(offer['offerId'].toString());
+  }
   Future<void> chooseOffer(String offerId)async{
+    if(acceptingOfferId!=null)return;
     setState((){acceptingOfferId=offerId;error=null;});
     try{
       await api.accept(widget.bookingId,offerId);
@@ -1513,7 +1566,7 @@ class _OffersScreenState extends State<OffersScreen>{
       if(booking['payment_method']=='ONLINE'){
         context.push('/payment/'+widget.bookingId);
       }else{
-        context.go('/home');
+        context.push('/booking/'+widget.bookingId);
       }
     }on DioException catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
@@ -1526,7 +1579,7 @@ class _OffersScreenState extends State<OffersScreen>{
 
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(title:Text(t('Choisir votre chauffeur')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
+    appBar:AppBar(actions:[IconButton(onPressed:refreshOffers,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))],title:Text(t('Choisir votre chauffeur')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
     body:ListView(padding:const EdgeInsets.all(16),children:[
       FutureBuilder<Map<String,dynamic>>(
         future:bookingFuture,
@@ -1592,6 +1645,7 @@ class _OffersScreenState extends State<OffersScreen>{
                     Text(VeyraMoneyFormatter.fromMinor(x['totalMinor']),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
                   ]),
                 ]),
+                Text([x['vehicleColor'],x['vehicleYear']].where((v)=>v!=null).join(' • ')),
                 const SizedBox(height:8),
                 Row(children:[
                   const Icon(Icons.verified_user_outlined,size:16,color:VeyraColors.success),
@@ -1601,7 +1655,7 @@ class _OffersScreenState extends State<OffersScreen>{
                 const SizedBox(height:14),
                 SizedBox(width:double.infinity,child:FilledButton(
                   style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-                  onPressed:acceptingOfferId!=null?null:()=>chooseOffer(x['offerId'].toString()),
+                  onPressed:acceptingOfferId!=null?null:()=>confirmOffer(x),
                   child:acceptingOfferId==x['offerId'].toString()
                     ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
                     :Text(t('Choisir cette offre')),
@@ -1629,10 +1683,16 @@ class _PaymentScreenState extends State<PaymentScreen>{
 
   @override void initState(){
     super.initState();
-    api.bookingDetail(widget.bookingId).then((v){if(mounted)setState(()=>booking=v);}).catchError((_){if(mounted)setState(()=>error=t('Impossible de charger le paiement.'));});
+    loadBooking();
+  }
+
+  Future<void> loadBooking()async{
+    try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState((){booking=value;error=null;});}
+    catch(e){if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));}
   }
 
   Future<void> pay()async{
+    if(loading||booking==null)return;
     const publishableKey=String.fromEnvironment('STRIPE_PUBLISHABLE_KEY',defaultValue:'');
     if(publishableKey.isEmpty){
       setState(()=>error=t('Paiement en ligne non configuré sur cette version.'));
@@ -1649,27 +1709,26 @@ class _PaymentScreenState extends State<PaymentScreen>{
         ),
       );
       await Stripe.instance.presentPaymentSheet();
-      // Real gap fixed here, found during a UX/business audit: this
-      // used to redirect straight to /home with zero acknowledgment --
-      // someone who just paid real money got no visible confirmation
-      // that it actually went through, only silence. A person who just
-      // committed money needs to see that explicitly, not infer it from
-      // being dropped back on the home screen.
+      // The webhook is authoritative; the reservation displays its result.
       if(mounted){
         await showDialog<void>(
           context:context,
           barrierDismissible:false,
           builder:(dialogContext)=>AlertDialog(
             icon:const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
-            title:Text(t('Paiement confirmé')),
-            content:Text(t('Votre paiement a bien été pris en compte. Merci !')),
+            title:Text(t('Paiement transmis')),
+            content:Text(t('Consultez votre réservation pour suivre la confirmation du paiement.')),
             actions:[
               FilledButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Continuer'))),
             ],
           ),
         );
-        if(mounted)context.go('/home');
+        if(mounted)context.go('/booking/'+widget.bookingId);
       }
+    }on DioException catch(e){
+      final code=e.response?.data is Map?(e.response!.data as Map)['code']:null;
+      if(code=='ALREADY_PAID'&&mounted){context.go('/booking/'+widget.bookingId);}
+      else if(mounted){setState(()=>error=VeyraErrorMessages.forException(e));}
     }catch(_){
       if(mounted)setState(()=>error=t('Le paiement n’a pas été finalisé.'));
     }finally{
@@ -1687,9 +1746,11 @@ class _PaymentScreenState extends State<PaymentScreen>{
         const SizedBox(height:12),
         const Text('Ce total inclut le prix proposé par le chauffeur et la commission Veyra.',textAlign:TextAlign.center),
         if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error),textAlign:TextAlign.center)),
+        if(booking==null&&error!=null)TextButton(onPressed:loadBooking,child:Text(t('Réessayer'))),
+        if(booking?['payment_status']=='CAPTURED')Text(t('Ce paiement est déjà réglé.'),textAlign:TextAlign.center),
         const SizedBox(height:20),
         FilledButton.icon(
-          onPressed:loading?null:pay,
+          onPressed:loading||booking==null||booking?['payment_status']=='CAPTURED'?null:pay,
           icon:const Icon(Icons.credit_card),
           label:loading?Text(t('Paiement…')):Text(t('Payer maintenant')),
         ),
@@ -1699,6 +1760,12 @@ class _PaymentScreenState extends State<PaymentScreen>{
 }
 
 
+String paymentStatusLabel(String? status)=>switch(status){
+  'CAPTURED'=>t('Payé'), 'PENDING'=>t('En cours de confirmation'),
+  'FAILED'=>t('Échec — réessayez le paiement'), 'CANCELED'=>t('Annulé'),
+  'REFUNDED'=>t('Remboursé'), _=>t('À payer'),
+};
+
 class BookingDetailScreen extends StatefulWidget{
   final String bookingId;
   const BookingDetailScreen({required this.bookingId,super.key});
@@ -1706,18 +1773,37 @@ class BookingDetailScreen extends StatefulWidget{
 }
 class _BookingDetailScreenState extends State<BookingDetailScreen>{
   late Future<Map<String,dynamic>> future;
+  Timer? statusTimer;
+  bool refreshing=false;
   String? pin;
   String? message;
   int ratingScore=0;
   bool ratingSubmitting=false;
   bool cancelling=false;
   bool ratingSubmitted=false;
+  bool favorite=false;
+  bool favoriteBusy=false;
 
   @override void initState(){
     super.initState();
-    future=api.bookingDetail(widget.bookingId);
+    future=api.bookingDetail(widget.bookingId).then((value){favorite=value['favorite_driver']==true;return value;});
+    statusTimer=Timer.periodic(const Duration(seconds:8),(_)=>refreshStatus());
   }
 
+  Future<void> toggleFavorite(Map<String,dynamic> booking)async{
+    if(favoriteBusy)return;setState(()=>favoriteBusy=true);
+    try{if(favorite){await api.removeFavoriteDriver(booking['selected_driver_id'].toString());}else{await api.addFavoriteDriver(widget.bookingId);}if(mounted)setState(()=>favorite=!favorite);}
+    catch(e){if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));}
+    finally{if(mounted)setState(()=>favoriteBusy=false);}
+  }
+  Future<void> refreshStatus()async{
+    if(refreshing||cancelling||loadingPreview||favoriteBusy)return;
+    refreshing=true;
+    try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState((){future=Future.value(value);favorite=value['favorite_driver']==true;});}
+    catch(e){if(mounted)setState(()=>message=t('Actualisation interrompue. Les données affichées peuvent être anciennes.'));}
+    finally{refreshing=false;}
+  }
+  @override void dispose(){statusTimer?.cancel();super.dispose();}
   void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
 
   Future<void> loadPin()async{
@@ -1821,7 +1907,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Détail réservation'))),
+    appBar:AppBar(title:Text(t('Détail réservation')),actions:[IconButton(onPressed:refreshStatus,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
@@ -1838,6 +1924,16 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
           const SizedBox(height:8),
           Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+          Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
+          if((x['customer_notes']??'').toString().isNotEmpty)Text(t('Remarques')+' : '+x['customer_notes'].toString()),
+          if({'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status))...[
+            Text(t('Réception des offres jusqu’au')+' '+VeyraDateFormatter.dateTime(x['offer_window_ends_at'])),
+            FilledButton(onPressed:()=>context.push('/offers/'+widget.bookingId),child:Text(t('Voir les offres'))),
+            TextButton(onPressed:cancelling?null:confirmAndCancel,child:Text(t('Annuler la réservation'))),
+          ],
+          if(status=='CONFIRMED')Text(t('Votre chauffeur est engagé. Vous serez informé de son départ et de son arrivée.')),
+          if(x['selected_driver_id']!=null)Text([x['vehicle_brand'],x['vehicle_model'],x['vehicle_color'],x['plate_number']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' • ')),
+          if(x['payment_method']=='ONLINE')Text(t('Paiement')+' : '+paymentStatusLabel(x['payment_status']?.toString())),
           const SizedBox(height:12),
           Card(child:ListTile(title:Text(t('Statut')),trailing:VeyraStatusBadge(status:status))),
           if(x['selected_driver_id']!=null)Card(child:ListTile(
@@ -1850,7 +1946,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             subtitle:Text(VeyraStatusLabels.paymentMethod(x['payment_method']?.toString())),
             trailing:Text(VeyraMoneyFormatter.fromMinor(total)),
           )),
-          if(x['payment_method']=='ONLINE'&&{'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status))
+          if(x['payment_method']=='ONLINE'&&x['payment_status']!='CAPTURED'&&{'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status))
             FilledButton.icon(onPressed:()=>context.push('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:Text(t('Payer en ligne'))),
           if({'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))...[
             OutlinedButton.icon(onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Chat Veyra'))),
@@ -1870,14 +1966,15 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             if(pin==null)
               OutlinedButton(onPressed:loadPin,child:Text(t('Afficher le PIN')))
             else...[
-              Text(status=='DRIVER_ARRIVED'?t('Donnez ce code à votre chauffeur'):t('Code à transmettre au chauffeur à son arrivée'),style:const TextStyle(fontSize:13,color:Colors.black54)),
+              Text(t('Communiquez ce code au chauffeur uniquement lorsque vous êtes dans le véhicule.'),style:const TextStyle(fontSize:13,color:Colors.black54)),
               const SizedBox(height:8),
               VeyraPinDisplay(pin:pin!),
             ],
             TextButton(onPressed:(cancelling||loadingPreview)?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):loadingPreview?t('Calcul des frais…'):t('Annuler la réservation'))),
           ],
-          if({'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER'}.contains(status))
+          if({'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED'}.contains(status))
             OutlinedButton.icon(onPressed:()=>context.push('/addresses',extra:x),icon:const Icon(Icons.replay),label:Text(t('Réserver à nouveau'))),
+          if({'COMPLETED','CLOSED'}.contains(status))OutlinedButton.icon(onPressed:favoriteBusy?null:()=>toggleFavorite(x),icon:Icon(favorite?Icons.favorite:Icons.favorite_border),label:Text(favorite?t('Retirer des favoris'):t('Ajouter le chauffeur aux favoris'))),
           if({'COMPLETED','CLOSED'}.contains(status))
             Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Text(t('Noter le chauffeur'),style:const TextStyle(fontWeight:FontWeight.bold)),
@@ -1908,6 +2005,8 @@ class _ChatScreenState extends State<ChatScreen>{
   final scrollController=ScrollController();
   final List<Map<String,dynamic>> messages=[];
   String? myUserId;
+  Map<String,dynamic>? chatBooking;
+  Future<void> loadChatBooking()async{try{final b=await api.bookingDetail(widget.bookingId);if(mounted)setState(()=>chatBooking=b);}catch(_){}}
   bool loading=true;
   bool loadError=false;
   bool sending=false;
@@ -1918,11 +2017,13 @@ class _ChatScreenState extends State<ChatScreen>{
   @override void initState(){
     super.initState();
     _load();
+    loadChatBooking();
     fallbackPoller=Timer.periodic(const Duration(seconds:5),(_)=>_pollForNewMessages());
   }
 
   Future<void> _pollForNewMessages()async{
     if(!mounted)return;
+    loadChatBooking();
     try{
       final history=await api.chatMessages(widget.bookingId);
       if(!mounted)return;
@@ -2019,6 +2120,11 @@ class _ChatScreenState extends State<ChatScreen>{
       backgroundColor:const Color(0xFFF2F6FB),
       appBar:AppBar(title:Text(t('Chat Veyra'))),
       body:Column(children:[
+        if(chatBooking!=null)ListTile(
+          title:Text((chatBooking?['driver_name']??t('Votre interlocuteur')).toString()),
+          subtitle:Text((chatBooking?['pickup_address']??'').toString()+' → '+(chatBooking?['dropoff_address']??'').toString()),
+          trailing:VeyraStatusBadge(status:chatBooking?['status']?.toString()??''),
+        ),
         Expanded(child:
           loading?const Center(child:CircularProgressIndicator())
           :loadError?Center(child:FilledButton(onPressed:_load,child:Text(t('Réessayer'))))
@@ -2120,6 +2226,8 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
 
   Future<void> refresh()async{
     try{
+      final latest=await api.bookingDetail(widget.bookingId);
+      if(mounted)setState(()=>bookingMap=latest);
       final value=await api.currentLocation(widget.bookingId);
       if(mounted)setState((){location=value;error=null;});
       await refreshEta();
@@ -2152,8 +2260,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
       if(mounted&&etaInfo!=null)setState(()=>etaInfo=null);
       return;
     }
-    final toLat=(booking['dropoff_lat'] as num?)?.toDouble();
-    final toLng=(booking['dropoff_lng'] as num?)?.toDouble();
+    final inProgress=booking['status']=='IN_PROGRESS';
+    final toLat=(booking[inProgress?'dropoff_lat':'pickup_lat'] as num?)?.toDouble();
+    final toLng=(booking[inProgress?'dropoff_lng':'pickup_lng'] as num?)?.toDouble();
     if(toLat==null||toLng==null)return;
     try{
       final eta=await api.routeEstimate(
@@ -2207,10 +2316,11 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
           child:Card(child:Padding(
             padding:const EdgeInsets.all(16),
             child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+              VeyraStatusBadge(status:bookingMap?['status']?.toString()),
               Text(available?t('Position actuelle du chauffeur'):t('Position indisponible'),style:const TextStyle(fontWeight:FontWeight.bold)),
               Text(error??(available?t('Mise à jour automatique toutes les 10 secondes.'):t('En attente de la première position GPS.'))),
               if(etaInfo!=null)Text(
-                t('ETA destination : ')+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])+
+                (bookingMap?['status']=='IN_PROGRESS'?t('ETA destination : '):t('Arrivée du chauffeur : '))+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])+
                 ' • '+VeyraMoneyFormatter.distance(etaInfo!['distanceMeters']),
                 style:const TextStyle(fontWeight:FontWeight.w600),
               ),

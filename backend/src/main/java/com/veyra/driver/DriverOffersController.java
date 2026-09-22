@@ -5,6 +5,7 @@ import com.veyra.shared.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -28,8 +29,24 @@ public class DriverOffersController {
 
   private static final Set<String> VALID_SCOPES=Set.of("active","won","closed");
 
+  @DeleteMapping("/{id}")
+  @Transactional
+  public void withdraw(@PathVariable UUID id){
+    UUID driver=driverId();
+    List<UUID> bookings=db.queryForList("select booking_id from driver_offers where id=? and driver_id=?",UUID.class,id,driver);
+    if(bookings.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"OFFER_NOT_FOUND");
+    // Match selection's lock order: booking first, then offer.
+    db.queryForList("select id from scheduled_bookings where id=? for update",bookings.getFirst());
+    List<String> statuses=db.queryForList("select status from driver_offers where id=? and driver_id=? for update",String.class,id,driver);
+    if(statuses.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"OFFER_NOT_FOUND");
+    if("WITHDRAWN".equals(statuses.getFirst()))return;
+    if(!"ACTIVE".equals(statuses.getFirst()))throw new ApiException(HttpStatus.CONFLICT,"OFFER_NOT_ACTIVE");
+    db.update("update driver_offers set status='WITHDRAWN' where id=? and driver_id=?",id,driver);
+  }
+
+  public List<Map<String,Object>> list(String scope){return list(scope,null);}
   @GetMapping
-  public List<Map<String,Object>> list(@RequestParam(defaultValue="active") String scope){
+  public List<Map<String,Object>> list(@RequestParam(defaultValue="active") String scope,@RequestParam(required=false) Integer page){
     if(!VALID_SCOPES.contains(scope)){
       throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_OFFER_SCOPE");
     }
@@ -47,7 +64,7 @@ public class DriverOffersController {
         "sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status as booking_status " +
         "from driver_offers o join scheduled_bookings sb on sb.id=o.booking_id " +
         "where o.driver_id=? and "+statusFilter+" " +
-        "order by o.created_at desc",
+        "order by o.created_at desc,o.id"+(page==null?"":" limit 10 offset "+(Math.max(0,Math.min(page,100000))*10)),
         driverId);
   }
 

@@ -42,7 +42,7 @@ public class StripeWebhookController {
       };
       if (status != null) {
         db.update(
-            "update payments set status=? where provider='STRIPE' and provider_payment_id=?",
+            "update payments set status=? where provider='STRIPE' and provider_payment_id=? and status not in ('CAPTURED','REFUNDED')",
             status,
             paymentIntent.getId());
       }

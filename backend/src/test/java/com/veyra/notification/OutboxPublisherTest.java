@@ -37,6 +37,14 @@ class OutboxPublisherTest {
     return new OutboxPublisher(db);
   }
 
+  @Test void clientCancellationAlsoNotifiesTheSelectedDriver(){
+    UUID event=UUID.randomUUID(),booking=UUID.randomUUID();
+    when(db.queryForList(contains("from outbox_events"))).thenReturn(List.of(outboxRow(event,"booking.status.cancelled",booking)));
+    publisher().publish();
+    verify(db).update(contains("select creator_user_id"),eq("booking.status.cancelled"),eq(event),eq(booking),eq("booking.status.cancelled"),eq(booking));
+    verify(db).update(argThat((String sql)->sql.contains("select d.user_id")&&sql.contains("d.id=sb.selected_driver_id")),eq("booking.status.cancelled"),eq(event),eq(booking),eq("booking.status.cancelled"),eq(booking));
+  }
+
   private Map<String, Object> outboxRow(UUID eventId, String type, UUID bookingId) {
     return Map.of(
         "id", eventId,

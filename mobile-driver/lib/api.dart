@@ -229,8 +229,8 @@ class Api {
   Future<Map<String,dynamic>> wallet() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/wallet')).data);
 
-  Future<List<dynamic>> walletTransactions({int page=0}) async =>
-      List<dynamic>.from((await dio.get('/api/v1/driver/wallet/transactions',queryParameters:{'page':page})).data);
+  Future<List<dynamic>> walletTransactions({int page=0,DateTime? from,DateTime? to}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/driver/wallet/transactions',queryParameters:{'page':page,if(from!=null)'from':from.toUtc().toIso8601String(),if(to!=null)'to':to.toUtc().toIso8601String()})).data);
 
   Future<Map<String,dynamic>> createProfile() async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/driver/profile')).data);
