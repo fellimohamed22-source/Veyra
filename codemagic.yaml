@@ -95,14 +95,20 @@ workflows:
           sed -i 's/io.flutter.embedding.android.FlutterActivity/io.flutter.embedding.android.FlutterFragmentActivity/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           sed -i 's/: FlutterActivity()/: FlutterFragmentActivity()/' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
           grep -q 'FlutterFragmentActivity' android/app/src/main/kotlin/com/veyra/client/MainActivity.kt
-          # Same real theme fix as android-apk.yml -- see that file's own
-          # comment for the full explanation and evidence.
-          for f in android/app/src/main/res/values/styles.xml android/app/src/main/res/values-night/styles.xml android/app/src/main/res/values-v31/styles.xml; do
+          # Same real, updated theme fix as android-apk.yml -- see that
+          # file's own comment for the full explanation and evidence
+          # (values-v31's LaunchTheme specifically left untouched, given
+          # Android 12+'s SplashScreen API is a separate handoff
+          # mechanism from the legacy splash theme).
+          for f in android/app/src/main/res/values/styles.xml android/app/src/main/res/values-night/styles.xml; do
             if [ -f "$f" ]; then
               sed -i 's#<style name="LaunchTheme" parent="[^"]*">#<style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">#' "$f"
               sed -i 's#<style name="NormalTheme" parent="[^"]*">#<style name="NormalTheme" parent="Theme.MaterialComponents">#' "$f"
             fi
           done
+          if [ -f android/app/src/main/res/values-v31/styles.xml ]; then
+            sed -i 's#<style name="NormalTheme" parent="[^"]*">#<style name="NormalTheme" parent="Theme.MaterialComponents">#' android/app/src/main/res/values-v31/styles.xml
+          fi
           grep -q 'Theme.MaterialComponents' android/app/src/main/res/values/styles.xml
 
           sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts

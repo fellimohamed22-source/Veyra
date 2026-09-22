@@ -171,12 +171,35 @@ jobs:
           # rather than the exact current parent value so this stays
           # correct regardless of which Flutter version's default theme
           # string is generated.
-          for f in android/app/src/main/res/values/styles.xml android/app/src/main/res/values-night/styles.xml android/app/src/main/res/values-v31/styles.xml; do
+          # NEW hypothesis being tried here, directly prompted by fresh
+          # evidence: a real device screenshot showed a screen colored
+          # exactly like the app's own scaffoldBackgroundColor but with
+          # NO AppBar and nothing else at all -- AddressScreen's own
+          # build() always includes an AppBar unconditionally, so this
+          # could not have been AddressScreen actually rendering.
+          # Combined with adb logcat showing zero crash for
+          # com.veyra.client and the Dart-level diagnostic banner
+          # catching nothing, this points to the NATIVE Android launch
+          # screen itself never handing off to Flutter's first frame --
+          # i.e. an app stuck on its own splash, not a Dart render at
+          # all. Android 12+'s SplashScreen API (values-v31/styles.xml
+          # specifically -- a separate system from the legacy splash
+          # theme, introduced exactly because it works differently) may
+          # not correctly hand off when its LaunchTheme's parent is
+          # forced to AppCompat the same way the legacy values/ and
+          # values-night/ themes are. Stripe's own requirement is on the
+          # RUNTIME theme (NormalTheme) -- the LaunchTheme in values-v31
+          # specifically is left on flutter create's own default here,
+          # while still applying both changes everywhere else.
+          for f in android/app/src/main/res/values/styles.xml android/app/src/main/res/values-night/styles.xml; do
             if [ -f "$f" ]; then
               sed -i 's#<style name="LaunchTheme" parent="[^"]*">#<style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">#' "$f"
               sed -i 's#<style name="NormalTheme" parent="[^"]*">#<style name="NormalTheme" parent="Theme.MaterialComponents">#' "$f"
             fi
           done
+          if [ -f android/app/src/main/res/values-v31/styles.xml ]; then
+            sed -i 's#<style name="NormalTheme" parent="[^"]*">#<style name="NormalTheme" parent="Theme.MaterialComponents">#' android/app/src/main/res/values-v31/styles.xml
+          fi
           grep -q 'Theme.MaterialComponents' android/app/src/main/res/values/styles.xml
           # Google Services Gradle plugin -- required to actually process
           # google-services.json into usable Android resources; having
