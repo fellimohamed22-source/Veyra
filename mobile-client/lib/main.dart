@@ -162,12 +162,27 @@ final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://1
 
 final lastCrash=ValueNotifier<String?>(null);
 
+String _truncatedStack(String stack){
+  final lines=stack.split('\n').where((l)=>l.trim().isNotEmpty).take(8).toList();
+  return lines.join('\n');
+}
+
 void main() {
   runZonedGuarded(() {
     _mainBody();
   },(error,stack){
+    // Gap found the hard way: a real device's logcat captured
+    // "UNCAUGHT_FLUTTER_ERROR: Null check operator used on a null
+    // value" for the actual reported blank-screen bug, but with no
+    // stack trace anywhere nearby -- this debugPrint only ever logged
+    // exceptionAsString()/error.toString(), never the stack, so there
+    // was no way to know which line actually threw. Logging the full
+    // stack now, and truncating what the on-screen banner shows (a
+    // full Dart stack trace can be dozens of lines) to keep it
+    // readable while debugPrint still gets everything via adb logcat.
     debugPrint('UNCAUGHT_ZONE_ERROR: '+error.toString());
-    lastCrash.value='ZONE: '+error.toString();
+    debugPrint('UNCAUGHT_ZONE_STACK:\n'+stack.toString());
+    lastCrash.value='ZONE: '+error.toString()+'\n'+_truncatedStack(stack.toString());
   });
 }
 
@@ -176,11 +191,13 @@ Future<void> _mainBody() async {
   FlutterError.onError=(details){
     FlutterError.presentError(details);
     debugPrint('UNCAUGHT_FLUTTER_ERROR: '+details.exceptionAsString());
-    lastCrash.value='FLUTTER: '+details.exceptionAsString();
+    debugPrint('UNCAUGHT_FLUTTER_STACK:\n'+(details.stack?.toString()??'(pas de stack)'));
+    lastCrash.value='FLUTTER: '+details.exceptionAsString()+'\n'+_truncatedStack(details.stack?.toString()??'');
   };
   PlatformDispatcher.instance.onError=(error,stack){
     debugPrint('UNCAUGHT_PLATFORM_ERROR: '+error.toString());
-    lastCrash.value='PLATFORM: '+error.toString();
+    debugPrint('UNCAUGHT_PLATFORM_STACK:\n'+stack.toString());
+    lastCrash.value='PLATFORM: '+error.toString()+'\n'+_truncatedStack(stack.toString());
     return true;
   };
   // Loaded in the background, same principle as the Stripe fix just
