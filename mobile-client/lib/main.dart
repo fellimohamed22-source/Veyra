@@ -1426,7 +1426,24 @@ class _AddressScreenState extends State<AddressScreen>{
         leading:const Icon(Icons.event),
         title:Text(t('Date et heure de départ')),
         subtitle:Text(scheduledAt==null?t('Minimum 2 h à l’avance'):VeyraDateFormatter.dateTime(scheduledAt!.toIso8601String())),
-        trailing:OutlinedButton(onPressed:chooseDateTime,child:Text(t('Choisir'))),
+        trailing:OutlinedButton(
+          // Vrai bug trouvé via un vrai adb logcat (UNCAUGHT_FLUTTER_ERROR:
+          // "Trailing widget consumes the entire tile width"), confirmé
+          // par la trace de pile menant à sliver_multi_box_adaptor.dart
+          // (ce ListTile vit dans le ListView de cet écran). Cause
+          // racine : le thème global OutlinedButton
+          // (app/theme.dart) fixe minimumSize:Size.fromHeight(50), ce qui
+          // signifie une largeur minimale INFINIE par construction --
+          // pensé pour des CTA pleine largeur ailleurs dans l'app, pas
+          // pour un petit bouton "Choisir" utilisé comme trailing d'un
+          // ListTile, qui exige justement une largeur bornée pour se
+          // layouter. Ce déraillement de layout cascadait ensuite en une
+          // série de "RenderBox was not laid out" puis en de multiples
+          // "Null check operator used on a null value" en aval, ce qui
+          // laissait l'écran entièrement blanc.
+          style:OutlinedButton.styleFrom(minimumSize:Size.zero,padding:const EdgeInsets.symmetric(horizontal:16,vertical:10)),
+          onPressed:chooseDateTime,child:Text(t('Choisir')),
+        ),
       ),
       const SizedBox(height:12),
       FutureBuilder<List<dynamic>>(
