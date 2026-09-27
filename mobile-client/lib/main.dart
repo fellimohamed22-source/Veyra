@@ -8,6 +8,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
@@ -431,6 +433,35 @@ class _LoginScreenState extends State<LoginScreen>{
     }
   }
 
+  // Real gap fixed here: Google sign-in existed and already worked
+  // end-to-end on the driver app (same backend /api/v1/auth/firebase
+  // endpoint, already correctly verifying Firebase ID tokens), but was
+  // entirely absent on the client -- no button, no SDK call, nothing.
+  Future<void> _googleLogin() async {
+    setState((){loading=true;error=null;offline=false;});
+    try{
+      if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+      final account=await GoogleSignIn().signIn();
+      if(account==null)return;
+      final auth=await account.authentication;
+      final credential=GoogleAuthProvider.credential(
+        accessToken:auth.accessToken,
+        idToken:auth.idToken,
+      );
+      final userCredential=await FirebaseAuth.instance.signInWithCredential(credential);
+      final token=await userCredential.user?.getIdToken();
+      if(token==null||token.isEmpty)throw StateError('FIREBASE_ID_TOKEN_MISSING');
+      await api.loginWithFirebase(token);
+      await configurePush();
+      if(mounted)context.go('/home');
+    }catch(e){
+      debugPrint('GOOGLE_LOGIN_FAILED: $e');
+      if(mounted)setState(()=>error=e is DioException?VeyraErrorMessages.forException(e):t('Connexion Google impossible. Vérifiez la configuration Firebase et réessayez.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
     body:SafeArea(child:Column(children:[
@@ -462,6 +493,22 @@ class _LoginScreenState extends State<LoginScreen>{
         if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
         const SizedBox(height:20),
         VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
+        const SizedBox(height:20),
+        Row(children:[
+          const Expanded(child:Divider()),
+          Padding(
+            padding:const EdgeInsets.symmetric(horizontal:12),
+            child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
+          ),
+          const Expanded(child:Divider()),
+        ]),
+        const SizedBox(height:14),
+        OutlinedButton.icon(
+          onPressed:loading?null:_googleLogin,
+          icon:const Icon(Icons.g_mobiledata_rounded,size:28),
+          label:Text(t('Continuer avec Google')),
+          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
+        ),
       TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
       TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte'))),
       ]))),

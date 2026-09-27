@@ -110,6 +110,21 @@ class Api {
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);
   }
 
+  // Real gap fixed here: this method already existed on the driver app
+  // (calling the same, already-working backend /api/v1/auth/firebase
+  // endpoint) but was entirely missing on the client -- there was no
+  // Google/phone sign-in path for clients at all, not just a broken one.
+  Future<void> loginWithFirebase(String idToken) async {
+    _me=null;
+    final r=await dio.post('/api/v1/auth/firebase',data:{
+      'idToken':idToken,
+      'role':'CLIENT',
+      'deviceName':'client-mobile',
+    });
+    await storage.write(key:'accessToken',value:r.data['accessToken']);
+    await storage.write(key:'refreshToken',value:r.data['refreshToken']);
+  }
+
   Future<void> logout() async {
     final refresh=await storage.read(key:'refreshToken');
     if(refresh!=null){
