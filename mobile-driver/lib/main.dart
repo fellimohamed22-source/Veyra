@@ -928,6 +928,15 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   DateTimeRange? dates;
   late Future<List<dynamic>> categories;
   int page=0;
+  int revision=0;
+  late Future<Position?> listPosition;
+  Future<Position?> locate()async{
+    try{
+      final permission=await Geolocator.checkPermission();
+      if(permission!=LocationPermission.always&&permission!=LocationPermission.whileInUse)return null;
+      return await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:10)));
+    }catch(_){return null;}
+  }
   final pickupFilter=TextEditingController();
   final destinationFilter=TextEditingController();
   int? minPassengers;
@@ -957,7 +966,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
     destinationFilter.dispose();
     super.dispose();
   }
-  Future<List<dynamic>> load()=>api.opportunities(
+  Future<List<dynamic>> load(){revision++;listPosition=locate();return api.opportunities(
     page:page,
     sort:sort,
     pickupQuery:pickupFilter.text,
@@ -966,7 +975,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
     categoryId:categoryId,
     from:dates?.start,
     to:dates==null?null:dates!.end.add(const Duration(days:1)).subtract(const Duration(microseconds:1)),
-  );
+  );}
   void reload()=>setState((){future=load();});
 
   @override Widget build(BuildContext context)=>Scaffold(
@@ -1066,6 +1075,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
             final items=s.data??[];
             if(items.isEmpty){
+              if(page>0)return TextButton(onPressed:()=>setState((){page--;future=load();}),child:Text(t('Page précédente')));
               final filtered=pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null||categoryId!=null||dates!=null;
               return Card(child:ListTile(
                 leading:const Icon(Icons.inbox_outlined),
@@ -1079,13 +1089,10 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
               final x=Map<String,dynamic>.from(raw as Map);
               final id=x['id'].toString();
               final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-              final tripMeters=(x['trip_distance_meters']??x['tripDistanceMeters']) as num?;
-              final approachMeters=(x['approach_distance_meters']??x['approachDistanceMeters']) as num?;
               final ownOffer=x['own_offer_amount_minor']??x['ownOfferAmountMinor'];
               final category=(x['category_name']??x['vehicle_category_name'])?.toString();
               final passengers=x['passenger_count'];
               final baggage=x['baggage_count'];
-              String distance(num? meters)=>meters==null?t('Indisponible'):(meters.toDouble()/1000).toStringAsFixed(meters<10000?1:0)+' km';
               return Card(child:InkWell(
                 borderRadius:BorderRadius.circular(12),
                 onTap:()=>context.push('/request/'+id),
@@ -1107,7 +1114,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
                     if(baggage!=null)Chip(avatar:const Icon(Icons.luggage_outlined,size:16),label:Text('$baggage '+t('bagage(s)'))),
                   ]),
                   const SizedBox(height:6),
-                  Text(t('Course')+' : '+distance(tripMeters)+' • '+t('Approche')+' : '+distance(approachMeters),style:const TextStyle(color:Colors.black54)),
+                  OpportunityDistanceSummary(key:ValueKey('$id:$revision'),booking:x,position:listPosition),
                   if(ownOffer!=null)Padding(padding:const EdgeInsets.only(top:6),child:Text(t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(ownOffer),style:const TextStyle(fontWeight:FontWeight.w700))),
                 ])),
               ));
@@ -1211,6 +1218,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
           }
           final items=s.data??[];
           if(items.isEmpty){
+              if(page>0)return TextButton(onPressed:()=>_changePage(scope,-1),child:Text(t('Page précédente')));
             return VeyraEmptyView(
               icon:Icons.local_offer_outlined,
               message:t('Aucune offre dans cette catégorie.'),
@@ -1307,6 +1315,38 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
       _list(closed,isWon:false,scope:'closed',page:closedPage),
     ]),
   );
+}
+
+
+class OpportunityDistanceSummary extends StatefulWidget{
+  final Map<String,dynamic> booking;
+  final Future<Position?> position;
+  const OpportunityDistanceSummary({required this.booking,required this.position,super.key});
+  @override State<OpportunityDistanceSummary> createState()=>_OpportunityDistanceSummaryState();
+}
+class _OpportunityDistanceSummaryState extends State<OpportunityDistanceSummary>{
+  Map<String,dynamic>? trip,approach;
+  bool loading=true;
+  @override void initState(){super.initState();load();}
+  Future<void> load()async{
+    final b=widget.booking;
+    final a=(b['pickup_lat'] as num?)?.toDouble(),c=(b['pickup_lng'] as num?)?.toDouble();
+    final d=(b['dropoff_lat'] as num?)?.toDouble(),e=(b['dropoff_lng'] as num?)?.toDouble();
+    if(a!=null&&c!=null&&d!=null&&e!=null){
+      try{final value=await api.routeEstimate(fromLat:a,fromLng:c,toLat:d,toLng:e);if(mounted)setState(()=>trip=value);}catch(_){}
+      final p=await widget.position;
+      if(p!=null&&mounted){try{final value=await api.routeEstimate(fromLat:p.latitude,fromLng:p.longitude,toLat:a,toLng:c);if(mounted)setState(()=>approach=value);}catch(_){}}
+    }
+    if(mounted)setState(()=>loading=false);
+  }
+  @override Widget build(BuildContext context){
+    final tripDistance=trip?['distanceMeters'] as num?,approachDistance=approach?['distanceMeters'] as num?;
+    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(t('Course')+' : '+(tripDistance==null?(loading?t('Calcul en cours…'):t('Itinéraire indisponible')):VeyraMoneyFormatter.distance(tripDistance))+(trip?['durationSeconds']==null?'':' • '+VeyraMoneyFormatter.duration(trip!['durationSeconds'] as num))),
+      Text(t('Approche')+' : '+(approachDistance==null?(loading?t('Calcul en cours…'):t('Indisponible — vérifier le GPS')):VeyraMoneyFormatter.distance(approachDistance))),
+      if(tripDistance!=null&&approachDistance!=null)Text(t('Distance totale estimée')+' : '+VeyraMoneyFormatter.distance(tripDistance+approachDistance)),
+    ]);
+  }
 }
 
 class RequestScreen extends StatefulWidget{
@@ -1688,6 +1728,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
             }
             final items=s.data??[];
             if(items.isEmpty){
+              if(page>0)return TextButton(onPressed:()=>setState((){page--;future=_load();}),child:Text(t('Page précédente')));
               return Center(child:Padding(
                 padding:const EdgeInsets.all(32),
                 child:Column(mainAxisSize:MainAxisSize.min,children:[Text(status=='ALL'?t('Aucune course pour le moment.'):t('Aucune course ne correspond aux filtres.')),if(status!='ALL'||sort!='asc')TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser les filtres')))]),
@@ -1707,6 +1748,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
                       ),
                       const SizedBox(height:4),
                       Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
+                      Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
                       const SizedBox(height:8),
                       Row(children:[
                         VeyraStatusBadge(status:(x['status']??'').toString()),
@@ -1741,6 +1783,13 @@ class _AgendaScreenState extends State<AgendaScreen>{
       ]),
     ),
   );
+}
+
+DateTime? noShowAvailableAt(Map<String,dynamic> booking){
+  final arrived=DateTime.tryParse(booking['arrived_at']?.toString()??'');
+  final scheduled=DateTime.tryParse(booking['scheduled_at']?.toString()??'');
+  if(arrived==null||scheduled==null)return null;
+  return (arrived.isAfter(scheduled)?arrived:scheduled).add(const Duration(minutes:15));
 }
 
 class RideScreen extends StatefulWidget{
@@ -2231,9 +2280,10 @@ class _RideScreenState extends State<RideScreen>{
                     child:Text(t('Démarrer la course')),
                   ),
                   TextButton(
-                    onPressed:busy?null:confirmNoShow,
+                    onPressed:busy||noShowAvailableAt(x)==null||DateTime.now().isBefore(noShowAvailableAt(x)!)?null:confirmNoShow,
                     child:Text(t('Déclarer le client absent')),
                   ),
+                  Text(noShowAvailableAt(x)==null?t('Heure d’arrivée indisponible. Actualisez la course.'):t('Déclaration possible à partir de')+' '+VeyraDateFormatter.dateTime(noShowAvailableAt(x)!.toIso8601String())),
                 ],
                 if(status=='IN_PROGRESS')
                   FilledButton(
@@ -2433,6 +2483,7 @@ class _WalletScreenState extends State<WalletScreen>{
               }
               final items=ts.data??[];
               if(items.isEmpty){
+              if(transactionsPage>0)return TextButton(onPressed:()=>setState((){transactionsPage--;transactionsFuture=loadTransactions();}),child:Text(t('Page précédente')));
                 return Card(child:ListTile(
                   leading:const Icon(Icons.receipt_long_outlined),
                   title:Text(t('Aucune transaction pour le moment.')),
