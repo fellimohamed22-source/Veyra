@@ -21,7 +21,16 @@ import java.util.*;
     }
     @PostMapping("/refresh")Resp refresh(@RequestBody Req r){
         String h=sha(r.refreshToken());
-        List<Map<String,Object>>x=db.queryForList("select s.id,s.user_id,u.email from user_sessions s join users u on u.id=s.user_id where s.refresh_token_hash=? and s.revoked_at is null and s.expires_at>now() for update",h);
+        // Bug réel trouvé en auditant toutes les sélections de u.email :
+        // sans cast, le driver JDBC renvoie u.email (colonne CITEXT) sous
+        // une forme non-String (déjà vu et corrigé dans MeController --
+        // même colonne, même type). Ici c'était pire qu'un problème
+        // d'affichage : le (String)s.get("email") juste en dessous
+        // provoquait un ClassCastException à CHAQUE appel réel de
+        // /auth/refresh, jamais détecté par le test existant parce qu'il
+        // mocke JdbcTemplate avec un vrai String Java, contournant
+        // exactement le comportement du vrai driver PostgreSQL.
+        List<Map<String,Object>>x=db.queryForList("select s.id,s.user_id,u.email::text as email from user_sessions s join users u on u.id=s.user_id where s.refresh_token_hash=? and s.revoked_at is null and s.expires_at>now() for update",h);
         if(x.isEmpty())throw new ApiException(HttpStatus.UNAUTHORIZED,"INVALID_REFRESH_TOKEN");
         Map<String,Object>s=x.getFirst();
         db.update("update user_sessions set revoked_at=now() where id=?",s.get("id"));

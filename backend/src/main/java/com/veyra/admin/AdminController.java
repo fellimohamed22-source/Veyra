@@ -29,7 +29,7 @@ public class AdminController {
   @GetMapping("/drivers")
   public List<Map<String,Object>> drivers(){
     return db.queryForList(
-      "select d.id,u.first_name,u.last_name,u.email,u.phone,d.status,d.kyc_status,d.marketplace_enabled,d.rating " +
+      "select d.id,u.first_name,u.last_name,u.email::text as email,u.phone,d.status,d.kyc_status,d.marketplace_enabled,d.rating " +
       "from drivers d join users u on u.id=d.user_id order by d.created_at desc limit 500");
   }
 
