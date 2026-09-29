@@ -2602,10 +2602,14 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
   final phone=TextEditingController();
   final email=TextEditingController();
   final password=TextEditingController();
+  final formKey=GlobalKey<FormState>();
   bool loading=false;
   String? error;
 
+  @override void dispose(){firstName.dispose();lastName.dispose();phone.dispose();email.dispose();password.dispose();super.dispose();}
+
   Future<void> submit()async{
+    if(loading||!formKey.currentState!.validate())return;
     if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
       setState(()=>error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.'));
       return;
@@ -2630,20 +2634,20 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Créer un compte Chauffeur'))),
-    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
-      TextField(controller:firstName,decoration:InputDecoration(labelText:t('Prénom'))),
+    body:SafeArea(child:Form(key:formKey,autovalidateMode:AutovalidateMode.onUserInteraction,child:ListView(padding:const EdgeInsets.all(24),children:[
+      TextFormField(controller:firstName,validator:(v)=>(v??'').trim().isEmpty?t('Prénom requis'):null,decoration:InputDecoration(labelText:t('Prénom'))),
       const SizedBox(height:12),
-      TextField(controller:lastName,decoration:InputDecoration(labelText:t('Nom'))),
+      TextFormField(controller:lastName,decoration:InputDecoration(labelText:t('Nom'))),
       const SizedBox(height:12),
-      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
+      TextFormField(controller:phone,validator:(v)=>(v??'').trim().length<6?t('Téléphone incomplet'):null,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
       const SizedBox(height:12),
-      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
+      TextFormField(controller:email,validator:(v)=>RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v??'').trim())?null:t('E-mail invalide'),keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
       const SizedBox(height:12),
-      TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),helperText:'10 caractères minimum')),
+      TextFormField(controller:password,validator:(v)=>(v??'').length<10?t('10 caractères minimum'):null,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),helperText:'10 caractères minimum')),
       if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:16),
       FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Continuer vers mon dossier VTC'))),
-    ])),
+    ]))),
   );
 }
 

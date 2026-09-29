@@ -2435,11 +2435,15 @@ class _RegisterScreenState extends State<RegisterScreen>{
   final phone=TextEditingController();
   final email=TextEditingController();
   final password=TextEditingController();
+  final formKey=GlobalKey<FormState>();
   bool loading=false;
   String? error;
   bool offline=false;
 
+  @override void dispose(){firstName.dispose();lastName.dispose();phone.dispose();email.dispose();password.dispose();super.dispose();}
+
   Future<void> submit()async{
+    if(loading||!formKey.currentState!.validate())return;
     if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
       setState((){error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.');offline=false;});
       return;
@@ -2474,21 +2478,21 @@ class _RegisterScreenState extends State<RegisterScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
     appBar:AppBar(title:Text(t('Créer un compte')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
-    body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
-      TextField(controller:firstName,decoration:appFieldDecoration(t('Prénom'),icon:Icons.person_outline)),
+    body:SafeArea(child:Form(key:formKey,autovalidateMode:AutovalidateMode.onUserInteraction,child:ListView(padding:const EdgeInsets.all(24),children:[
+      TextFormField(controller:firstName,validator:(v)=>(v??'').trim().isEmpty?t('Prénom requis'):null,decoration:appFieldDecoration(t('Prénom'),icon:Icons.person_outline)),
       const SizedBox(height:12),
-      TextField(controller:lastName,decoration:appFieldDecoration(t('Nom'),icon:Icons.person_outline)),
+      TextFormField(controller:lastName,decoration:appFieldDecoration(t('Nom'),icon:Icons.person_outline)),
       const SizedBox(height:12),
-      TextField(controller:phone,keyboardType:TextInputType.phone,decoration:appFieldDecoration(t('Téléphone'),icon:Icons.phone_outlined)),
+      TextFormField(controller:phone,validator:(v)=>(v??'').trim().length<6?t('Téléphone incomplet'):null,keyboardType:TextInputType.phone,decoration:appFieldDecoration(t('Téléphone'),icon:Icons.phone_outlined)),
       const SizedBox(height:12),
-      TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
+      TextFormField(controller:email,validator:(v)=>RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v??'').trim())?null:t('E-mail invalide'),keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
       const SizedBox(height:12),
-      TextField(controller:password,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline,helperText:t('10 caractères minimum'))),
+      TextFormField(controller:password,validator:(v)=>(v??'').length<10?t('10 caractères minimum'):null,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline,helperText:t('10 caractères minimum'))),
       if(offline)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:VeyraOfflineBanner(onRetry:submit)),
       if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:16),
       VeyraPrimaryButton(label:t('Créer mon compte'),loading:loading,onPressed:submit),
-    ])),
+    ]))),
   );
 }
 
