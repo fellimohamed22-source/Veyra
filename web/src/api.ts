@@ -95,6 +95,20 @@ export class Api {
   logout(){
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    // Bug réel trouvé en lisant views/partner.ts : partnerId est lu
+    // depuis localStorage au démarrage du composant (`localStorage.
+    // getItem('partnerId')`) et n'était jamais nettoyé ici. Le backend
+    // reste protégé (chaque endpoint /partner/{id}/... vérifie
+    // l'appartenance réelle via member(), donc pas de fuite de données
+    // -- juste un 403 silencieux avalé en "Aucune réservation"), mais
+    // sur un poste partagé (réception d'un hôtel/restaurant), la
+    // personne suivante qui se connecte avec son propre compte hérite
+    // de l'ID du partenaire précédent et voit un encart "Partenaire
+    // actif" trompeur tant qu'elle ne clique pas sur "Changer" sans
+    // comprendre pourquoi. Nettoyé ici, au même endroit que les tokens,
+    // pour couvrir aussi bien le clic "Déconnexion" que la
+    // déconnexion automatique déclenchée par un refresh échoué.
+    localStorage.removeItem('partnerId');
   }
 
   adminDashboard(){return this.request('/admin/dashboard');}
