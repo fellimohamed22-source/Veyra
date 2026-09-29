@@ -14,7 +14,7 @@ void main(){
     }));
     await tester.pumpWidget(const MaterialApp(home:MesOffresScreen()));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Suivant').first,500,scrollable:find.byType(Scrollable).last);
+    await tester.scrollUntilVisible(find.text('Suivant'),500,scrollable:find.byType(Scrollable).last);
     await tester.tap(find.text('Suivant').first);
     await tester.pumpAndSettle();
     expect(find.text('Page précédente'),findsOneWidget);
