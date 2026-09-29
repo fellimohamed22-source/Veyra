@@ -45,11 +45,21 @@ export class Api {
   // Separate method rather than a flag on request(), to keep the much
   // more common JSON path simple and not risk it accidentally taking
   // the blob branch.
-  async requestBlob(path:string):Promise<Blob>{
+  async requestBlob(path:string,retried=false):Promise<Blob>{
     const token=localStorage.getItem('accessToken');
     const headers=new Headers();
     if(token)headers.set('Authorization','Bearer '+token);
     const response=await fetch(this.base+path,{headers});
+    // Bug réel trouvé en comparant avec request() ci-dessus : cette
+    // méthode n'a jamais eu la même logique de retry sur 401. Un admin
+    // dont le token venait tout juste d'expirer en consultant un
+    // document KYC recevait "Document introuvable ou accès refusé"
+    // (message trompeur -- le document existe, c'est juste le token qui
+    // est expiré) plutôt que le rafraîchissement silencieux normal.
+    if(response.status===401&&!retried){
+      const refreshed=await this.refreshAccessToken();
+      if(refreshed)return this.requestBlob(path,true);
+    }
     if(!response.ok)throw new Error('HTTP_'+response.status);
     return response.blob();
   }
