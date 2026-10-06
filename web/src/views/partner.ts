@@ -294,12 +294,23 @@ export class Partner implements OnInit{
 
   async searchAddress(isPickup:boolean){
     const q=isPickup?this.pickupText:this.dropoffText;
+    // Bug réel : après avoir choisi une suggestion, modifier le texte
+    // laissait this.pickup/dropoff sur l'ANCIEN lieu (lat/lng inclus) --
+    // le champ affichait la nouvelle adresse mais publish() réservait
+    // l'ancienne. Toute édition invalide désormais la sélection : il
+    // faut re-choisir une suggestion (publish() exige pickup/dropoff).
+    if(isPickup){if(this.pickup&&this.pickup.label!==q)this.pickup=null;}
+    else if(this.dropoff&&this.dropoff.label!==q)this.dropoff=null;
     if(q.trim().length<3){
       if(isPickup)this.pickupSuggestions=[];else this.dropoffSuggestions=[];
       return;
     }
     try{
       const result=await this.api.autocomplete(q);
+      // Réponses hors-ordre : une requête lente pour "mar" ne doit pas
+      // écraser les suggestions de "marseille" déjà affichées.
+      const current=isPickup?this.pickupText:this.dropoffText;
+      if(current!==q)return;
       if(isPickup)this.pickupSuggestions=result;else this.dropoffSuggestions=result;
     }catch{}
   }

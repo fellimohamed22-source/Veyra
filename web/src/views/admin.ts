@@ -2,7 +2,7 @@ import {CommonModule} from '@angular/common';
 import {Component,OnInit} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {Api} from '../api';
-import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel,documentTypeLabel} from '../formatters';
+import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel,documentTypeLabel,partnerOrgStatusLabel} from '../formatters';
 
 @Component({
   standalone:true,
@@ -46,7 +46,7 @@ import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel,documentTypeLabel
       <p *ngIf="partners.length===0">Aucun partenaire.</p>
       <div *ngFor="let p of partners" style="border-top:1px solid #e5e7eb;padding:12px 0">
         <strong>{{p.name}}</strong>
-        <div>{{p.partner_type}} • {{p.status}} • crédit {{p.credit_status}}</div>
+        <div>{{p.partner_type}} • {{partnerOrgStatusLabel(p.status)}}</div>
         <button *ngIf="p.status!=='APPROVED'" (click)="approvePartner(p.id)">Approuver</button>
         <button *ngIf="p.status==='APPROVED'" (click)="suspendPartner(p.id)">Suspendre</button>
         <div *ngIf="p.status==='APPROVED'" style="margin-top:10px">
@@ -146,6 +146,7 @@ export class Admin implements OnInit{
   dateTime=dateTime;
   kycStatusLabel=kycStatusLabel;
   documentTypeLabel=documentTypeLabel;
+  partnerOrgStatusLabel=partnerOrgStatusLabel;
 
   dashboard:any=null;
   bookings:any[]=[];
@@ -196,7 +197,7 @@ export class Admin implements OnInit{
     }
   }
 
-  async approveDriver(id:string){await this.api.approveDriver(id);await this.load();}
+  async approveDriver(id:string){await this.act(()=>this.api.approveDriver(id));}
 
   async toggleDocuments(driverId:string){
     if(this.expandedDriverId===driverId){
@@ -228,11 +229,26 @@ export class Admin implements OnInit{
     }
   }
   async rejectDriver(id:string){
-    const reason=prompt('Motif de rejet KYC')||'DOCUMENT_INVALID';
-    await this.api.rejectDriver(id,reason);await this.load();
+    const input=prompt('Motif de rejet KYC');
+    // Bug réel : annuler la boîte de dialogue (null) rejetait quand même
+    // le dossier avec le motif par défaut -- une action irréversible
+    // côté chauffeur déclenchée par un simple clic sur "Annuler".
+    if(input===null)return;
+    const reason=input.trim()||'DOCUMENT_INVALID';
+    await this.act(()=>this.api.rejectDriver(id,reason));
   }
-  async approvePartner(id:string){await this.api.approvePartner(id);await this.load();}
-  async suspendPartner(id:string){await this.api.suspendPartner(id);await this.load();}
+  async approvePartner(id:string){await this.act(()=>this.api.approvePartner(id));}
+  async suspendPartner(id:string){await this.act(()=>this.api.suspendPartner(id));}
+
+  // Ces 4 actions (approuver/rejeter/suspendre) n'avaient aucun
+  // try/catch : un échec réseau ou un 403 laissait une promesse rejetée
+  // non gérée, sans aucun retour visuel pour l'admin.
+  private async act(fn:()=>Promise<any>){
+    this.error='';
+    try{await fn();}
+    catch{this.error='Action impossible. Vérifiez votre connexion et réessayez.';return;}
+    await this.load();
+  }
   async saveStandardCommission(){
     const bps=Math.round(this.standardCommissionPercent*100);
     try{

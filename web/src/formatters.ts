@@ -27,7 +27,15 @@ const PAYMENT_METHOD_FR: Record<string,string> = {
   PARTNER_INVOICE: 'Facturation partenaire',
 };
 
+// Statuts réellement posés par le backend (AdminController /
+// PartnerController) : SUBMITTED à la création, APPROVED à la
+// validation, SUSPENDED à la suspension. PENDING/ACTIVE/REJECTED
+// n'existent pas côté backend mais restent mappés par prudence.
 const PARTNER_ORG_STATUS_FR: Record<string,string> = {
+  DRAFT: 'Brouillon',
+  SUBMITTED: 'En attente de validation',
+  UNDER_REVIEW: 'En cours de vérification',
+  APPROVED: 'Approuvé',
   PENDING: 'En attente de validation',
   ACTIVE: 'Actif',
   SUSPENDED: 'Suspendu',
@@ -37,6 +45,7 @@ const PARTNER_ORG_STATUS_FR: Record<string,string> = {
 const KYC_STATUS_FR: Record<string,string> = {
   DRAFT: 'Dossier à compléter',
   SUBMITTED: 'Vérification en cours',
+  UNDER_REVIEW: 'Vérification en cours',
   APPROVED: 'Dossier approuvé',
   REJECTED: 'Dossier refusé',
 };
