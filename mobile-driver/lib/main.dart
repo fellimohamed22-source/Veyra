@@ -1364,23 +1364,46 @@ class _RequestScreenState extends State<RequestScreen>{
   bool _prefilled=false;
   Map<String,dynamic>? _tripEconomics;
   bool _tripEconomicsLoading=false;
+  // Bug réel : le catch vide de _loadTripEconomics ne signalait rien -- un
+  // chauffeur qui tapait "Réessayer le calcul du trajet" voyait un clignotement
+  // puis exactement le même état "indisponible", sans savoir pourquoi.
+  String? _tripEconomicsError;
+  // Idem pour la localisation : Android ne réaffiche jamais le dialogue de
+  // permission une fois deniedForever, retaper le bouton ne peut donc jamais
+  // fonctionner -- seul un passage par les réglages système débloque.
+  bool _approachPermissionDeniedForever=false;
   Map<String,dynamic>? approach;
   String? approachError;
   bool approachLoading=false;
   Future<void> loadApproach({bool requestPermission=false})async{
-    if(approachLoading)return;setState(()=>approachLoading=true);
+    if(approachLoading)return;setState((){approachLoading=true;_approachPermissionDeniedForever=false;});
     try{
       if(!await Geolocator.isLocationServiceEnabled())throw StateError('gps');
       var permission=await Geolocator.checkPermission();
       if(permission==LocationPermission.denied&&requestPermission)permission=await Geolocator.requestPermission();
-      if(permission==LocationPermission.denied||permission==LocationPermission.deniedForever)throw StateError('permission');
+      if(permission==LocationPermission.deniedForever){_approachPermissionDeniedForever=true;throw StateError('permission_forever');}
+      if(permission==LocationPermission.denied)throw StateError('permission');
       final position=await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:15)));
       final x=await detail;
       final lat=(x['pickup_lat'] as num?)?.toDouble(),lng=(x['pickup_lng'] as num?)?.toDouble();
       if(lat==null||lng==null)throw StateError('coordinates');
       final estimate=await api.routeEstimate(fromLat:position.latitude,fromLng:position.longitude,toLat:lat,toLng:lng);
       if(mounted)setState((){approach=estimate;approachError=null;});
-    }catch(e){if(mounted)setState((){approach=null;approachError=t('Approche non calculée. Activez et autorisez la localisation, puis réessayez.');});}
+    }catch(e){
+      if(mounted)setState((){
+        approach=null;
+        final cause=e is StateError?e.message:'';
+        approachError=cause=='permission_forever'
+          ?t('La localisation est bloquée pour cette application. Autorisez-la depuis les réglages du téléphone.')
+          :cause=='gps'
+            ?t('Le GPS du téléphone est désactivé. Activez-le puis réessayez.')
+            :cause=='permission'
+              ?t('Autorisation de localisation refusée. Appuyez sur Actualiser ma position pour l’accorder.')
+              :cause=='coordinates'
+                ?t('Point de départ sans coordonnées, approche impossible à calculer.')
+                :t('Approche non calculée pour le moment. Réessayez dans un instant.');
+      });
+    }
     finally{if(mounted)setState(()=>approachLoading=false);}
   }
 
@@ -1393,7 +1416,22 @@ class _RequestScreenState extends State<RequestScreen>{
 
   void _refreshEconomics(){if(!mounted)return;setState((){});}
 
-  Future<void> _loadTripEconomics(Map<String,dynamic>x)async{final a=_number(_field(x,'pickup_lat','pickupLat')),b=_number(_field(x,'pickup_lng','pickupLng')),c=_number(_field(x,'dropoff_lat','dropoffLat')),e=_number(_field(x,'dropoff_lng','dropoffLng'));if(a==null||b==null||c==null||e==null)return;if(mounted)setState(()=>_tripEconomicsLoading=true);try{final r=await api.routeEstimate(fromLat:a,fromLng:b,toLat:c,toLng:e);if(mounted)setState(()=>_tripEconomics=r);}catch(_){}finally{if(mounted)setState(()=>_tripEconomicsLoading=false);}}
+  Future<void> _loadTripEconomics(Map<String,dynamic>x)async{
+    final a=_number(_field(x,'pickup_lat','pickupLat')),b=_number(_field(x,'pickup_lng','pickupLng')),c=_number(_field(x,'dropoff_lat','dropoffLat')),e=_number(_field(x,'dropoff_lng','dropoffLng'));
+    if(a==null||b==null||c==null||e==null){
+      if(mounted)setState(()=>_tripEconomicsError=t('Coordonnées de départ ou de destination indisponibles pour cette réservation.'));
+      return;
+    }
+    if(mounted)setState((){_tripEconomicsLoading=true;_tripEconomicsError=null;});
+    try{
+      final r=await api.routeEstimate(fromLat:a,fromLng:b,toLat:c,toLng:e);
+      if(mounted)setState((){_tripEconomics=r;_tripEconomicsError=null;});
+    }catch(_){
+      if(mounted)setState(()=>_tripEconomicsError=t('Calcul du trajet indisponible pour le moment. Réessayez dans un instant.'));
+    }finally{
+      if(mounted)setState(()=>_tripEconomicsLoading=false);
+    }
+  }
 
   dynamic _field(Map<String,dynamic> x,String snake,String camel){
     if(x.containsKey(snake))return x[snake];
@@ -1519,10 +1557,12 @@ class _RequestScreenState extends State<RequestScreen>{
                 const SizedBox(height:10),
                 if(_tripEconomicsLoading)const LinearProgressIndicator(),
                 Text(courseMeters==null?t('Distance de la course indisponible'):t('Distance départ → destination')+' : '+VeyraMoneyFormatter.distance(courseMeters)),
+                if(_tripEconomicsError!=null)Text(_tripEconomicsError!,style:const TextStyle(color:Colors.black54)),
                 if(routeSeconds!=null)Text(t('Durée routière estimée')+' : '+VeyraMoneyFormatter.duration(routeSeconds)),
                 if(approachMeters!=null)Text(t('Distance d’approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
                 if(courseMeters!=null&&approachMeters!=null)Text(t('Distance totale')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
                 if(approachError!=null)Text(approachError!),
+                if(_approachPermissionDeniedForever)TextButton.icon(onPressed:()=>Geolocator.openAppSettings(),icon:const Icon(Icons.settings),label:Text(t('Ouvrir les réglages'))),
                 TextButton.icon(onPressed:approachLoading?null:()=>loadApproach(requestPermission:true),icon:const Icon(Icons.my_location),label:Text(approachLoading?t('Localisation…'):t('Actualiser ma position'))),
                 if(courseMeters==null)TextButton(onPressed:()=>detail.then(_loadTripEconomics),child:Text(t('Réessayer le calcul du trajet'))),
                 if(approachMeters==null)Text(t('Le revenu par km ci-dessous exclut l’approche tant qu’elle ne peut pas être calculée.')),
