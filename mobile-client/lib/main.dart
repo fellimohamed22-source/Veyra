@@ -626,12 +626,21 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
                         Expanded(child:Text(title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16,height:1.25,color:VeyraColors.textPrimary))),
                       ]),
                       const SizedBox(height:14),
-                      Row(children:[
-                        const Icon(Icons.schedule,size:17,color:VeyraColors.textSecondary),
-                        const SizedBox(width:6),
-                        Expanded(child:Text(scheduled,style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
-                        VeyraStatusBadge(status:status),
-                      ]),
+                      // Même défaut que l'en-tête de OffersScreen (badge non flexible
+                      // dans un Row) sur l'écran le plus fréquenté de l'app.
+                      SizedBox(width:double.infinity,child:Wrap(
+                        alignment:WrapAlignment.spaceBetween,
+                        crossAxisAlignment:WrapCrossAlignment.center,
+                        spacing:8,runSpacing:6,
+                        children:[
+                          Row(mainAxisSize:MainAxisSize.min,children:[
+                            const Icon(Icons.schedule,size:17,color:VeyraColors.textSecondary),
+                            const SizedBox(width:6),
+                            Flexible(child:Text(scheduled,style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
+                          ]),
+                          VeyraStatusBadge(status:status),
+                        ],
+                      )),
                       if(x['selected_driver_id']!=null)Text((x['driver_name']??'Chauffeur confirmé').toString()),
                       if(x['customer_total_amount_minor']!=null)Text(t('Total client')+' : '+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
                       Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
@@ -1675,10 +1684,20 @@ class _OffersScreenState extends State<OffersScreen>{
                 style:const TextStyle(fontWeight:FontWeight.w600),
               ),
               const SizedBox(height:6),
-              Row(children:[
-                Expanded(child:Text(VeyraDateFormatter.dateTime(b['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13))),
-                VeyraStatusBadge(status:(b['status']??'').toString()),
-              ]),
+              // Défaut d'accessibilité réel (test offers_accessibility_test, texte
+              // x1,5 sur 320 px) : le badge de statut était un enfant NON flexible
+              // d'un Row -- dès que son libellé ("OFFRES REÇUES") est plus large que
+              // la ligne, RenderFlex déborde. Wrap + spaceBetween garde le badge à
+              // droite en taille normale et le fait passer à la ligne sinon.
+              SizedBox(width:double.infinity,child:Wrap(
+                alignment:WrapAlignment.spaceBetween,
+                crossAxisAlignment:WrapCrossAlignment.center,
+                spacing:8,runSpacing:6,
+                children:[
+                  Text(VeyraDateFormatter.dateTime(b['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
+                  VeyraStatusBadge(status:(b['status']??'').toString()),
+                ],
+              )),
             ])),
           );
         },
