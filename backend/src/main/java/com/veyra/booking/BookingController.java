@@ -243,7 +243,7 @@ import java.util.*;
         Map<String,Object>b=one("select creator_user_id,partner_id from scheduled_bookings where id=?",bookingId);
         owner(b);
         int rate=rate((UUID)b.get("partner_id"));
-            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id left join vehicles v on v.driver_id=d.id and v.status='APPROVED' left join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' order by o.proposed_amount_minor",(rs,
+            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id join scheduled_bookings sb on sb.id=o.booking_id join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' and o.expires_at>now() and sb.offer_window_ends_at>now() and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true order by o.proposed_amount_minor,o.id",(rs,
             n)->{
                 long p=rs.getLong("proposed_amount_minor"),commissionAmount=commission(p,
                 rate);
@@ -268,6 +268,7 @@ import java.util.*;
                 rs.getString("first_name"));
                 result.put("driverLastName",
                 rs.getString("last_name"));
+                result.put("driverVerified",true);
                 result.put("vehicleBrand",
                 rs.getString("brand"));
                 result.put("vehicleModel",

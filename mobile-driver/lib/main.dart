@@ -128,6 +128,7 @@ Future<void> configureDriverPush() async {
 }
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
+final activeRideTracker=DriverLocationTracker(api:api);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1817,18 +1818,19 @@ class _RideScreenState extends State<RideScreen>{
   bool ratingSubmitting=false;
   bool ratingSubmitted=false;
   bool trackingStarting=false;
+  bool trackingAttached=false;
   bool routePreviewLoading=false;
 
   @override void initState(){
     super.initState();
     future=api.bookingDetail(widget.bookingId);
-    tracker=DriverLocationTracker(api:api);
+    tracker=activeRideTracker;
     statusTimer=Timer.periodic(const Duration(seconds:8),(_)=>refreshStatus());
   }
 
   @override void dispose(){
     statusTimer?.cancel();
-    tracker.dispose();
+    tracker.detach(this);
     pin.dispose();
     super.dispose();
   }
@@ -1867,14 +1869,16 @@ class _RideScreenState extends State<RideScreen>{
 
   Future<void> _startTrackingIfNeeded(String status) async {
     if(!{'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status)||
-       tracker.running||
+       (tracker.running&&tracker.bookingId==widget.bookingId&&trackingAttached)||
        trackingStarting){
       return;
     }
     trackingStarting=true;
+    trackingAttached=true;
     try{
       await tracker.start(
         bookingId:widget.bookingId,
+        owner:this,
         onPosition:(p){
           if(!mounted)return;
           setState((){
@@ -2116,11 +2120,11 @@ class _RideScreenState extends State<RideScreen>{
         final tripRoute=VeyraRouteGeometry.fromApi(tripEtaInfo);
         final active={'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status);
 
-        if(active&&!tracker.running&&!trackingStarting){
+        if(active&&(!tracker.running||tracker.bookingId!=widget.bookingId||!trackingAttached)&&!trackingStarting){
           WidgetsBinding.instance.addPostFrameCallback((_){
             if(mounted)_startTrackingIfNeeded(status);
           });
-        }else if(!active&&tracker.running){
+        }else if(!active&&tracker.running&&tracker.bookingId==widget.bookingId){
           WidgetsBinding.instance.addPostFrameCallback((_){
             tracker.stop();
           });
@@ -2546,7 +2550,7 @@ class _WalletScreenState extends State<WalletScreen>{
 
 /// Écran Compte minimal côté chauffeur : identité, statut KYC, langue,
 /// déconnexion. Miroir de AccountScreen côté client.
-class AccountScreen extends StatefulWidget{const AccountScreen({super.key});@override State<AccountScreen> createState()=>_AccountScreenState();}class _AccountScreenState extends State<AccountScreen>{late Future<Map<String,dynamic>> future;late Future<List<dynamic>> docs;late Future<Map<String,dynamic>> kyc;Uint8List? avatar;bool busy=false;@override void initState(){super.initState();future=api.me();docs=api.documents();kyc=api.onboardingStatus();_loadAvatar();}Future<void> _loadAvatar()async{try{final v=await api.avatarBytes();if(mounted)setState(()=>avatar=v);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}}Future<void> photo()async{final r=await FilePicker.platform.pickFiles(type:FileType.image,withData:true);if(r==null||r.files.isEmpty)return;final f=r.files.single;if(f.path==null&&f.bytes==null){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Impossible de lire cette image.'))));return;}setState(()=>busy=true);try{final m=f.path!=null?await api.uploadAvatar(f.path!):await api.uploadAvatarBytes(f.bytes!,f.name),v=await api.avatarBytes();if(v==null||v.isEmpty)throw StateError('AVATAR_RELOAD_EMPTY');if(mounted){setState((){future=Future.value(m);avatar=v;});ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Photo de profil mise à jour.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e is DioException?VeyraErrorMessages.forException(e):t('Impossible d’enregistrer la photo de profil.'))));}finally{if(mounted)setState(()=>busy=false);}}Future<void> doc(String type)async{final r=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf','jpg','jpeg','png']),p=r?.files.single.path;if(p==null)return;setState(()=>busy=true);try{await api.uploadDocument(type,p);if(mounted)setState(()=>docs=api.documents());}finally{if(mounted)setState(()=>busy=false);}}Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState(()=>future=Future.value(u));}}Future<void> password()async{final o=TextEditingController(),n=TextEditingController();final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mon mot de passe')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:o,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe actuel'))),TextField(controller:n,obscureText:true,decoration:InputDecoration(labelText:t('Nouveau mot de passe')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&n.text.length>=10)try{await api.changePassword(o.text,n.text);await logout();}catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Mot de passe actuel incorrect.'))));}}Future<void> logout()async{await api.logout();try{await FirebaseAuth.instance.signOut();}catch(_){}if(mounted)context.go('/login');}@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Mon compte'))),body:FutureBuilder<Map<String,dynamic>>(future:future,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!));final m=s.data??{},name=((m['first_name']??'').toString()+' '+(m['last_name']??'').toString()).trim(),rating=double.tryParse((m['rating_average']??0).toString())??0,count=m['rating_count']??0;return ListView(padding:const EdgeInsets.all(20),children:[Center(child:Stack(children:[CircleAvatar(radius:48,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:42):null),Positioned(right:0,bottom:0,child:IconButton.filled(onPressed:busy?null:photo,icon:const Icon(Icons.camera_alt_outlined)))])),Center(child:Text(name.isEmpty?t('Chauffeur Veyra'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold))),Center(child:Text((m['email']??'').toString())),Center(child:Text((m['phone']??'').toString())),Center(child:Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.star,color:Colors.amber),Text(' '+rating.toStringAsFixed(1)+' ('+count.toString()+' '+t('avis')+')')])),const SizedBox(height:12),FutureBuilder<Map<String,dynamic>>(future:kyc,builder:(context,ks){
+class AccountScreen extends StatefulWidget{const AccountScreen({super.key});@override State<AccountScreen> createState()=>_AccountScreenState();}class _AccountScreenState extends State<AccountScreen>{late Future<Map<String,dynamic>> future;late Future<List<dynamic>> docs;late Future<Map<String,dynamic>> kyc;Uint8List? avatar;bool busy=false;@override void initState(){super.initState();future=api.me();docs=api.documents();kyc=api.onboardingStatus();_loadAvatar();}Future<void> _loadAvatar()async{try{final v=await api.avatarBytes();if(mounted)setState(()=>avatar=v);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}}Future<void> photo()async{final r=await FilePicker.platform.pickFiles(type:FileType.image,withData:true);if(r==null||r.files.isEmpty)return;final f=r.files.single;if(f.path==null&&f.bytes==null){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Impossible de lire cette image.'))));return;}setState(()=>busy=true);try{final m=f.path!=null?await api.uploadAvatar(f.path!):await api.uploadAvatarBytes(f.bytes!,f.name),v=await api.avatarBytes();if(v==null||v.isEmpty)throw StateError('AVATAR_RELOAD_EMPTY');if(mounted){setState((){future=Future.value(m);avatar=v;});ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Photo de profil mise à jour.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e is DioException?VeyraErrorMessages.forException(e):t('Impossible d’enregistrer la photo de profil.'))));}finally{if(mounted)setState(()=>busy=false);}}Future<void> doc(String type)async{final r=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf','jpg','jpeg','png']),p=r?.files.single.path;if(p==null)return;setState(()=>busy=true);try{await api.uploadDocument(type,p);if(mounted)setState(()=>docs=api.documents());}finally{if(mounted)setState(()=>busy=false);}}Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState(()=>future=Future.value(u));}}Future<void> password()async{final o=TextEditingController(),n=TextEditingController();final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mon mot de passe')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:o,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe actuel'))),TextField(controller:n,obscureText:true,decoration:InputDecoration(labelText:t('Nouveau mot de passe')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&n.text.length>=10)try{await api.changePassword(o.text,n.text);await logout();}catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Mot de passe actuel incorrect.'))));}}Future<void> logout()async{await activeRideTracker.stop();await api.logout();try{await FirebaseAuth.instance.signOut();}catch(_){}if(mounted)context.go('/login');}@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Mon compte'))),body:FutureBuilder<Map<String,dynamic>>(future:future,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!));final m=s.data??{},name=((m['first_name']??'').toString()+' '+(m['last_name']??'').toString()).trim(),rating=double.tryParse((m['rating_average']??0).toString())??0,count=m['rating_count']??0;return ListView(padding:const EdgeInsets.all(20),children:[Center(child:Stack(children:[CircleAvatar(radius:48,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:42):null),Positioned(right:0,bottom:0,child:IconButton.filled(onPressed:busy?null:photo,icon:const Icon(Icons.camera_alt_outlined)))])),Center(child:Text(name.isEmpty?t('Chauffeur Veyra'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold))),Center(child:Text((m['email']??'').toString())),Center(child:Text((m['phone']??'').toString())),Center(child:Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.star,color:Colors.amber),Text(' '+rating.toStringAsFixed(1)+' ('+count.toString()+' '+t('avis')+')')])),const SizedBox(height:12),FutureBuilder<Map<String,dynamic>>(future:kyc,builder:(context,ks){
             // Real gap fixed here, found during a UX/business audit:
             // kyc_status is already fetched and displayed well on the
             // dedicated KYC screen (icon, label, per-document detail),

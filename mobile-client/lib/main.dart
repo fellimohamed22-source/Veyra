@@ -1707,7 +1707,7 @@ class _OffersScreenState extends State<OffersScreen>{
             return Card(
               margin:const EdgeInsets.only(bottom:12),
               shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16)),
-              child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              child:InkWell(onTap:acceptingOfferId!=null?null:()=>confirmOffer(x),child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                 Row(children:[
                   CircleAvatar(radius:24,backgroundColor:const Color(0xFF1565C0).withValues(alpha:0.12),child:const Icon(Icons.local_taxi,color:Color(0xFF1565C0))),
                   const SizedBox(width:12),
@@ -1721,17 +1721,17 @@ class _OffersScreenState extends State<OffersScreen>{
                       Expanded(child:Text('${x['vehicleCategory']??'VTC'} • $vehicle',style:const TextStyle(color:Colors.black54,fontSize:12),overflow:TextOverflow.ellipsis)),
                     ]),
                   ])),
-                  Column(crossAxisAlignment:CrossAxisAlignment.end,children:[
+                ]),
+                Align(alignment:Alignment.centerRight,child:Column(crossAxisAlignment:CrossAxisAlignment.end,children:[
                     Text(t('Total à payer'),style:const TextStyle(fontSize:11,color:Colors.black45)),
                     Text(VeyraMoneyFormatter.fromMinor(x['totalMinor']),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
-                  ]),
-                ]),
+                  ])),
                 Text([x['vehicleColor'],x['vehicleYear']].where((v)=>v!=null).join(' • ')),
                 const SizedBox(height:8),
-                Row(children:[
+                if(x['driverVerified']==true)Row(children:[
                   const Icon(Icons.verified_user_outlined,size:16,color:VeyraColors.success),
                   const SizedBox(width:5),
-                  Text(t('Chauffeur Veyra vérifié'),style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary,fontWeight:FontWeight.w600)),
+                  Expanded(child:Text(t('Chauffeur Veyra vérifié'),style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
                 ]),
                 const SizedBox(height:14),
                 SizedBox(width:double.infinity,child:FilledButton(
@@ -1741,7 +1741,7 @@ class _OffersScreenState extends State<OffersScreen>{
                     ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
                     :Text(t('Choisir cette offre')),
                 )),
-              ])),
+              ]))),
             );
           }),
           ]);
