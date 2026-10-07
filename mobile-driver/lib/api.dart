@@ -4,9 +4,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class Api {
   final Dio dio;
+  final Dio _refreshClient;
+  Future<bool>? _refreshing;
   final FlutterSecureStorage storage=const FlutterSecureStorage();
 
-  Api(String base):dio=Dio(BaseOptions(
+  Api(String base,{Dio? refreshClient}):_refreshClient=refreshClient??Dio(BaseOptions(baseUrl:base,connectTimeout:const Duration(seconds:10),receiveTimeout:const Duration(seconds:15))),dio=Dio(BaseOptions(
     baseUrl:base,
     connectTimeout:const Duration(seconds:10),
     receiveTimeout:const Duration(seconds:15),
@@ -21,16 +23,20 @@ class Api {
         final request=e.requestOptions;
         final isAuth=request.path.contains('/api/v1/auth/');
         if(e.response?.statusCode==401 && !isAuth && request.extra['retried']!=true){
-          final refreshed=await _refreshToken();
-          if(refreshed){
-            final token=await storage.read(key:'accessToken');
-            request.headers['Authorization']='Bearer $token';
-            request.extra['retried']=true;
-            try{
+          try{
+            final current=await storage.read(key:'accessToken');
+            final alreadyRotated=current!=null&&current.isNotEmpty&&request.headers['Authorization']!='Bearer $current';
+            if(alreadyRotated||await _refreshToken()){
+              final token=await storage.read(key:'accessToken');
+              request.headers['Authorization']='Bearer $token';
+              request.extra['retried']=true;
               final response=await dio.fetch(request);
               h.resolve(response);
               return;
-            }catch(_){}
+            }
+          }on DioException catch(failure){
+            h.next(failure);
+            return;
           }
         }
         h.next(e);
@@ -38,15 +44,17 @@ class Api {
     ));
   }
 
-  Future<bool> _refreshToken() async {
+  Future<bool> _refreshToken()=>_refreshing??=_performRefresh().whenComplete(()=>_refreshing=null);
+
+  Future<bool> _performRefresh() async {
     final refresh=await storage.read(key:'refreshToken');
     if(refresh==null||refresh.isEmpty)return false;
     try{
-      final raw=Dio(BaseOptions(baseUrl:dio.options.baseUrl));
-      final r=await raw.post('/api/v1/auth/refresh',data:{
+      final r=await _refreshClient.post('/api/v1/auth/refresh',data:{
         'refreshToken':refresh,
         'deviceName':'mobile',
       });
+      if(await storage.read(key:'refreshToken')!=refresh)return false;
       await storage.write(key:'accessToken',value:r.data['accessToken']);
       await storage.write(key:'refreshToken',value:r.data['refreshToken']);
       return true;
@@ -64,9 +72,10 @@ class Api {
       // the attempt simply didn't complete, and the stored session must
       // survive to be retried later.
       if(e.response?.statusCode==401||e.response?.statusCode==403){
-        await storage.deleteAll();
+        if(await storage.read(key:'refreshToken')==refresh)await storage.deleteAll();
+        return false;
       }
-      return false;
+      rethrow;
     }catch(_){
       return false;
     }
