@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'core/widgets/booking_financial_summary.dart';
 import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -2025,7 +2026,6 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
         final status=(x['status']??'').toString();
         final driverName=((x['driver_first_name']??'') as Object).toString()+' '+((x['driver_last_name']??'') as Object).toString();
         final driverPhone=x['driver_phone']?.toString();
-        final total=(x['customer_total_amount_minor'] as num?)?.toInt();
         return ListView(padding:const EdgeInsets.all(20),children:[
           Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
           const SizedBox(height:8),
@@ -2047,11 +2047,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
             subtitle:Text('Note : '+(x['driver_rating']??'-').toString()),
           )),
-          if(x['customer_total_amount_minor']!=null)Card(child:ListTile(
-            title:Text(t('Total client')),
-            subtitle:Text(VeyraStatusLabels.paymentMethod(x['payment_method']?.toString())),
-            trailing:Text(VeyraMoneyFormatter.fromMinor(total)),
-          )),
+          if(x['customer_total_amount_minor']!=null)BookingFinancialSummary(booking:x,paymentLabel:paymentStatusLabel(x['payment_status']?.toString())),
           if(x['payment_method']=='ONLINE'&&x['payment_status']!='CAPTURED'&&{'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status))
             FilledButton.icon(onPressed:()=>context.push('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:Text(t('Payer en ligne'))),
           if({'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))...[
