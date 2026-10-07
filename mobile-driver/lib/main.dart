@@ -796,7 +796,7 @@ class _KycScreenState extends State<KycScreen>{
         color:color.text.trim(),
       );
       hasVehicle=true;}
-      if(mounted)setState(()=>message=t('Informations professionnelles enregistrées.'));
+      if(mounted)setState((){message=t('Informations professionnelles enregistrées.');future=loadDossier();});
     }catch(e){
       if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
     }finally{
@@ -805,6 +805,7 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   Future<void> upload(String type)async{
+    if(uploadingType!=null)return;
     final result=await FilePicker.platform.pickFiles(
       type:FileType.custom,
       allowedExtensions:['pdf','jpg','jpeg','png'],
@@ -832,7 +833,8 @@ class _KycScreenState extends State<KycScreen>{
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
         if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=loadDossier();}));
         final status=s.data??{};
-        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
+        final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true&&
+          (status['vehicles'] as List? ??[]).whereType<Map>().any((v)=>v['status']=='APPROVED');
 
         return ListView(padding:const EdgeInsets.all(20),children:[
           Card(child:ListTile(
@@ -859,7 +861,7 @@ class _KycScreenState extends State<KycScreen>{
               if(cs.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(cs.error!),onRetry:()=>setState((){categories=api.vehicleCategories();}));
               final items=cs.data??[];
               return DropdownButtonFormField<String>(
-                initialValue:categoryId,
+                initialValue:items.any((raw)=>(raw as Map)['id'].toString()==categoryId)?categoryId:null,
                 isExpanded:true,
                 decoration:InputDecoration(labelText:t('Catégorie')),
                 items:items.map((raw){
@@ -906,7 +908,7 @@ class _KycScreenState extends State<KycScreen>{
               ]),
               trailing:uploadingType==item.$1
                 ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2))
-                :IconButton(onPressed:()=>upload(item.$1),tooltip:t(rejected?'Remplacer':'Téléverser'),icon:Icon(rejected?Icons.refresh:Icons.upload_file)),
+                :IconButton(onPressed:uploadingType!=null?null:()=>upload(item.$1),tooltip:t(rejected?'Remplacer':'Téléverser'),icon:Icon(rejected?Icons.refresh:Icons.upload_file)),
             ));
           }),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(message!)),
