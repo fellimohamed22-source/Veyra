@@ -1779,6 +1779,10 @@ class _OffersScreenState extends State<OffersScreen>{
 }
 
 
+bool bookingCanPayOnline(Map<String,dynamic>? booking)=>booking!=null&&
+  booking['payment_method']=='ONLINE'&&booking['payment_status']!='CAPTURED'&&
+  {'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(booking['status']);
+
 class PaymentScreen extends StatefulWidget{
   final String bookingId;
   const PaymentScreen({required this.bookingId,super.key});
@@ -1786,6 +1790,7 @@ class PaymentScreen extends StatefulWidget{
 }
 class _PaymentScreenState extends State<PaymentScreen>{
   bool loading=false;
+  bool bookingLoading=false;
   String? error;
   Map<String,dynamic>? booking;
 
@@ -1795,12 +1800,15 @@ class _PaymentScreenState extends State<PaymentScreen>{
   }
 
   Future<void> loadBooking()async{
+    if(bookingLoading||loading)return;
+    setState((){bookingLoading=true;booking=null;error=null;});
     try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState((){booking=value;error=null;});}
     catch(e){if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));}
+    finally{if(mounted)setState(()=>bookingLoading=false);}
   }
 
   Future<void> pay()async{
-    if(loading||booking==null)return;
+    if(loading||bookingLoading||!bookingCanPayOnline(booking))return;
     const publishableKey=String.fromEnvironment('STRIPE_PUBLISHABLE_KEY',defaultValue:'');
     if(publishableKey.isEmpty){
       setState(()=>error=t('Paiement en ligne non configuré sur cette version.'));
@@ -1846,7 +1854,7 @@ class _PaymentScreenState extends State<PaymentScreen>{
 
   @override Widget build(BuildContext context){
     return Scaffold(
-      appBar:AppBar(title:Text(t('Paiement sécurisé'))),
+      appBar:AppBar(title:Text(t('Paiement sécurisé')),actions:[IconButton(onPressed:loading||bookingLoading?null:loadBooking,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
       body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
         const Icon(Icons.lock_outline,size:56),
         const SizedBox(height:16),
@@ -1856,9 +1864,10 @@ class _PaymentScreenState extends State<PaymentScreen>{
         if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error),textAlign:TextAlign.center)),
         if(booking==null&&error!=null)TextButton(onPressed:loadBooking,child:Text(t('Réessayer'))),
         if(booking?['payment_status']=='CAPTURED')Text(t('Ce paiement est déjà réglé.'),textAlign:TextAlign.center),
+        if(booking!=null&&booking?['payment_status']!='CAPTURED'&&!bookingCanPayOnline(booking))Text(t('Cette réservation ne nécessite pas de paiement en ligne à cette étape.'),textAlign:TextAlign.center),
         const SizedBox(height:20),
         FilledButton.icon(
-          onPressed:loading||booking==null||booking?['payment_status']=='CAPTURED'?null:pay,
+          onPressed:loading||bookingLoading||!bookingCanPayOnline(booking)?null:pay,
           icon:const Icon(Icons.credit_card),
           label:loading?Text(t('Paiement…')):Text(t('Payer maintenant')),
         ),
@@ -2050,7 +2059,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             subtitle:Text('Note : '+(x['driver_rating']??'-').toString()),
           )),
           if(x['customer_total_amount_minor']!=null)BookingFinancialSummary(booking:x,paymentLabel:paymentStatusLabel(x['payment_status']?.toString())),
-          if(x['payment_method']=='ONLINE'&&x['payment_status']!='CAPTURED'&&{'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status))
+          if(bookingCanPayOnline(x))
             FilledButton.icon(onPressed:()=>context.push('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:Text(t('Payer en ligne'))),
           if({'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))...[
             OutlinedButton.icon(onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Chat Veyra'))),
