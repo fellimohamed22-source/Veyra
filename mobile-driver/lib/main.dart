@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -43,7 +44,6 @@ bool _driverLocalNotificationsInitialized=false;
 
 Future<void> _ensureDriverLocalNotifications(void Function(String payload) onTap)async{
   if(_driverLocalNotificationsInitialized)return;
-  _driverLocalNotificationsInitialized=true;
   const androidInit=AndroidInitializationSettings('@mipmap/ic_launcher');
   await _driverLocalNotifications.initialize(
     const InitializationSettings(android:androidInit),
@@ -60,6 +60,8 @@ Future<void> _ensureDriverLocalNotifications(void Function(String payload) onTap
   await _driverLocalNotifications
     .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
     ?.createNotificationChannel(channel);
+  _driverLocalNotificationsInitialized=true;
+  await resumeNotificationLaunch(_driverLocalNotifications,onTap);
 }
 
 Future<void> _showDriverForegroundPush(RemoteMessage message)async{
@@ -341,7 +343,6 @@ class _LoginScreenState extends State<LoginScreen>{
     setState((){loading=true;error=null;offline=false;});
     try{
       await api.login(email.text,password.text);
-      await configureDriverPush();
       await api.createProfile();
       if(!mounted)return;
       // Do not reinterpret a timeout/5xx while loading onboarding status as
@@ -351,6 +352,7 @@ class _LoginScreenState extends State<LoginScreen>{
       if(!mounted)return;
       final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
       context.go(approved?'/home':'/kyc');
+      await configureDriverPush();
     }catch(e){
       if(!mounted)return;
       final isOffline=e is DioException&&(
@@ -371,7 +373,6 @@ class _LoginScreenState extends State<LoginScreen>{
     final token=await credential.user?.getIdToken();
     if(token==null||token.isEmpty)throw StateError('FIREBASE_ID_TOKEN_MISSING');
     await api.loginWithFirebase(token);
-    await configureDriverPush();
     // Firebase login on the driver app provisions a minimal driver row in
     // the backend. The onboarding flow then remains the single source of
     // truth for KYC/vehicle eligibility.
@@ -379,6 +380,7 @@ class _LoginScreenState extends State<LoginScreen>{
     if(!mounted)return;
     final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
     context.go(approved?'/home':'/kyc');
+    await configureDriverPush();
   }
 
   Future<void> _googleLogin() async {
@@ -2667,8 +2669,9 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
         lastName:lastName.text,
         phone:phone.text,
       );
+      if(!mounted)return;
+      context.go('/kyc');
       await configureDriverPush();
-      if(mounted)context.go('/kyc');
     }catch(_){
       if(mounted)setState(()=>error=t('Création du compte impossible.'));
     }finally{

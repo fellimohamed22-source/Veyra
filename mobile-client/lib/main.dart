@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' show PlatformDispatcher;
@@ -54,7 +55,6 @@ bool _localNotificationsInitialized=false;
 
 Future<void> _ensureLocalNotifications(void Function(String payload) onTap)async{
   if(_localNotificationsInitialized)return;
-  _localNotificationsInitialized=true;
   const androidInit=AndroidInitializationSettings('@mipmap/ic_launcher');
   await _localNotifications.initialize(
     const InitializationSettings(android:androidInit),
@@ -71,6 +71,8 @@ Future<void> _ensureLocalNotifications(void Function(String payload) onTap)async
   await _localNotifications
     .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
     ?.createNotificationChannel(channel);
+  _localNotificationsInitialized=true;
+  await resumeNotificationLaunch(_localNotifications,onTap);
 }
 
 Future<void> _showForegroundPush(RemoteMessage message)async{
@@ -394,12 +396,14 @@ class _LoginScreenState extends State<LoginScreen>{
     // available synchronously on first render regardless.
     WidgetsBinding.instance.addPostFrameCallback((_)async{
       String? token;
+      String? refreshToken;
       try{
         token=await api.storage.read(key:'accessToken');
+        refreshToken=await api.storage.read(key:'refreshToken');
       }catch(_){
         return;
       }
-      if(token!=null&&mounted){
+      if(((token?.isNotEmpty??false)||(refreshToken?.isNotEmpty??false))&&mounted){
         context.go('/home');
         await configurePush();
       }
@@ -410,8 +414,9 @@ class _LoginScreenState extends State<LoginScreen>{
     setState((){loading=true;error=null;offline=false;});
     try{
       await api.login(email.text,password.text);
+      if(!mounted)return;
+      context.go('/home');
       await configurePush();
-      if(mounted)context.go('/home');
     }catch(e){
       if(!mounted)return;
       // Distingue OFFLINE (pas de réponse serveur) de ERROR (le serveur
@@ -452,8 +457,9 @@ class _LoginScreenState extends State<LoginScreen>{
       final token=await userCredential.user?.getIdToken();
       if(token==null||token.isEmpty)throw StateError('FIREBASE_ID_TOKEN_MISSING');
       await api.loginWithFirebase(token);
+      if(!mounted)return;
+      context.go('/home');
       await configurePush();
-      if(mounted)context.go('/home');
     }catch(e){
       debugPrint('GOOGLE_LOGIN_FAILED: $e');
       if(mounted)setState(()=>error=e is DioException?VeyraErrorMessages.forException(e):t('Connexion Google impossible. Vérifiez la configuration Firebase et réessayez.'));
@@ -2476,8 +2482,9 @@ class _RegisterScreenState extends State<RegisterScreen>{
         lastName:lastName.text,
         phone:phone.text,
       );
+      if(!mounted)return;
+      context.go('/home');
       await configurePush();
-      if(mounted)context.go('/home');
     }catch(e){
       if(!mounted)return;
       final isOffline=e is DioException&&(
