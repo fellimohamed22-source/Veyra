@@ -1677,7 +1677,7 @@ class _OffersScreenState extends State<OffersScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:const Color(0xFFF2F6FB),
     appBar:AppBar(actions:[IconButton(onPressed:refreshOffers,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))],title:Text(t('Choisir votre chauffeur')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
-    body:ListView(padding:const EdgeInsets.all(16),children:[
+    body:RefreshIndicator(onRefresh:refreshOffers,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
       FutureBuilder<Map<String,dynamic>>(
         future:bookingFuture,
         builder:(context,s){
@@ -1710,6 +1710,7 @@ class _OffersScreenState extends State<OffersScreen>{
         },
       ),
       const SizedBox(height:16),
+      if(error!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
@@ -1723,7 +1724,7 @@ class _OffersScreenState extends State<OffersScreen>{
             Text(items.length==1?t('1 offre reçue'):items.length.toString()+' '+t('offres reçues'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
             const SizedBox(height:5),
             Text(t('Comparez librement le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:VeyraColors.textSecondary,height:1.35)),
-            if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+
             const SizedBox(height:14),
             for(final raw in items)Builder(builder:(context){
               final x=Map<String,dynamic>.from(raw as Map);
@@ -1773,7 +1774,7 @@ class _OffersScreenState extends State<OffersScreen>{
           ]);
         },
       ),
-    ]),
+    ])),
   );
 }
 
@@ -1884,6 +1885,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   bool refreshing=false;
   String? pin;
   String? message;
+  String? refreshError;
   int ratingScore=0;
   bool ratingSubmitting=false;
   bool cancelling=false;
@@ -1906,8 +1908,8 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   Future<void> refreshStatus()async{
     if(refreshing||cancelling||loadingPreview||favoriteBusy)return;
     refreshing=true;
-    try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState((){future=Future.value(value);favorite=value['favorite_driver']==true;});}
-    catch(e){if(mounted)setState(()=>message=t('Actualisation interrompue. Les données affichées peuvent être anciennes.'));}
+    try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState((){future=Future.value(value);favorite=value['favorite_driver']==true;refreshError=null;});}
+    catch(e){if(mounted)setState(()=>refreshError=t('Actualisation interrompue. Les données affichées peuvent être anciennes.'));}
     finally{refreshing=false;}
   }
   @override void dispose(){statusTimer?.cancel();super.dispose();}
@@ -2026,7 +2028,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
         final status=(x['status']??'').toString();
         final driverName=((x['driver_first_name']??'') as Object).toString()+' '+((x['driver_last_name']??'') as Object).toString();
         final driverPhone=x['driver_phone']?.toString();
-        return ListView(padding:const EdgeInsets.all(20),children:[
+        return RefreshIndicator(onRefresh:refreshStatus,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
           Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
           const SizedBox(height:8),
           Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
@@ -2090,8 +2092,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
               )]),
               FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
             ]))),
+          if(refreshError!=null)Text(refreshError!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
           if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(message!)),
-        ]);
+        ]));
       },
     ),
   );
