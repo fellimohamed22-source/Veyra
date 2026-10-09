@@ -1343,17 +1343,25 @@ class OpportunityDistanceSummary extends StatefulWidget{
 class _OpportunityDistanceSummaryState extends State<OpportunityDistanceSummary>{
   Map<String,dynamic>? trip,approach;
   bool loading=true;
+  int loadRevision=0;
   @override void initState(){super.initState();load();}
+  @override void didUpdateWidget(covariant OpportunityDistanceSummary oldWidget){
+    super.didUpdateWidget(oldWidget);
+    if(['pickup_lat','pickup_lng','dropoff_lat','dropoff_lng'].any((key)=>oldWidget.booking[key]!=widget.booking[key])||oldWidget.position!=widget.position)load();
+  }
   Future<void> load()async{
+    final revision=++loadRevision;
     final b=widget.booking;
+    final position=widget.position.catchError((_)=>null);
+    setState((){trip=null;approach=null;loading=true;});
     final a=(b['pickup_lat'] as num?)?.toDouble(),c=(b['pickup_lng'] as num?)?.toDouble();
     final d=(b['dropoff_lat'] as num?)?.toDouble(),e=(b['dropoff_lng'] as num?)?.toDouble();
     if(a!=null&&c!=null&&d!=null&&e!=null){
-      try{final value=await api.routeEstimate(fromLat:a,fromLng:c,toLat:d,toLng:e);if(mounted)setState(()=>trip=value);}catch(_){}
-      final p=await widget.position;
-      if(p!=null&&mounted){try{final value=await api.routeEstimate(fromLat:p.latitude,fromLng:p.longitude,toLat:a,toLng:c);if(mounted)setState(()=>approach=value);}catch(_){}}
+      try{final value=await api.routeEstimate(fromLat:a,fromLng:c,toLat:d,toLng:e);if(mounted&&revision==loadRevision)setState(()=>trip=value);}catch(_){}
+      final p=await position;
+      if(p!=null&&mounted&&revision==loadRevision){try{final value=await api.routeEstimate(fromLat:p.latitude,fromLng:p.longitude,toLat:a,toLng:c);if(mounted&&revision==loadRevision)setState(()=>approach=value);}catch(_){}}
     }
-    if(mounted)setState(()=>loading=false);
+    if(mounted&&revision==loadRevision)setState(()=>loading=false);
   }
   @override Widget build(BuildContext context){
     final tripDistance=trip?['distanceMeters'] as num?,approachDistance=approach?['distanceMeters'] as num?;
