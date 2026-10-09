@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'core/active_booking.dart';
+import 'core/maps/tracking_eta.dart';
 import 'core/widgets/booking_financial_summary.dart';
 import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
@@ -2356,13 +2357,11 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Map<String,dynamic>? location;
   Map<String,dynamic>? bookingMap;
   Map<String,dynamic>? etaInfo;
+  int etaRevision=0;
   String? error;
 
   @override void initState(){
     super.initState();
-    api.bookingDetail(widget.bookingId).then((value){
-      if(mounted)setState(()=>bookingMap=value);
-    }).catchError((_){});
     refresh();
     timer=Timer.periodic(const Duration(seconds:10),(_)=>refresh());
     etaTimer=Timer.periodic(const Duration(seconds:30),(_)=>refreshEta());
@@ -2377,12 +2376,12 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   Future<void> refresh()async{
     try{
       final latest=await api.bookingDetail(widget.bookingId);
-      if(mounted)setState(()=>bookingMap=latest);
+      if(mounted)setState((){if(bookingMap?['status']!=latest['status']){etaRevision++;etaInfo=null;}bookingMap=latest;});
       final value=await api.currentLocation(widget.bookingId);
       if(mounted)setState((){location=value;error=null;});
       await refreshEta();
     }catch(_){
-      if(mounted)setState(()=>error=t('La position du chauffeur est momentanément indisponible. Le suivi reprendra automatiquement dès sa prochaine position GPS.'));
+      if(mounted)setState((){etaRevision++;etaInfo=null;error=t('La position du chauffeur est momentanément indisponible. Le suivi reprendra automatiquement dès sa prochaine position GPS.');});
     }
   }
 
@@ -2400,17 +2399,17 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
   }
 
   Future<void> refreshEta()async{
+    final revision=++etaRevision;
     final live=location;
     final booking=bookingMap;
-    if(live?['available']!=true||booking==null)return;
-    if(_isStale){
+    if(!canEstimateTrackingEta(booking,live,DateTime.now())){
       // Une position obsolète ne doit jamais servir de base à un ETA
       // recalculé -- on efface plutôt un ETA précédent qui deviendrait
       // trompeur.
       if(mounted&&etaInfo!=null)setState(()=>etaInfo=null);
       return;
     }
-    final inProgress=booking['status']=='IN_PROGRESS';
+    final inProgress=booking!['status']=='IN_PROGRESS';
     final toLat=(booking[inProgress?'dropoff_lat':'pickup_lat'] as num?)?.toDouble();
     final toLng=(booking[inProgress?'dropoff_lng':'pickup_lng'] as num?)?.toDouble();
     if(toLat==null||toLng==null)return;
@@ -2420,8 +2419,8 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
         fromLng:(live['lng'] as num).toDouble(),
         toLat:toLat,toLng:toLng,
       );
-      if(mounted)setState(()=>etaInfo=eta);
-    }catch(_){}
+      if(mounted&&revision==etaRevision&&identical(live,location)&&identical(booking,bookingMap)&&canEstimateTrackingEta(booking,live,DateTime.now()))setState(()=>etaInfo=eta);
+    }catch(_){if(mounted&&revision==etaRevision)setState(()=>etaInfo=null);}
   }
 
   @override Widget build(BuildContext context){
@@ -2469,7 +2468,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
               VeyraStatusBadge(status:bookingMap?['status']?.toString()),
               Text(available?t('Position actuelle du chauffeur'):t('Position indisponible'),style:const TextStyle(fontWeight:FontWeight.bold)),
               Text(error??(available?t('Mise à jour automatique toutes les 10 secondes.'):t('En attente de la première position GPS.'))),
-              if(etaInfo!=null)Text(
+              if(etaInfo!=null&&canEstimateTrackingEta(bookingMap,location,DateTime.now()))Text(
                 (bookingMap?['status']=='IN_PROGRESS'?t('ETA destination : '):t('Arrivée du chauffeur : '))+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])+
                 ' • '+VeyraMoneyFormatter.distance(etaInfo!['distanceMeters']),
                 style:const TextStyle(fontWeight:FontWeight.w600),
