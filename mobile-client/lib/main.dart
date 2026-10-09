@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'core/active_booking.dart';
 import 'core/widgets/booking_financial_summary.dart';
 import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
@@ -101,6 +102,15 @@ String clientNotificationRoute(String bookingId,String? template,Map<String,dyna
   if(template=='PAYMENT_REQUIRED'||status=='PAYMENT_PENDING')return '/payment/$bookingId';
   return '/booking/$bookingId';
 }
+Future<void> resumeActiveBooking()async{
+  try{
+    final id=activeBookingId(await api.bookings());
+    if(id!=null&&router.routeInformationProvider.value.uri.path=='/home')router.go('/booking/'+Uri.encodeComponent(id));
+  }catch(_){
+    // Keep the usable home screen when the server cannot confirm an active ride.
+  }
+}
+
 void openPush(RemoteMessage message){
   final bookingId=message.data['bookingId']?.toString();
   if(bookingId==null||bookingId.isEmpty)return;
@@ -406,6 +416,7 @@ class _LoginScreenState extends State<LoginScreen>{
       }
       if(((token?.isNotEmpty??false)||(refreshToken?.isNotEmpty??false))&&mounted){
         context.go('/home');
+        await resumeActiveBooking();
         await configurePush();
       }
     });
@@ -1181,6 +1192,7 @@ class _AddressScreenState extends State<AddressScreen>{
   final pickup=TextEditingController();
   final notes=TextEditingController();
   int categoryCapacity=9;
+  bool categoriesReady=false;
   final dropoff=TextEditingController();
   List<dynamic> pickupResults=[];
   List<dynamic> dropoffResults=[];
@@ -1203,7 +1215,7 @@ class _AddressScreenState extends State<AddressScreen>{
 
   @override void initState(){
     super.initState();
-    categories=api.vehicleCategories();
+    categories=loadCategories();
     final initial=widget.initialBooking;
     if(initial!=null){
       final pickupLabel=initial['pickup_address']?.toString()??'';
@@ -1213,6 +1225,7 @@ class _AddressScreenState extends State<AddressScreen>{
       final dropoffLat=(initial['dropoff_lat'] as num?)?.toDouble();
       final dropoffLng=(initial['dropoff_lng'] as num?)?.toDouble();
       pickup.text=pickupLabel; dropoff.text=dropoffLabel;
+      notes.text=(initial['customer_notes']??'').toString();
       if(pickupLat!=null&&pickupLng!=null)pickupPlace={'label':pickupLabel,'lat':pickupLat,'lng':pickupLng};
       if(dropoffLat!=null&&dropoffLng!=null)dropoffPlace={'label':dropoffLabel,'lat':dropoffLat,'lng':dropoffLng};
       categoryId=initial['vehicle_category_id']?.toString()??initial['category_id']?.toString();
@@ -1227,6 +1240,19 @@ class _AddressScreenState extends State<AddressScreen>{
     // a platform-wide policy set by an admin (not a per-booking choice),
     // but there was previously no way for anyone but an admin to even
     // see which mode is currently active.
+  }
+
+  Future<List<dynamic>> loadCategories()async{
+    final items=await api.vehicleCategories();
+    if(mounted)setState((){
+      categoriesReady=true;
+      final matches=items.whereType<Map>().where((x)=>x['id'].toString()==categoryId);
+      if(categoryId!=null){
+        if(matches.isEmpty){categoryId=null;categoryName=null;}
+        else{final selected=matches.first;categoryCapacity=(selected['capacity'] as num).toInt();categoryName=(selected['display_name']??selected['code']).toString();}
+      }
+    });
+    return items;
   }
 
   @override void dispose(){
@@ -1385,6 +1411,8 @@ class _AddressScreenState extends State<AddressScreen>{
 
   Future<void> publish()async{
     if(submitting)return;
+    if(!categoriesReady){setState(()=>error=t('Rechargez les catégories avant de publier.'));return;}
+    if(passengerCount>categoryCapacity){setState(()=>error=t('Le nombre de passagers dépasse la capacité de cette catégorie.'));return;}
     if(pickupPlace==null||dropoffPlace==null||scheduledAt==null||categoryId==null){
       setState(()=>error=t('Complétez le trajet, la date et la catégorie.'));
       return;
@@ -1513,10 +1541,10 @@ class _AddressScreenState extends State<AddressScreen>{
         future:categories,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
-          if(s.hasError)return Text(t('Catégories indisponibles.'));
+          if(s.hasError)return TextButton(onPressed:()=>setState((){categories=loadCategories();}),child:Text(t('Réessayer le chargement des catégories')));
           final items=s.data??[];
           return DropdownButtonFormField<String>(
-            initialValue:categoryId,
+            initialValue:items.any((raw)=>(raw as Map)['id'].toString()==categoryId)?categoryId:null,
             isExpanded:true,
             decoration:InputDecoration(labelText:t('Catégorie de véhicule')),
             items:items.map((raw){

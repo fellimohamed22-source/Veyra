@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'core/active_booking.dart';
 import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -85,6 +86,15 @@ String driverNotificationRoute(String bookingId,String? template,Map<String,dyna
   if(template=='NEW_BOOKING')return '/request/$bookingId';
   return '/ride/$bookingId';
 }
+Future<void> resumeActiveBooking()async{
+  try{
+    final id=activeBookingId(await api.bookings(scope:'active'));
+    if(id!=null&&router.routeInformationProvider.value.uri.path=='/home')router.go('/ride/'+Uri.encodeComponent(id));
+  }catch(_){
+    // Keep the usable home screen when the server cannot confirm an active ride.
+  }
+}
+
 void openDriverPush(RemoteMessage message){
   final bookingId=message.data['bookingId']?.toString();
   if(bookingId==null||bookingId.isEmpty)return;
@@ -316,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen>{
       if(!mounted)return;
       final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
       context.go(approved?'/home':'/kyc');
-      if(approved)await configureDriverPush();
+      if(approved){await resumeActiveBooking();await configureDriverPush();}
     }on DioException catch(e){
       if(!mounted)return;
       if(e.response?.statusCode==401||e.response?.statusCode==403){

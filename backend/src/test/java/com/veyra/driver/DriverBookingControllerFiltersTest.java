@@ -16,6 +16,10 @@ class DriverBookingControllerFiltersTest {
     when(db.queryForList(anyString(),eq(UUID.class),eq(user))).thenReturn(List.of(driver));
   }
   @AfterEach void cleanup(){SecurityContextHolder.clearContext();}
+  @Test void resumeScopeExcludesFutureAndFinishedTripsBeforePagination(){
+    new DriverBookingController(db).mine("active",null,"asc",0);
+    verify(db).queryForList(argThat(sql->sql.contains("sb.status in ('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')")&&!sql.contains("'CONFIRMED'")&&!sql.contains("'COMPLETED'")&&sql.endsWith("limit 10 offset 0")),eq(driver));
+  }
   @Test void allScopeIncludesHistoryAndFiltersBeforePagination(){
     new DriverBookingController(db).mine("all","COMPLETED","desc",2);
     verify(db).queryForList(argThat(sql->sql.contains("'COMPLETED'")&&sql.contains("'CUSTOMER_NO_SHOW'")&&sql.contains("and sb.status=?")&&sql.contains("order by sb.scheduled_at desc,sb.id limit 10 offset 20")),eq(driver),eq("COMPLETED"));

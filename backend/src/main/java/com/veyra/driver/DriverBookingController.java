@@ -23,6 +23,7 @@ public class DriverBookingController {
       @RequestParam(required=false) Integer page) {
     UUID driverId = driverId();
     String states = "('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')";
+    if ("active".equals(scope)) states="('DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS')";
     if ("history".equals(scope)) {
       states = "('COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW')";
     }
