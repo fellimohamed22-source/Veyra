@@ -29,7 +29,7 @@ void main() {
           'dropoff_lng': 7,
         }, position: Future.value(null))));
     await tester.pumpWidget(screen(43));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(requests, 1);
     await tester.pumpWidget(screen(42));
     await tester.pumpAndSettle();
