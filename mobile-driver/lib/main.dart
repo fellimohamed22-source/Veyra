@@ -2462,13 +2462,17 @@ class _WalletScreenState extends State<WalletScreen>{
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
   }
-  void _refresh()=>setState((){
-    future=api.wallet();
-    transactionsFuture=loadTransactions();
-  });
+  void _refresh()=>unawaited(refreshWallet());
+  Future<void> refreshWallet()async{
+    final balances=api.wallet(),transactions=loadTransactions();
+    setState((){future=balances;transactionsFuture=transactions;});
+    try{await Future.wait<Object>([balances,transactions]);}catch(_){
+      // Each FutureBuilder displays the error for its own request.
+    }
+  }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Portefeuille'))),
+    appBar:AppBar(title:Text(t('Portefeuille')),actions:[IconButton(onPressed:refreshWallet,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
@@ -2477,7 +2481,7 @@ class _WalletScreenState extends State<WalletScreen>{
           ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.wallet();}))
           :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.wallet();}));
         final x=s.data??{};
-        return ListView(padding:const EdgeInsets.all(20),children:[
+        return RefreshIndicator(onRefresh:refreshWallet,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
           // Real gap fixed here, found during a UX/business audit: both
           // summary cards used the exact same neutral ListTile styling,
           // with no visual distinction between money coming TO the
@@ -2495,9 +2499,10 @@ class _WalletScreenState extends State<WalletScreen>{
             const Icon(Icons.account_balance_wallet_outlined,color:Color(0xFF16A34A),size:28),
             const SizedBox(width:14),
             Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Paiements en ligne à recevoir'),style:const TextStyle(color:Colors.black54,fontSize:13)),
+              Text(t('Solde à recevoir'),style:const TextStyle(color:Colors.black54,fontSize:13)),
               const SizedBox(height:2),
               Text(VeyraMoneyFormatter.fromMinor(x['onlinePayableMinor']),style:const TextStyle(color:Color(0xFF16A34A),fontSize:22,fontWeight:FontWeight.w900)),
+              Text(t('Montants dus par Veyra, en attente de versement.'),style:const TextStyle(fontSize:12)),
             ])),
           ]))),
           const SizedBox(height:10),
@@ -2595,7 +2600,7 @@ class _WalletScreenState extends State<WalletScreen>{
               ]);
             },
           ),
-        ]);
+        ]));
       },
     ),
   );
