@@ -27,24 +27,28 @@ class VeyraPinDisplay extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           for (final d in digits)
-            Container(
+            Flexible(
+                child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 6),
               width: 44,
-              height: 56,
+              constraints: const BoxConstraints(minHeight: 56),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(VeyraRadius.sm),
               ),
-              child: Text(
-                d,
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w800,
-                  color: VeyraColors.primaryDark,
-                ),
-              ),
-            ),
+              child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    d,
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: VeyraColors.primaryDark,
+                    ),
+                  )),
+            )),
         ],
       ),
     );
