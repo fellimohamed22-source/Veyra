@@ -909,21 +909,22 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> photo() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image);
-    final path = result?.files.single.path;
-    if (path == null) return;
-    setState(() => busy = true);
+    if(busy)return;
+    setState(()=>busy=true);
     try {
-      final profile = await api.uploadAvatar(path);
-      final bytes = await api.avatarBytes();
-      if (!mounted) return;
-      setState(() {
-        future = Future.value(profile);
-        avatar = bytes;
-      });
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
+      final result=await FilePicker.platform.pickFiles(type:FileType.image);
+      if(result==null||!mounted)return;
+      final path=result.files.isEmpty?null:result.files.single.path;
+      if(path==null){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Impossible de lire cette image.'))));return;}
+      final profile=await api.uploadAvatar(path);
+      final bytes=await api.avatarBytes();
+      if(bytes==null||bytes.isEmpty)throw StateError('AVATAR_RELOAD_EMPTY');
+      if(!mounted)return;
+      setState((){future=Future.value(profile);avatar=bytes;});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Photo de profil mise à jour.'))));
+    }catch(e){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e is DioException?VeyraErrorMessages.forException(e):t('Impossible d’enregistrer la photo de profil.'))));
+    }finally{if(mounted)setState(()=>busy=false);}
   }
 
   Future<void> edit(Map<String, dynamic> profile) async {
@@ -949,8 +950,13 @@ class _AccountScreenState extends State<AccountScreen> {
       ),
     );
     if (confirmed == true && first.text.trim().isNotEmpty && phone.text.trim().length >= 6) {
-      final updated = await api.updateProfile(firstName: first.text, lastName: last.text, phone: phone.text);
-      if (mounted) setState(() => future = Future.value(updated));
+      if(!mounted||busy)return;
+      setState(()=>busy=true);
+      try{
+        final updated=await api.updateProfile(firstName:first.text,lastName:last.text,phone:phone.text);
+        if(mounted)setState(()=>future=Future.value(updated));
+      }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+      finally{if(mounted)setState(()=>busy=false);}
     }
   }
 

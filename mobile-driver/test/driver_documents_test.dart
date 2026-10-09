@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,14 +8,16 @@ void main() {
   testWidgets('offline document list shows a retry, not an empty dossier',
       (tester) async {
     var retries = 0;
+    final documents = Completer<List<dynamic>>();
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: DriverDocuments(
-      documents: Future.error(DioException(
-          requestOptions: RequestOptions(),
-          type: DioExceptionType.connectionError)),
+      documents: documents.future,
       onRetry: () => retries++,
     ))));
+    documents.completeError(DioException(
+        requestOptions: RequestOptions(),
+        type: DioExceptionType.connectionError));
     await tester.pumpAndSettle();
     expect(
         find.text('Aucun document envoyé. Complétez votre dossier chauffeur.'),

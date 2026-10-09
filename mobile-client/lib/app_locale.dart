@@ -229,5 +229,8 @@ class AppLocale {
     'Vérifiez votre connexion puis réessayez.': 'Check your connection and try again.',
     'Recherche d’adresse indisponible.': 'Address search unavailable.',
     'Impossible d’envoyer la demande pour le moment.': 'Could not send the request right now.',
+    'Impossible de lire cette image.': 'Could not read this image.',
+    'Photo de profil mise à jour.': 'Profile photo updated.',
+    'Impossible d’enregistrer la photo de profil.': 'Could not save your profile photo.',
   };
 }
