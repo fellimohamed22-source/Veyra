@@ -1212,6 +1212,7 @@ class _AddressScreenState extends State<AddressScreen>{
   bool submitting=false;
   String? error;
   Timer? _searchDebounce;
+  int pickupSearchRevision=0,dropoffSearchRevision=0;
 
   @override void initState(){
     super.initState();
@@ -1262,6 +1263,8 @@ class _AddressScreenState extends State<AddressScreen>{
   }
 
   Future<void> search(bool isPickup,String q)async{
+    final revision=isPickup?++pickupSearchRevision:++dropoffSearchRevision;
+    bool current()=>mounted&&revision==(isPickup?pickupSearchRevision:dropoffSearchRevision)&&(isPickup?pickup:dropoff).text.trim()==q.trim();
     if(q.trim().length<3){
       setState((){if(isPickup)pickupResults=[];else dropoffResults=[];});
       return;
@@ -1269,11 +1272,11 @@ class _AddressScreenState extends State<AddressScreen>{
     setState((){if(isPickup)loadingPickup=true;else loadingDropoff=true;});
     try{
       final r=await api.autocomplete(q);
-      if(mounted)setState((){if(isPickup)pickupResults=r;else dropoffResults=r;});
+      if(current())setState((){if(isPickup)pickupResults=r;else dropoffResults=r;});
     }catch(_){
-      if(mounted)setState(()=>error=t('Recherche d’adresse indisponible.'));
+      if(current())setState(()=>error=t('Recherche d’adresse indisponible.'));
     }finally{
-      if(mounted)setState((){if(isPickup)loadingPickup=false;else loadingDropoff=false;});
+      if(current())setState((){if(isPickup)loadingPickup=false;else loadingDropoff=false;});
     }
   }
 
@@ -1342,7 +1345,10 @@ class _AddressScreenState extends State<AddressScreen>{
           // own label.
           final current=isPickup?pickupPlace:dropoffPlace;
           if(current!=null&&current['label']==q)return;
-          if(isPickup)pickupPlace=null;else dropoffPlace=null;
+          setState((){
+            if(isPickup){pickupPlace=null;pickupResults=[];loadingPickup=false;pickupSearchRevision++;}
+            else{dropoffPlace=null;dropoffResults=[];loadingDropoff=false;dropoffSearchRevision++;}
+          });
           // Real bug found from an actual production log: every single
           // keystroke called search() immediately, each one hitting
           // LocationIQ's geocoding API directly -- typing a normal
