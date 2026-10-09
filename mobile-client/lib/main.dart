@@ -2226,12 +2226,14 @@ class _ChatScreenState extends State<ChatScreen>{
   }
 
   Future<void> send() async {
-    final body=input.text.trim();
+    if(sending)return;
+    final draft=input.text;
+    final body=draft.trim();
     if(body.isEmpty)return;
-    input.clear();
     setState(()=>sending=true);
     try{
       final sent=await api.sendMessage(widget.bookingId,body);
+      if(mounted&&input.text==draft)input.clear();
       if(mounted&&!_isDuplicate(sent['id'])){
         setState(()=>messages.add(sent));
         _scrollToBottom();
