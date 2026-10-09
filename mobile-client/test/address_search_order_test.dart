@@ -24,7 +24,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: AddressScreen()));
     await tester.pumpAndSettle();
     final pickup = find.byWidgetPredicate((widget) =>
-        widget is TextField && widget.decoration?.labelText == 'Départ');
+        widget is TextField && widget.decoration?.labelText == 'Adresse de départ');
     await tester.enterText(pickup, 'Nice');
     await tester.pump(const Duration(milliseconds: 450));
     await tester.enterText(pickup, 'Cannes');
