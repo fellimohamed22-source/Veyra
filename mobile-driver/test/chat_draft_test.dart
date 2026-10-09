@@ -44,6 +44,9 @@ void main() {
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'Je suis devant la gare');
     expect(attempts, 1);
+    // Let the failure snackbar leave the bottom send button before retrying.
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Envoyer'));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
