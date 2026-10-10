@@ -440,7 +440,9 @@ class _LoginScreenState extends State<LoginScreen>{
         ],
       ),
     );
-    controller.dispose();
+    // Pas de controller.dispose() ici : le TextField est encore monté pendant
+    // l'animation de fermeture du dialogue (assertion '_dependents.isEmpty').
+    // Le controller n'a aucune ressource native, le GC suffit.
     return result;
   }
 
@@ -467,7 +469,9 @@ class _LoginScreenState extends State<LoginScreen>{
         ],
       ),
     );
-    controller.dispose();
+    // Pas de controller.dispose() ici : le TextField est encore monté pendant
+    // l'animation de fermeture du dialogue (assertion '_dependents.isEmpty').
+    // Le controller n'a aucune ressource native, le GC suffit.
     return result;
   }
 
