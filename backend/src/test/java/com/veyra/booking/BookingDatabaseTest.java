@@ -1,0 +1,132 @@
+package com.veyra.booking;
+
+import com.veyra.finance.LedgerService;
+import com.veyra.security.PinCrypto;
+import com.veyra.shared.ApiException;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.springframework.context.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.*;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+import javax.sql.DataSource;
+import java.util.*;
+import java.util.concurrent.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+// Real migrations, PostgreSQL row locks, and Spring transaction proxies.
+// CI supplies an isolated database; no simulated JdbcTemplate or ledger.
+@EnabledIfEnvironmentVariable(named="TEST_DATABASE_URL", matches=".+")
+class BookingDatabaseTest {
+  static AnnotationConfigApplicationContext context;
+  static JdbcTemplate db;
+  static BookingController controller;
+  final UUID user=UUID.randomUUID(), driver=UUID.randomUUID(), booking=UUID.randomUUID();
+
+  @Configuration @EnableTransactionManagement(proxyTargetClass=true)
+  static class Config {
+    @Bean DataSource dataSource() {
+      var ds=new DriverManagerDataSource(System.getenv("TEST_DATABASE_URL"),
+          System.getenv("TEST_DATABASE_USER"),System.getenv("TEST_DATABASE_PASSWORD"));
+      Flyway.configure().dataSource(ds).load().migrate();
+      return ds;
+    }
+    @Bean JdbcTemplate jdbcTemplate(DataSource ds) { return new JdbcTemplate(ds); }
+    @Bean PlatformTransactionManager transactionManager(DataSource ds) { return new DataSourceTransactionManager(ds); }
+    @Bean LedgerService ledger(JdbcTemplate db) { return new LedgerService(db); }
+    @Bean BookingController controller(JdbcTemplate db, LedgerService ledger) {
+      return new BookingController(db,new BCryptPasswordEncoder(4),new PinCrypto("test-only-key"),
+          ledger,120,24,60,30,new BookingStatusHistoryService(db));
+    }
+  }
+  @BeforeAll static void connect() {
+    context=new AnnotationConfigApplicationContext(Config.class);
+    db=context.getBean(JdbcTemplate.class);
+    controller=context.getBean(BookingController.class);
+  }
+  @AfterAll static void close() { if(context!=null) context.close(); }
+  @BeforeEach void seed() {
+    db.update("insert into users(id,first_name,email,password_hash) values (?,?,?,?)",user,"Test",user+"@example.test","unused");
+    db.update("insert into drivers(id,user_id) values (?,?)",driver,user);
+    db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,status,selected_driver_id,pin_hash) " +
+        "select ?,'CLIENT',?,ST_SetSRID(ST_MakePoint(2,48),4326),'A',ST_SetSRID(ST_MakePoint(3,49),4326),'B',now()+interval '1 day',id,'CASH','CLIENT','DRIVER_ARRIVED',?,? from vehicle_categories where code='STANDARD'",
+        booking,user,driver,new BCryptPasswordEncoder(4).encode("0427"));
+    authenticate();
+  }
+  @AfterEach void clearSecurity() { SecurityContextHolder.clearContext(); }
+  void authenticate() { SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(user,null)); }
+  String status() { return db.queryForObject("select status from scheduled_bookings where id=?",String.class,booking); }
+  int count(String table) { return db.queryForObject("select count(*) from "+table+" where booking_id=?",Integer.class,booking); }
+  void snapshot() {
+    UUID offer=UUID.randomUUID();
+    db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status) values (?,?,?,10000,'EUR','ACCEPTED')",offer,booking,driver);
+    db.update("insert into booking_financial_snapshots select ?,?,id,1000,10000,1000,11000,10000,'EUR','CASH' from commission_policy_versions where scope_type='STANDARD' limit 1",booking,offer);
+  }
+  @Test void failedPinCommitsAttemptsAndLockButDoesNotAdvanceRide() {
+    for(int i=1;i<=5;i++) {
+      assertThrows(ApiException.class,()->controller.start(booking,new BookingController.Pin("9999")));
+      assertEquals(i,db.queryForObject("select pin_failed_attempts from scheduled_bookings where id=?",Integer.class,booking));
+    }
+    assertEquals("PIN_TEMPORARILY_LOCKED",assertThrows(ApiException.class,
+        ()->controller.start(booking,new BookingController.Pin("0427"))).code());
+    assertEquals("DRIVER_ARRIVED",status());
+    assertEquals(0,count("booking_status_history"));
+  }
+  @Test void competingStartsAdvanceOnlyOnce() throws Exception {
+    assertEquals(List.of("OK","INVALID_BOOKING_TRANSITION"),race(()->controller.start(booking,new BookingController.Pin("0427"))));
+    assertEquals("IN_PROGRESS",status());
+    assertEquals(1,count("booking_status_history"));
+  }
+  @Test void competingCompletionsSettleOnlyOnce() throws Exception {
+    snapshot();
+    db.update("update scheduled_bookings set status='IN_PROGRESS' where id=?",booking);
+    assertEquals(List.of("OK","INVALID_BOOKING_TRANSITION"),race(()->controller.complete(booking)));
+    assertEquals("COMPLETED",status());
+    assertEquals(1,count("driver_platform_debts"));
+    assertEquals(1,count("ledger_transactions"));
+    assertEquals(1,count("booking_status_history"));
+    assertEquals(2,db.queryForObject("select count(*) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Integer.class,booking));
+  }
+  @Test void missingFinancialSnapshotRollsBackCompletionAndNotifications() {
+    db.update("update scheduled_bookings set status='IN_PROGRESS' where id=?",booking);
+    assertThrows(ApiException.class,()->controller.complete(booking));
+    assertEquals("IN_PROGRESS",status());
+    assertEquals(0,count("booking_status_history"));
+    assertEquals(0,count("driver_platform_debts"));
+    assertEquals(0,db.queryForObject("select count(*) from outbox_events where aggregate_id=?",Integer.class,booking));
+  }
+  @Test void bookingDetailUsesTheSameDeterministicVehicleAsOfferCards() {
+    for(String plate:List.of("A-"+booking.toString().substring(0,12),"B-"+booking.toString().substring(0,12))) {
+      db.update("insert into vehicles(driver_id,category_id,brand,model,year,plate_number,status) select ?,id,'Test','Car',2024,?,'APPROVED' from vehicle_categories where code='STANDARD'",driver,plate);
+    }
+    String expected=db.queryForObject("select plate_number from vehicles where driver_id=? order by id limit 1",String.class,driver);
+    var detail=new BookingQueryController(db).detail(booking);
+    assertEquals(expected,detail.get("plate_number"));
+    assertEquals("Standard",detail.get("category_name"));
+  }
+  List<String> race(Runnable action) throws Exception {
+    var ready=new CountDownLatch(2);
+    var go=new CountDownLatch(1);
+    try(var pool=Executors.newFixedThreadPool(2)) {
+      Callable<String> task=()->{
+        authenticate();
+        try {
+          ready.countDown();
+          assertTrue(go.await(10,TimeUnit.SECONDS));
+          try { action.run(); return "OK"; } catch(ApiException e) { return e.code(); }
+        } finally { SecurityContextHolder.clearContext(); }
+      };
+      var first=pool.submit(task); var second=pool.submit(task);
+      assertTrue(ready.await(10,TimeUnit.SECONDS)); go.countDown();
+      var results=new ArrayList<>(List.of(first.get(20,TimeUnit.SECONDS),second.get(20,TimeUnit.SECONDS)));
+      results.sort(Comparator.reverseOrder());
+      return results;
+    } finally { go.countDown(); }
+  }
+}

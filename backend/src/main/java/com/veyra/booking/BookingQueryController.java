@@ -31,7 +31,7 @@ public class BookingQueryController {
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "left join drivers d on d.id=sb.selected_driver_id " +
         "left join users du on du.id=d.user_id " +
-        "left join vehicles v on v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id " +
+        "left join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true " +
         "where sb.id=? limit 1",
         bookingId);
 
