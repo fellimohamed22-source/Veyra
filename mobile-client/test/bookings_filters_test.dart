@@ -66,10 +66,13 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Suivant'), 300);
+    await tester.ensureVisible(find.text('Suivant'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Suivant'));
     await tester.pumpAndSettle();
     expect(pages.last, 1);
     await tester.ensureVisible(find.text('Page précédente'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Page précédente'));
     await tester.pumpAndSettle();
     expect(pages, [0, 1, 0]);
