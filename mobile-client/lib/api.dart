@@ -150,8 +150,10 @@ class Api {
   Future<List<dynamic>> favoriteDrivers()async=>List<dynamic>.from((await dio.get('/api/v1/me/favorite-drivers')).data);
   Future<void> addFavoriteDriver(String bookingId)async{await dio.put('/api/v1/me/favorite-drivers/from-booking/$bookingId');}
   Future<void> removeFavoriteDriver(String id)async{await dio.delete('/api/v1/me/favorite-drivers/$id');}
-  Future<List<dynamic>> bookings() async =>
-      List<dynamic>.from((await dio.get('/api/v1/scheduled-bookings')).data);
+  Future<List<dynamic>> bookings({String? status,String? sort,int? page}) async =>
+      List<dynamic>.from((await dio.get('/api/v1/scheduled-bookings',queryParameters:{
+        if(status!=null)'status':status,if(sort!=null)'sort':sort,if(page!=null)'page':page,
+      })).data);
 
   Future<Map<String,dynamic>> bookingDetail(String id) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/scheduled-bookings/$id')).data);

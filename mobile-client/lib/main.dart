@@ -541,12 +541,12 @@ class HomeScreen extends StatefulWidget{
 class _HomeScreenState extends State<HomeScreen> with RouteAware{
   late Future<List<dynamic>> future;
   String statusFilter='ALL'; String dateSort='desc'; int page=0; bool hasNext=false;
+  int loadRevision=0;
   Future<List<dynamic>> load()async{
-    final all=await api.bookings();
-    final rows=all.where((x)=>statusFilter=='ALL'||(x as Map)['status']==statusFilter).toList();
-    rows.sort((a,b){final cmp=(a['scheduled_at']??'').toString().compareTo((b['scheduled_at']??'').toString());return dateSort=='asc'?cmp:-cmp;});
-    hasNext=rows.length>(page+1)*10;
-    return rows.skip(page*10).take(10).toList();
+    final revision=++loadRevision;
+    final rows=await api.bookings(status:statusFilter=='ALL'?null:statusFilter,sort:dateSort,page:page);
+    if(revision==loadRevision)hasNext=rows.length==10;
+    return rows;
   }
   void resetFilters(){setState((){statusFilter='ALL';dateSort='desc';page=0;future=load();});}
   @override void initState(){
@@ -614,6 +614,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
             }
             final items=s.data??[];
             if(items.isEmpty){
+              if(page>0)return TextButton(onPressed:()=>setState((){page--;future=load();}),child:Text(t('Page précédente')));
               return Card(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ListTile(
                 leading:const Icon(Icons.event_available,color:Color(0xFF1565C0)),
                 title:Text(statusFilter=='ALL'?t('Aucune réservation'):t('Aucune réservation ne correspond aux filtres.')),
