@@ -232,5 +232,7 @@ class AppLocale {
     'Impossible de lire cette image.': 'Could not read this image.',
     'Photo de profil mise à jour.': 'Profile photo updated.',
     'Impossible d’enregistrer la photo de profil.': 'Could not save your profile photo.',
+    'Mot de passe actuel requis.': 'Current password is required.',
+    '10 caractères minimum.': 'At least 10 characters.',
   };
 }

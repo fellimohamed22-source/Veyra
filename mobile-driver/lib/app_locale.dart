@@ -248,5 +248,7 @@ class AppLocale {
     'Notifications indisponibles.': 'Notifications unavailable.',
     'Activez la localisation du téléphone.': 'Turn on the phone\'s location.',
     '10 caractères minimum': '10 characters minimum',
+    'Mot de passe actuel requis.': 'Current password is required.',
+    '10 caractères minimum.': 'At least 10 characters.',
   };
 }

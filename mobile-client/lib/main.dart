@@ -31,6 +31,7 @@ import 'core/formatters/money_formatter.dart';
 import 'core/formatters/status_labels.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/state_views.dart';
+import 'core/widgets/password_dialog.dart';
 import 'core/widgets/status_badge.dart';
 import 'core/widgets/pin_display.dart';
 import 'core/widgets/pagination_bar.dart';
@@ -961,41 +962,16 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-  Future<void> password() async {
-    final current = TextEditingController();
-    final next = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(t('Modifier mon mot de passe')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: current, obscureText: true, decoration: InputDecoration(labelText: t('Mot de passe actuel'))),
-            TextField(controller: next, obscureText: true, decoration: InputDecoration(labelText: t('Nouveau mot de passe'))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(t('Annuler'))),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(t('Enregistrer'))),
-        ],
-      ),
-    );
-    if (confirmed != true || next.text.length < 10) return;
-    try {
-      await api.changePassword(current.text, next.text);
-      await api.logout();
-      if (mounted) context.go('/login');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(VeyraErrorMessages.forException(e))),
-        );
-      }
-    }
-  }
-
-  Future<void> logout() async {
+  Future<void> password()async{
+  if(busy)return;
+  final change=await showDialog<(String,String)>(context:context,builder:(_)=>const VeyraPasswordDialog());
+  if(change==null||!mounted)return;
+  setState(()=>busy=true);
+  try{await api.changePassword(change.$1,change.$2);await api.logout();if(mounted)context.go('/login');}
+  catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+  finally{if(mounted)setState(()=>busy=false);}
+}
+Future<void> logout() async {
     await api.logout();
     if (mounted) context.go('/login');
   }
