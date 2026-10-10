@@ -22,7 +22,9 @@ class Api {
       onError:(e,h)async{
         final request=e.requestOptions;
         final isAuth=request.path.contains('/api/v1/auth/');
-        if(e.response?.statusCode==401 && !isAuth && request.extra['retried']!=true){
+        final data=e.response?.data;
+        final invalidCurrentPassword=request.path=='/api/v1/me/password'&&data is Map&&data['code']=='CURRENT_PASSWORD_INVALID';
+        if(e.response?.statusCode==401 && !isAuth && !invalidCurrentPassword && request.extra['retried']!=true){
           try{
             final current=await storage.read(key:'accessToken');
             final alreadyRotated=current!=null&&current.isNotEmpty&&request.headers['Authorization']!='Bearer $current';

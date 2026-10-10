@@ -986,10 +986,10 @@ class _AccountScreenState extends State<AccountScreen> {
       await api.changePassword(current.text, next.text);
       await api.logout();
       if (mounted) context.go('/login');
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t('Mot de passe actuel incorrect.'))),
+          SnackBar(content: Text(VeyraErrorMessages.forException(e))),
         );
       }
     }

@@ -88,4 +88,26 @@ void main() {
     api.dio.close();
     refresh.close();
   });
+
+  test('incorrect current password neither refreshes nor clears the session',
+      () async {
+    var refreshCount = 0;
+    final refresh = Dio();
+    refresh.httpClientAdapter = Adapter((_) async {
+      refreshCount++;
+      return json('{}', 401);
+    });
+    final api = Api('https://test.invalid', refreshClient: refresh);
+    api.dio.httpClientAdapter =
+        Adapter((_) async => json('{"code":"CURRENT_PASSWORD_INVALID"}', 401));
+    await expectLater(
+        api.changePassword('wrong', 'new-password-123'),
+        throwsA(isA<DioException>().having((e) => e.response?.data['code'],
+            'code', 'CURRENT_PASSWORD_INVALID')));
+    expect(refreshCount, 0);
+    expect(await api.storage.read(key: 'accessToken'), 'old');
+    expect(await api.storage.read(key: 'refreshToken'), 'refresh-old');
+    api.dio.close();
+    refresh.close();
+  });
 }
