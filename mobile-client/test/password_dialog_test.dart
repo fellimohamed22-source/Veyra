@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_client/core/widgets/password_dialog.dart';
+import 'package:veyra_client/app/theme.dart';
 
 void main() {
   testWidgets(
       'invalid password stays in dialog; valid input returns exact text',
       (tester) async {
     (String, String)? result;
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
+        theme: veyraTheme(),
+        builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.5)),
+            child: child!),
         home: Scaffold(
             body: Builder(
                 builder: (context) => TextButton(

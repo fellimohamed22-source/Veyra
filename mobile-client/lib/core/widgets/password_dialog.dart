@@ -50,6 +50,7 @@ class _VeyraPasswordDialogState extends State<VeyraPasswordDialog> {
               onPressed: () => Navigator.pop(context),
               child: Text(AppLocale.t('Annuler'))),
           FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
               onPressed: () {
                 if (form.currentState!.validate())
                   Navigator.pop(context, (current.text, next.text));
