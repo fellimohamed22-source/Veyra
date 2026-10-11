@@ -54,13 +54,15 @@ void main() {
         builder: (context, child) => MediaQuery(data: MediaQuery.of(context)
             .copyWith(textScaler: const TextScaler.linear(1.5)), child: child!)));
     await tester.pumpAndSettle();
-    final pageScroll = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
-    await tester.scrollUntilVisible(find.text('Passagers'), 250, scrollable: pageScroll);
+    final pageScroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text('Passagers'), 250,
+        scrollable: pageScroll, maxScrolls: 60);
     await tester.ensureVisible(find.byTooltip('Augmenter').first);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Augmenter').first);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Récapitulatif'), 250, scrollable: pageScroll);
+    await tester.scrollUntilVisible(find.text('Récapitulatif'), 250,
+        scrollable: pageScroll, maxScrolls: 60);
     final recap = find.ancestor(of: find.text('Récapitulatif'), matching: find.byType(Card)).first;
     expect(find.descendant(of: recap, matching: find.text('Nice')), findsOneWidget);
     expect(find.descendant(of: recap, matching: find.text('Cannes')), findsOneWidget);
@@ -68,7 +70,7 @@ void main() {
     expect(find.descendant(of: recap, matching: find.text('3 passager(s) • 1 bagage(s)')), findsOneWidget);
     expect(find.descendant(of: recap, matching: find.text('Siège enfant')), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Publier la demande'), 250,
-        scrollable: pageScroll);
+        scrollable: pageScroll, maxScrolls: 60);
     await tester.tap(find.text('Publier la demande'));
     await tester.pumpAndSettle();
     expect(find.text('Vérifiez votre demande'), findsOneWidget);
