@@ -2,8 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_client/main.dart';
+import 'package:veyra_client/core/widgets/booking_route_preview.dart';
 
 void main() {
+  setUp(() => BookingRoutePreview.enableNetworkTiles = false);
+  tearDown(() => BookingRoutePreview.enableNetworkTiles = true);
   for (final retired in [false, true]) {
     testWidgets(
         retired
@@ -38,15 +41,15 @@ void main() {
         'dropoff_lng': 7.0
       })));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Publier la demande'), 400,
-          scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(find.text('Publier la demande'));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('Publier la demande'));
       await tester.pumpAndSettle();
       expect(posted, isFalse);
       expect(
           find.text(retired
-              ? 'Complétez le trajet, la date et la catégorie.'
+              ? 'Complétez le trajet, la date et la catégorie avant de continuer.'
               : 'Le nombre de passagers dépasse la capacité de cette catégorie.'),
           findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
