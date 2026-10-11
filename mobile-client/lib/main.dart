@@ -1,3 +1,4 @@
+import 'core/widgets/profile_dialog.dart';
 import 'dart:async';
 import 'core/active_booking.dart';
 import 'core/maps/tracking_eta.dart';
@@ -929,39 +930,17 @@ class _AccountScreenState extends State<AccountScreen> {
     }finally{if(mounted)setState(()=>busy=false);}
   }
 
-  Future<void> edit(Map<String, dynamic> profile) async {
-    final first = TextEditingController(text: (profile['first_name'] ?? '').toString());
-    final last = TextEditingController(text: (profile['last_name'] ?? '').toString());
-    final phone = TextEditingController(text: (profile['phone'] ?? '').toString());
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(t('Modifier mes informations')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: first, decoration: InputDecoration(labelText: t('Prénom'))),
-            TextField(controller: last, decoration: InputDecoration(labelText: t('Nom'))),
-            TextField(controller: phone, decoration: InputDecoration(labelText: t('Téléphone'))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(t('Annuler'))),
-          FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed: () => Navigator.pop(dialogContext, true), child: Text(t('Enregistrer'))),
-        ],
-      ),
-    );
-    if (confirmed == true && first.text.trim().isNotEmpty && phone.text.trim().length >= 6) {
-      if(!mounted||busy)return;
-      setState(()=>busy=true);
-      try{
-        final updated=await api.updateProfile(firstName:first.text,lastName:last.text,phone:phone.text);
-        if(mounted)setState((){future=Future.value(updated);});
-      }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
-      finally{if(mounted)setState(()=>busy=false);}
-    }
+  Future<void> edit(Map<String,dynamic> profile)async{
+    if(busy)return;
+    final change=await showDialog<(String,String,String)>(context:context,builder:(_)=>VeyraProfileDialog(profile:profile));
+    if(change==null||!mounted||busy)return;
+    setState(()=>busy=true);
+    try{
+      final updated=await api.updateProfile(firstName:change.$1,lastName:change.$2,phone:change.$3);
+      if(mounted)setState((){future=Future.value(updated);});
+    }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+    finally{if(mounted)setState(()=>busy=false);}
   }
-
   Future<void> password()async{
   if(busy)return;
   final change=await showDialog<(String,String)>(context:context,builder:(_)=>const VeyraPasswordDialog());
