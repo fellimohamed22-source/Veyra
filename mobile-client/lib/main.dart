@@ -582,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware{
       title:Text(t('Mes trajets planifiés'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
     ),
     body:RefreshIndicator(
-      onRefresh:()async{retry();await future;},
+      onRefresh:()async{retry();try{await future;}catch(_){/* FutureBuilder displays the load error. */}},
       child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
         DropdownButtonFormField<String>(key:ValueKey(statusFilter),initialValue:statusFilter,isExpanded:true,decoration:InputDecoration(labelText:t('État')),
           items:[DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),for(final v in ['OPEN_FOR_OFFERS','OFFERS_RECEIVED','CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER'])DropdownMenuItem(value:v,child:Text(VeyraStatusLabels.bookingStatus(v)))],
@@ -744,7 +744,7 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
       actions:const [LanguageSwitch()],
     ),
     body:RefreshIndicator(
-      onRefresh:()async{setState(_load);await Future.wait([me,bookings]);},
+      onRefresh:()async{setState(_load);try{await Future.wait([me,bookings]);}catch(_){/* FutureBuilders display the load error. */}},
       child:ListView(padding:const EdgeInsets.all(20),children:[
         FutureBuilder<Map<String,dynamic>>(
           future:me,
@@ -2679,7 +2679,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),
     body:RefreshIndicator(
-      onRefresh:()async{reload();await future;},
+      onRefresh:()async{reload();try{await future;}catch(_){/* FutureBuilder displays the load error. */}},
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
