@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_client/main.dart';
+import 'package:veyra_client/app/theme.dart';
 
 void main() {
   testWidgets('offer card fits enlarged text and requires confirmation',
@@ -42,6 +43,7 @@ void main() {
                 }));
     }));
     await tester.pumpWidget(MaterialApp(
+        theme: veyraTheme(),
         builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context)
                 .copyWith(textScaler: const TextScaler.linear(1.5)),
@@ -53,10 +55,12 @@ void main() {
     await tester.tap(find.text('Alexandre'));
     await tester.pumpAndSettle();
     expect(find.text('Choisir ce chauffeur ?'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     expect(submissions, 0);
     await tester.tap(find.text('Comparer encore'));
     await tester.pumpAndSettle();
     expect(submissions, 0);
     await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
   });
 }

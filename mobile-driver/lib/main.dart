@@ -434,7 +434,7 @@ class _LoginScreenState extends State<LoginScreen>{
         ),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Annuler'))),
-          FilledButton(
+          FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),
             onPressed:()=>Navigator.pop(dialogContext,controller.text.trim()),
             child:Text(t('Envoyer le code')),
           ),
@@ -463,7 +463,7 @@ class _LoginScreenState extends State<LoginScreen>{
         ),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Annuler'))),
-          FilledButton(
+          FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),
             onPressed:()=>Navigator.pop(dialogContext,controller.text.trim()),
             child:Text(t('Valider')),
           ),
@@ -1271,7 +1271,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                 final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
                   title:Text(t('Retirer cette offre ?')),
                   content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
-                  actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
+                  actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder mon offre'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Retirer')))],
                 ));
                 if(ok!=true)return;
                 try{await api.withdrawOffer(offerId);if(mounted){setState(_load);ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Offre retirée.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
@@ -1512,7 +1512,7 @@ class _RequestScreenState extends State<RequestScreen>{
       await showDialog(context:context,builder:(_)=>AlertDialog(
         title:Text(isAdjusting?t('Offre mise à jour'):t('Offre envoyée')),
         content:Text(t('Votre offre : ')+VeyraMoneyFormatter.fromMinor(amountMinor)+'\n'+t('Vous serez averti si le client vous sélectionne.')),
-        actions:[FilledButton(onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
+        actions:[FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
       ));
       if(mounted)context.go('/home');
     }on DioException catch(e){
@@ -1914,7 +1914,7 @@ class _RideScreenState extends State<RideScreen>{
   }
   Future<void> confirmNoShow()async{
     if(busy)return;
-    final confirmed=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Déclarer le client absent ?')),content:Text(t('Attendez au moins 15 minutes après votre arrivée et l’heure prévue. Appelez ou contactez le client avant de confirmer. Cette déclaration clôture la course et peut entraîner des frais pour le client.')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Continuer à attendre'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Client contacté, confirmer son absence')))]));
+    final confirmed=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Déclarer le client absent ?')),content:Text(t('Attendez au moins 15 minutes après votre arrivée et l’heure prévue. Appelez ou contactez le client avant de confirmer. Cette déclaration clôture la course et peut entraîner des frais pour le client.')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Continuer à attendre'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Client contacté, confirmer son absence')))]));
     if(confirmed==true&&mounted)await action(()=>api.noShow(widget.bookingId),stopGps:true);
   }
   void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
@@ -2129,7 +2129,7 @@ class _RideScreenState extends State<RideScreen>{
             onPressed:()=>Navigator.pop(dialogContext,false),
             child:Text(t('Garder la course')),
           ),
-          FilledButton(
+          FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),
             onPressed:()=>Navigator.pop(dialogContext,true),
             child:Text(t('Confirmer l’annulation')),
           ),
@@ -2373,7 +2373,7 @@ class _RideScreenState extends State<RideScreen>{
                               onPressed:()=>Navigator.pop(dialogContext,false),
                               child:Text(t('Continuer la course')),
                             ),
-                            FilledButton(
+                            FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),
                               onPressed:()=>Navigator.pop(dialogContext,true),
                               child:Text(t('Terminer la course')),
                             ),
@@ -2643,7 +2643,7 @@ class AccountScreen extends StatefulWidget{const AccountScreen({super.key});@ove
     if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));
   }finally{if(mounted)setState(()=>busy=false);}
 }
-Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){if(!mounted||busy)return;setState(()=>busy=true);try{final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState((){future=Future.value(u);});}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}finally{if(mounted)setState(()=>busy=false);}}}Future<void> password()async{
+Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){if(!mounted||busy)return;setState(()=>busy=true);try{final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState((){future=Future.value(u);});}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}finally{if(mounted)setState(()=>busy=false);}}}Future<void> password()async{
   if(busy)return;
   final change=await showDialog<(String,String)>(context:context,builder:(_)=>const VeyraPasswordDialog());
   if(change==null||!mounted)return;

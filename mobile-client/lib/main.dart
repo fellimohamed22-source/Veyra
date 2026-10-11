@@ -947,7 +947,7 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(t('Annuler'))),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(t('Enregistrer'))),
+          FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed: () => Navigator.pop(dialogContext, true), child: Text(t('Enregistrer'))),
         ],
       ),
     );
@@ -1306,7 +1306,7 @@ class _AddressScreenState extends State<AddressScreen>{
   Future<void> saveCurrentAddress(bool isPickup)async{
     final place=isPickup?pickupPlace:dropoffPlace;if(place==null)return;
     final label=TextEditingController();
-    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Enregistrer cette adresse')),content:TextField(controller:label,maxLength:80,decoration:InputDecoration(labelText:t('Maison, Travail ou autre nom'))),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Enregistrer')))]));
+    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Enregistrer cette adresse')),content:TextField(controller:label,maxLength:80,decoration:InputDecoration(labelText:t('Maison, Travail ou autre nom'))),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Annuler'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Enregistrer')))]));
     if(yes!=true||label.text.trim().isEmpty)return;
     try{await api.saveAddress({'label':label.text.trim(),'address':place['label'],'lat':place['lat'],'lng':place['lng']});if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Adresse enregistrée.'))));}
     catch(e){if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));}
@@ -1667,7 +1667,7 @@ class _OffersScreenState extends State<OffersScreen>{
   @override void dispose(){refreshTimer?.cancel();super.dispose();}
   Future<void> confirmOffer(Map<String,dynamic> offer)async{
     if(acceptingOfferId!=null)return;
-    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Choisir ce chauffeur ?')),content:Text([offer['driverFirstName'],offer['driverLastName'],offer['vehicleBrand'],offer['vehicleModel'],offer['vehicleColor'],offer['vehicleYear'],t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(offer['totalMinor'])].where((v)=>v!=null).join(' • ')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Comparer encore'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Confirmer mon choix')))]));
+    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Choisir ce chauffeur ?')),content:Text([offer['driverFirstName'],offer['driverLastName'],offer['vehicleBrand'],offer['vehicleModel'],offer['vehicleColor'],offer['vehicleYear'],t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(offer['totalMinor'])].where((v)=>v!=null).join(' • ')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Comparer encore'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Confirmer mon choix')))]));
     if(yes==true&&mounted)await chooseOffer(offer['offerId'].toString());
   }
   Future<void> chooseOffer(String offerId)async{
@@ -1853,7 +1853,7 @@ class _PaymentScreenState extends State<PaymentScreen>{
             title:Text(t('Paiement transmis')),
             content:Text(t('Consultez votre réservation pour suivre la confirmation du paiement.')),
             actions:[
-              FilledButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Continuer'))),
+              FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(dialogContext),child:Text(t('Continuer'))),
             ],
           ),
         );
@@ -2019,7 +2019,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
         ]),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Garder la réservation'))),
-          FilledButton(onPressed:previewError!=null?null:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
+          FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:previewError!=null?null:()=>Navigator.pop(dialogContext,true),child:Text(t('Confirmer l’annulation'))),
         ],
       ),
     );
