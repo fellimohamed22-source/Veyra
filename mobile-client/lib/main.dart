@@ -1,4 +1,5 @@
 import 'core/widgets/profile_dialog.dart';
+import 'core/widgets/recent_destinations_section.dart';
 import 'dart:async';
 import 'core/active_booking.dart';
 import 'core/maps/tracking_eta.dart';
@@ -1169,6 +1170,9 @@ class _AddressScreenState extends State<AddressScreen>{
   String? categoryName;
   late Future<List<dynamic>> categories;
 
+  List<Map<String,dynamic>> recentDestinations=[];
+  bool recentDestinationsLoading=false;
+  String? recentDestinationsError;
   bool loadingPickup=false;
   bool loadingDropoff=false;
   bool locating=false;
@@ -1180,6 +1184,7 @@ class _AddressScreenState extends State<AddressScreen>{
   @override void initState(){
     super.initState();
     categories=loadCategories();
+    loadRecentDestinations();
     final initial=widget.initialBooking;
     if(initial!=null){
       final pickupLabel=initial['pickup_address']?.toString()??'';
@@ -1275,6 +1280,43 @@ class _AddressScreenState extends State<AddressScreen>{
       if(mounted)setState(()=>error=t('Impossible d’obtenir votre position actuelle.'));
     }finally{
       if(mounted)setState(()=>locating=false);
+    }
+  }
+
+  Future<void> loadRecentDestinations()async{
+    if(!mounted)return;
+    setState((){recentDestinationsLoading=true;recentDestinationsError=null;});
+    try{
+      final rows=await api.recentDestinations();
+      if(mounted)setState(()=>recentDestinations=rows);
+    }catch(_){
+      if(mounted)setState(()=>recentDestinationsError=t('Impossible de charger les destinations récentes.'));
+    }finally{
+      if(mounted)setState(()=>recentDestinationsLoading=false);
+    }
+  }
+
+  void selectRecentDestination(Map<String,dynamic> destination){
+    final lat=(destination['lat'] as num?)?.toDouble();
+    final lng=(destination['lng'] as num?)?.toDouble();
+    final label=destination['address']?.toString()??'';
+    if(lat==null||lng==null||label.isEmpty)return;
+    _searchDebounce?.cancel();
+    setState((){
+      dropoff.text=label;
+      dropoffPlace={'label':label,'lat':lat,'lng':lng};
+      dropoffResults=[];
+      dropoffSearchRevision++;
+      loadingDropoff=false;
+    });
+  }
+
+  Future<void> removeRecentDestination(String id)async{
+    try{
+      await api.deleteRecentDestination(id);
+      if(mounted)await loadRecentDestinations();
+    }catch(_){
+      if(mounted)setState(()=>recentDestinationsError=t('Impossible de supprimer cette destination.'));
     }
   }
 
@@ -1440,6 +1482,16 @@ class _AddressScreenState extends State<AddressScreen>{
       });
       if(!mounted)return;
       final newBookingId=created['id']?.toString();
+      // Only persist after the customer explicitly publishes the booking.
+      // This is non-critical: failure must never undo a successful booking.
+      try{
+        await api.recordRecentDestination(
+          address:dropoffPlace!['label'].toString(),
+          lat:(dropoffPlace!['lat'] as num).toDouble(),
+          lng:(dropoffPlace!['lng'] as num).toDouble(),
+        );
+      }catch(_){/* Booking already succeeded; keep the confirmation flow. */}
+      if(!mounted)return;
       // Section 19 : déclenche le mécanisme de rafraîchissement
       // explicite plutôt que de dépendre uniquement de
       // RouteObserver/didPopNext (fiabilité incertaine avec le
@@ -1506,6 +1558,14 @@ class _AddressScreenState extends State<AddressScreen>{
       addressField(true),
       const SizedBox(height:16),
       addressField(false),
+      RecentDestinationsSection(
+        destinations:recentDestinations,
+        loading:recentDestinationsLoading,
+        error:recentDestinationsError,
+        onRetry:loadRecentDestinations,
+        onSelected:selectRecentDestination,
+        onRemove:removeRecentDestination,
+      ),
       const SizedBox(height:18),
       ListTile(
         contentPadding:EdgeInsets.zero,
