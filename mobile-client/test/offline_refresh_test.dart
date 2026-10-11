@@ -37,14 +37,16 @@ void main() {
       final refresh =
           tester.widget<RefreshIndicator>(find.byType(RefreshIndicator));
       final before = requests;
-      await expectLater(refresh.onRefresh(), completes);
+      final failedRefresh = refresh.onRefresh();
       await tester.pumpAndSettle();
+      await expectLater(failedRefresh, completes);
       expect(requests, greaterThan(before));
       expect(find.byType(VeyraOfflineBanner), findsWidgets);
       expect(tester.takeException(), isNull);
       offline = false;
-      await refresh.onRefresh();
+      final recovery = refresh.onRefresh();
       await tester.pumpAndSettle();
+      await expectLater(recovery, completes);
       expect(find.byType(VeyraOfflineBanner), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
