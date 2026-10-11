@@ -1849,6 +1849,7 @@ class _OffersScreenState extends State<OffersScreen>{
   late Future<Map<String,dynamic>> bookingFuture;
   String? error;
   String? acceptingOfferId;
+  String offerSort='price';
   Timer? refreshTimer;
   bool refreshing=false;
   @override void initState(){
@@ -1943,13 +1944,30 @@ class _OffersScreenState extends State<OffersScreen>{
           if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
             ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId);}))
             :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
-          final items=s.data??[];
+          final items=List<dynamic>.from(s.data??[]);
+          if(offerSort=='price'){
+            items.sort((a,b)=>((a as Map)['totalMinor'] as num? ?? 0)
+              .compareTo((b as Map)['totalMinor'] as num? ?? 0));
+          }
           if(items.isEmpty)return Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.')));
           return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text(items.length==1?t('1 offre reçue'):items.length.toString()+' '+t('offres reçues'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
             const SizedBox(height:5),
             Text(t('Comparez librement le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:VeyraColors.textSecondary,height:1.35)),
 
+            const SizedBox(height:10),
+            Wrap(spacing:8,runSpacing:8,children:[
+              ChoiceChip(
+                label:Text(t('Prix croissant')),
+                selected:offerSort=='price',
+                onSelected:(_)=>setState(()=>offerSort='price'),
+              ),
+              ChoiceChip(
+                label:Text(t('Ordre de réception')),
+                selected:offerSort=='received',
+                onSelected:(_)=>setState(()=>offerSort='received'),
+              ),
+            ]),
             const SizedBox(height:14),
             for(final raw in items)Builder(builder:(context){
               final x=Map<String,dynamic>.from(raw as Map);
