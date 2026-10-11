@@ -1,0 +1,29 @@
+# Opt-in local compatibility stack. The legacy compose file is unchanged.
+# Start from repository root:
+# docker compose -f docker-compose.yml -f infrastructure/docker-compose.microservices.yml up --build
+# Requires environment secrets for non-development use.
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/veyra
+      DB_USER: veyra
+      DB_PASSWORD: veyra
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      PIN_ENCRYPTION_KEY: ${PIN_ENCRYPTION_KEY:?Set PIN_ENCRYPTION_KEY in your environment}
+    depends_on:
+      - postgres
+    expose:
+      - "8080"
+  gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infrastructure/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8088:8080"
+    depends_on:
+      - backend
+    restart: unless-stopped
