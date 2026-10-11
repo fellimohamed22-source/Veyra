@@ -1486,6 +1486,65 @@ class _AddressScreenState extends State<AddressScreen>{
     setState((){scheduledAt=selected;error=null;});
   }
 
+  Future<void> reviewAndPublish()async{
+    if(submitting)return;
+    if(!categoriesReady||pickupPlace==null||dropoffPlace==null||
+       scheduledAt==null||categoryId==null||passengerCount>categoryCapacity){
+      setState(()=>error=t('Complétez le trajet, la date et la catégorie avant de continuer.'));
+      return;
+    }
+    if(scheduledAt!.difference(DateTime.now())<const Duration(hours:2)){
+      setState(()=>error=t('Le départ doit être planifié au moins 2 heures à l’avance.'));
+      return;
+    }
+    final confirmed=await showModalBottomSheet<bool>(
+      context:context,
+      isScrollControlled:true,
+      showDragHandle:true,
+      builder:(sheetContext)=>SafeArea(child:Padding(
+        padding:EdgeInsets.fromLTRB(
+          20,12,20,20+MediaQuery.viewInsetsOf(sheetContext).bottom),
+        child:Column(
+          mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.stretch,
+          children:[
+            Text(t('Vérifiez votre demande'),
+              style:Theme.of(sheetContext).textTheme.headlineSmall),
+            const SizedBox(height:16),
+            _RecapLine(icon:Icons.trip_origin,
+              text:pickupPlace!['label']?.toString()??''),
+            _RecapLine(icon:Icons.location_on,
+              text:dropoffPlace!['label']?.toString()??''),
+            _RecapLine(icon:Icons.event,
+              text:VeyraDateFormatter.dateTime(scheduledAt!.toIso8601String())),
+            _RecapLine(icon:Icons.directions_car,
+              text:categoryName??t('Catégorie sélectionnée')),
+            _RecapLine(icon:Icons.people,
+              text:'$passengerCount passager(s) • $baggageCount bagage(s)'),
+            _RecapLine(icon:Icons.payments_outlined,
+              text:paymentMethod=='CASH'?t('Paiement en espèces'):t('Paiement en ligne')),
+            if(notes.text.trim().isNotEmpty)
+              _RecapLine(icon:Icons.notes,text:notes.text.trim()),
+            const SizedBox(height:12),
+            Text(t('Cette action publie une demande, pas une réservation confirmée. '
+              'Les chauffeurs proposeront leurs tarifs et vous choisirez une offre.')),
+            const SizedBox(height:18),
+            FilledButton.icon(
+              onPressed:()=>Navigator.pop(sheetContext,true),
+              icon:const Icon(Icons.check),
+              label:Text(t('Confirmer et publier')),
+            ),
+            TextButton(
+              onPressed:()=>Navigator.pop(sheetContext,false),
+              child:Text(t('Modifier ma demande')),
+            ),
+          ],
+        ),
+      )),
+    );
+    if(confirmed==true&&mounted)await publish();
+  }
+
   Future<void> publish()async{
     if(submitting)return;
     if(!categoriesReady){setState(()=>error=t('Rechargez les catégories avant de publier.'));return;}
@@ -1762,7 +1821,7 @@ class _AddressScreenState extends State<AddressScreen>{
         child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
       ),
       FilledButton.icon(
-        onPressed:submitting?null:publish,
+        onPressed:submitting?null:reviewAndPublish,
         icon:const Icon(Icons.campaign),
         label:submitting?Text(t('Publication…')):Text(t('Publier la demande')),
       ),
