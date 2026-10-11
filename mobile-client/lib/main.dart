@@ -1627,6 +1627,7 @@ class _OffersScreenState extends State<OffersScreen>{
   @override void initState(){
     super.initState();
     refreshTimer=Timer.periodic(const Duration(seconds:10),(_)=>refreshOffers());
+    RefreshBus.tick.addListener(refreshOffers);
     future=api.offers(widget.bookingId);
     // Real gap fixed here: this screen only ever fetched the offers
     // list, never the booking's own details -- someone landing here
@@ -1643,7 +1644,7 @@ class _OffersScreenState extends State<OffersScreen>{
     catch(e){if(mounted)setState(()=>error=t('Actualisation interrompue. Vérifiez votre connexion.'));}
     finally{refreshing=false;}
   }
-  @override void dispose(){refreshTimer?.cancel();super.dispose();}
+  @override void dispose(){RefreshBus.tick.removeListener(refreshOffers);refreshTimer?.cancel();super.dispose();}
   Future<void> confirmOffer(Map<String,dynamic> offer)async{
     if(acceptingOfferId!=null)return;
     final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Choisir ce chauffeur ?')),content:Text([offer['driverFirstName'],offer['driverLastName'],offer['vehicleBrand'],offer['vehicleModel'],offer['vehicleColor'],offer['vehicleYear'],t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(offer['totalMinor'])].where((v)=>v!=null).join(' • ')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Comparer encore'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Confirmer mon choix')))]));
@@ -1903,6 +1904,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     super.initState();
     future=api.bookingDetail(widget.bookingId).then((value){favorite=value['favorite_driver']==true;return value;});
     statusTimer=Timer.periodic(const Duration(seconds:8),(_)=>refreshStatus());
+    RefreshBus.tick.addListener(refreshStatus);
   }
 
   Future<void> toggleFavorite(Map<String,dynamic> booking)async{
@@ -1918,7 +1920,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     catch(e){if(mounted)setState(()=>refreshError=t('Actualisation interrompue. Les données affichées peuvent être anciennes.'));}
     finally{refreshing=false;}
   }
-  @override void dispose(){statusTimer?.cancel();super.dispose();}
+  @override void dispose(){RefreshBus.tick.removeListener(refreshStatus);statusTimer?.cancel();super.dispose();}
   void reload()=>setState((){future=api.bookingDetail(widget.bookingId);});
 
   Future<void> loadPin()async{
@@ -2327,11 +2329,13 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     refresh();
     timer=Timer.periodic(const Duration(seconds:10),(_)=>refresh());
     etaTimer=Timer.periodic(const Duration(seconds:30),(_)=>refreshEta());
+    RefreshBus.tick.addListener(refresh);
   }
 
   @override void dispose(){
     timer?.cancel();
     etaTimer?.cancel();
+    RefreshBus.tick.removeListener(refresh);
     super.dispose();
   }
 

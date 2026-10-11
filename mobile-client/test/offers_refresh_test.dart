@@ -26,16 +26,26 @@ void main() {
         .pumpWidget(const MaterialApp(home: OffersScreen(bookingId: 'ride-1')));
     await tester.pumpAndSettle();
     offline = true;
-    await tester.tap(find.byTooltip('Actualiser'));
+    RefreshBus.bump();
     await tester.pumpAndSettle();
     expect(find.text('Actualisation interrompue. Vérifiez votre connexion.'),
         findsOneWidget);
     offline = false;
-    await tester.tap(find.byTooltip('Actualiser'));
+    RefreshBus.bump();
     await tester.pumpAndSettle();
     expect(find.text('Actualisation interrompue. Vérifiez votre connexion.'),
         findsNothing);
     expect(find.byType(RefreshIndicator), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
+    // Disposed screens must stop responding to foreground notifications.
+    var requestsAfterDispose = 0;
+    api.dio.interceptors.clear();
+    api.dio.interceptors.add(InterceptorsWrapper(onRequest: (request, handler) {
+      requestsAfterDispose++;
+      handler.resolve(Response(requestOptions: request, data: <dynamic>[]));
+    }));
+    RefreshBus.bump();
+    await tester.pumpAndSettle();
+    expect(requestsAfterDispose, 0);
   });
 }

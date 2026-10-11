@@ -1903,10 +1903,12 @@ class _RideScreenState extends State<RideScreen>{
     future=api.bookingDetail(widget.bookingId);
     tracker=activeRideTracker;
     statusTimer=Timer.periodic(const Duration(seconds:8),(_)=>refreshStatus());
+    RefreshBus.tick.addListener(refreshStatus);
   }
 
   @override void dispose(){
     statusTimer?.cancel();
+    RefreshBus.tick.removeListener(refreshStatus);
     tracker.detach(this);
     pin.dispose();
     super.dispose();
