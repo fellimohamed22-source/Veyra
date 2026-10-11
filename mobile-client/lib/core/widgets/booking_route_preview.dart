@@ -9,11 +9,12 @@ class BookingRoutePreview extends StatelessWidget {
     super.key,
     required this.pickupLat, required this.pickupLng,
     required this.dropoffLat, required this.dropoffLng,
-    this.distanceMeters, this.durationSeconds,
+    this.distanceMeters, this.durationSeconds, this.routePoints=const [],
     this.loading=false, this.error, this.onRetry,
   });
   final double pickupLat,pickupLng,dropoffLat,dropoffLng;
   final num? distanceMeters,durationSeconds;
+  final List<LatLng> routePoints;
   final bool loading;
   final String? error;
   final VoidCallback? onRetry;
@@ -23,6 +24,8 @@ class BookingRoutePreview extends StatelessWidget {
     final start=LatLng(pickupLat,pickupLng);
     final end=LatLng(dropoffLat,dropoffLng);
     final center=LatLng((pickupLat+dropoffLat)/2,(pickupLng+dropoffLng)/2);
+    final allPoints=[start,end,...routePoints];
+    final bounds=LatLngBounds.fromPoints(allPoints);
     final theme=Theme.of(context);
     return Card(
       clipBehavior:Clip.antiAlias,
@@ -34,12 +37,17 @@ class BookingRoutePreview extends StatelessWidget {
         SizedBox(
           height:210,
           child:FlutterMap(
-            options:MapOptions(initialCenter:center,initialZoom:11),
+            options:MapOptions(initialCenter:center,initialZoom:11,
+              initialCameraFit:CameraFit.bounds(bounds:bounds,
+                padding:const EdgeInsets.all(40))),
             children:[
               TileLayer(
                 urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName:'com.veyra.client',
               ),
+              if(routePoints.length>=2)PolylineLayer(polylines:[
+                Polyline(points:routePoints,strokeWidth:4,color:theme.colorScheme.primary),
+              ]),
               MarkerLayer(markers:[
                 Marker(point:start,width:48,height:48,
                   child:const Icon(Icons.trip_origin,color:Colors.green,size:34)),
