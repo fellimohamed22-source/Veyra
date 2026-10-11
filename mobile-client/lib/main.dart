@@ -1304,14 +1304,35 @@ class _AddressScreenState extends State<AddressScreen>{
     final c=(to['lat'] as num?)?.toDouble(),d=(to['lng'] as num?)?.toDouble();
     if(a==null||b==null||c==null||d==null)return;
     setState((){routeEstimate=null;routeEstimateLoading=true;routeEstimateError=null;});
-    api.routeEstimate(fromLat:a,fromLng:b,toLat:c,toLng:d).then((result){
-      if(mounted&&revision==routeRevision)setState(()=>routeEstimate=result);
-    }).catchError((Object _){
-      if(mounted&&revision==routeRevision)setState(
-        ()=>routeEstimateError=t('Estimation d’itinéraire indisponible.'));
-    }).whenComplete((){
-      if(mounted&&revision==routeRevision)setState(()=>routeEstimateLoading=false);
-    });
+    unawaited(_loadRoutePreview(
+      revision:revision,fromLat:a,fromLng:b,toLat:c,toLng:d,
+    ));
+  }
+
+  Future<void> _loadRoutePreview({
+    required int revision,
+    required double fromLat,
+    required double fromLng,
+    required double toLat,
+    required double toLng,
+  })async{
+    try{
+      final result=await api.routeEstimate(
+        fromLat:fromLat,fromLng:fromLng,toLat:toLat,toLng:toLng);
+      if(mounted&&revision==routeRevision){
+        setState(()=>routeEstimate=result);
+      }
+    }catch(_){
+      // Route estimation is optional: keep booking available even offline.
+      if(mounted&&revision==routeRevision){
+        setState(()=>routeEstimateError=t('Estimation d’itinéraire indisponible.'));
+      }
+    }finally{
+      // An outdated request must never reset the loading state of a newer one.
+      if(mounted&&revision==routeRevision){
+        setState(()=>routeEstimateLoading=false);
+      }
+    }
   }
 
   Future<void> loadRecentDestinations()async{
