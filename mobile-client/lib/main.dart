@@ -1,5 +1,6 @@
 import 'core/widgets/profile_dialog.dart';
 import 'core/widgets/recent_destinations_section.dart';
+import 'core/widgets/booking_route_preview.dart';
 import 'dart:async';
 import 'core/active_booking.dart';
 import 'core/maps/tracking_eta.dart';
@@ -1170,6 +1171,10 @@ class _AddressScreenState extends State<AddressScreen>{
   String? categoryName;
   late Future<List<dynamic>> categories;
 
+  Map<String,dynamic>? routeEstimate;
+  bool routeEstimateLoading=false;
+  String? routeEstimateError;
+  int routeRevision=0;
   List<Map<String,dynamic>> recentDestinations=[];
   bool recentDestinationsLoading=false;
   String? recentDestinationsError;
@@ -1204,6 +1209,9 @@ class _AddressScreenState extends State<AddressScreen>{
       baggageCount=(initial['baggage_count'] as num?)?.toInt()??0;
       scheduledAt=DateTime.now().add(const Duration(hours:3));
     }
+    if(pickupPlace!=null&&dropoffPlace!=null){
+      WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)refreshRoutePreview();});
+    }
     // Real gap fixed here: the client had no way to know whether their
     // booking would show competing prices to drivers or not -- this is
     // a platform-wide policy set by an admin (not a per-booking choice),
@@ -1225,6 +1233,7 @@ class _AddressScreenState extends State<AddressScreen>{
   }
 
   @override void dispose(){
+    routeRevision++;
     _searchDebounce?.cancel();
     pickup.dispose();dropoff.dispose();notes.dispose();
     super.dispose();
@@ -1276,11 +1285,33 @@ class _AddressScreenState extends State<AddressScreen>{
         pickupPlace=place;
         pickupResults=[];
       });
+      refreshRoutePreview();
     }catch(_){
       if(mounted)setState(()=>error=t('Impossible d’obtenir votre position actuelle.'));
     }finally{
       if(mounted)setState(()=>locating=false);
     }
+  }
+
+  void refreshRoutePreview(){
+    final revision=++routeRevision;
+    final from=pickupPlace,to=dropoffPlace;
+    if(from==null||to==null){
+      setState((){routeEstimate=null;routeEstimateLoading=false;routeEstimateError=null;});
+      return;
+    }
+    final a=(from['lat'] as num?)?.toDouble(),b=(from['lng'] as num?)?.toDouble();
+    final c=(to['lat'] as num?)?.toDouble(),d=(to['lng'] as num?)?.toDouble();
+    if(a==null||b==null||c==null||d==null)return;
+    setState((){routeEstimate=null;routeEstimateLoading=true;routeEstimateError=null;});
+    api.routeEstimate(fromLat:a,fromLng:b,toLat:c,toLng:d).then((result){
+      if(mounted&&revision==routeRevision)setState(()=>routeEstimate=result);
+    }).catchError((Object _){
+      if(mounted&&revision==routeRevision)setState(
+        ()=>routeEstimateError=t('Estimation d’itinéraire indisponible.'));
+    }).whenComplete((){
+      if(mounted&&revision==routeRevision)setState(()=>routeEstimateLoading=false);
+    });
   }
 
   Future<void> loadRecentDestinations()async{
@@ -1309,6 +1340,7 @@ class _AddressScreenState extends State<AddressScreen>{
       dropoffSearchRevision++;
       loadingDropoff=false;
     });
+    refreshRoutePreview();
   }
 
   Future<void> removeRecentDestination(String id)async{
@@ -1322,7 +1354,10 @@ class _AddressScreenState extends State<AddressScreen>{
 
   Future<void> selectSavedAddress(bool isPickup)async{
     final value=await Navigator.push<Map<String,dynamic>>(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen(select:true)));
-    if(value!=null&&mounted)setState((){if(isPickup){pickupPlace=value;pickup.text=value['label'].toString();}else{dropoffPlace=value;dropoff.text=value['label'].toString();}});
+    if(value!=null&&mounted){
+      setState((){if(isPickup){pickupPlace=value;pickup.text=value['label'].toString();}else{dropoffPlace=value;dropoff.text=value['label'].toString();}});
+      refreshRoutePreview();
+    }
   }
   Future<void> saveCurrentAddress(bool isPickup)async{
     final place=isPickup?pickupPlace:dropoffPlace;if(place==null)return;
@@ -1350,6 +1385,10 @@ class _AddressScreenState extends State<AddressScreen>{
           // own label.
           final current=isPickup?pickupPlace:dropoffPlace;
           if(current!=null&&current['label']==q)return;
+          routeRevision++;
+          routeEstimate=null;
+          routeEstimateLoading=false;
+          routeEstimateError=null;
           setState((){
             if(isPickup){pickupPlace=null;pickupResults=[];loadingPickup=false;pickupSearchRevision++;}
             else{dropoffPlace=null;dropoffResults=[];loadingDropoff=false;dropoffSearchRevision++;}
@@ -1413,6 +1452,7 @@ class _AddressScreenState extends State<AddressScreen>{
                 dropoffResults=[];
               }
             });
+            refreshRoutePreview();
           },
         ),
     ]);
@@ -1566,6 +1606,20 @@ class _AddressScreenState extends State<AddressScreen>{
         onSelected:selectRecentDestination,
         onRemove:removeRecentDestination,
       ),
+      const SizedBox(height:18),
+      if(pickupPlace!=null&&dropoffPlace!=null)
+        BookingRoutePreview(
+          key:ValueKey('${pickupPlace!['lat']},${pickupPlace!['lng']}-${dropoffPlace!['lat']},${dropoffPlace!['lng']}'),
+          pickupLat:(pickupPlace!['lat'] as num).toDouble(),
+          pickupLng:(pickupPlace!['lng'] as num).toDouble(),
+          dropoffLat:(dropoffPlace!['lat'] as num).toDouble(),
+          dropoffLng:(dropoffPlace!['lng'] as num).toDouble(),
+          distanceMeters:routeEstimate?['distanceMeters'] as num?,
+          durationSeconds:routeEstimate?['durationSeconds'] as num?,
+          loading:routeEstimateLoading,
+          error:routeEstimateError,
+          onRetry:refreshRoutePreview,
+        ),
       const SizedBox(height:18),
       ListTile(
         contentPadding:EdgeInsets.zero,
