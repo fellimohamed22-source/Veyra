@@ -29,12 +29,14 @@ void main() {
     await tester.pumpAndSettle();
     final initialReads = reads;
     expect(find.text('Votre chauffeur est arrivé'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Chauffeur Veyra vérifié'), 180);
     expect(find.text('Chauffeur Veyra vérifié'), findsOneWidget);
     status = 'DRIVER_ARRIVED';
     verified = false;
     RefreshBus.bump();
     await tester.pumpAndSettle();
     expect(reads, initialReads + 1);
+    await tester.scrollUntilVisible(find.text('Votre chauffeur est arrivé'), 180);
     expect(find.text('Votre chauffeur est arrivé'), findsOneWidget);
     expect(find.text('Chauffeur Veyra vérifié'), findsNothing);
     expect(tester.takeException(), isNull);
