@@ -49,10 +49,12 @@ public class DriverBookingController {
         "coalesce(sb.beneficiary_phone_snapshot,cu.phone) as customer_phone,sb.passenger_count,sb.baggage_count,sb.customer_notes,vc.display_name as category_name," +
         "(select max(created_at) from booking_status_history where booking_id=sb.id and to_status='DRIVER_ARRIVED') as arrived_at," +
         "(select p.status from payments p where p.booking_id=sb.id order by p.created_at desc limit 1) as payment_status," +
-        "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency " +
+        "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
+        "v.brand as vehicle_brand,v.model as vehicle_model,v.color as vehicle_color,v.plate_number " +
         "from scheduled_bookings sb " +
         "join users cu on cu.id=sb.creator_user_id join vehicle_categories vc on vc.id=sb.category_id " +
         "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
+        "left join lateral (select v.* from vehicles v where v.driver_id=sb.selected_driver_id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true " +
         "where sb.id=? and sb.selected_driver_id=?",
         bookingId,
         driverId);

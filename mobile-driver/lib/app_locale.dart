@@ -248,6 +248,7 @@ class AppLocale {
     'Notifications indisponibles.': 'Notifications unavailable.',
     'Activez la localisation du téléphone.': 'Turn on the phone\'s location.',
     '10 caractères minimum': '10 characters minimum',
+    'Véhicule approuvé': 'Approved vehicle',
     'Prénom requis.': 'First name is required.',
     'Téléphone de 6 caractères minimum requis.': 'A phone number of at least 6 characters is required.',
     'Mot de passe actuel requis.': 'Current password is required.',

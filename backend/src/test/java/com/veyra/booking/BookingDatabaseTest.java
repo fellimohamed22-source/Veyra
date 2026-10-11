@@ -140,6 +140,10 @@ class BookingDatabaseTest {
     var detail=new BookingQueryController(db).detail(booking);
     assertEquals(expected,detail.get("plate_number"));
     assertEquals("Standard",detail.get("category_name"));
+    var driverDetail=new com.veyra.driver.DriverBookingController(db).detail(booking);
+    assertEquals(expected,driverDetail.get("plate_number"));
+    assertEquals(detail.get("vehicle_brand"),driverDetail.get("vehicle_brand"));
+    assertEquals(detail.get("vehicle_model"),driverDetail.get("vehicle_model"));
   }
   UUID activeOffer(UUID bookingId) {
     UUID offer=UUID.randomUUID();

@@ -2252,6 +2252,7 @@ class _RideScreenState extends State<RideScreen>{
                 Text(t('Prise en charge prévue')+' : '+VeyraDateFormatter.dateTime(x['scheduled_at'])),
                 Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
                 if((x['customer_notes']??'').toString().isNotEmpty)Text(t('Remarques')+' : '+x['customer_notes'].toString()),
+                if(x['plate_number']!=null)Text(t('Véhicule approuvé')+' : '+[x['vehicle_brand'],x['vehicle_model'],x['vehicle_color'],x['plate_number']].where((value)=>value!=null&&value.toString().isNotEmpty).join(' • ')),
                 if(status=='DRIVER_ARRIVED')Text(t('Vous êtes arrivé au point de prise en charge. Contactez le client avant toute déclaration d’absence.')),
                 const SizedBox(height:12),
                 Row(children:[
