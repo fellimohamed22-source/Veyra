@@ -145,6 +145,24 @@ class Api {
     await storage.deleteAll();
   }
 
+  Future<List<Map<String,dynamic>>> recentDestinations() async {
+    final response=await dio.get('/api/v1/me/recent-destinations');
+    return (response.data as List).map((e)=>Map<String,dynamic>.from(e as Map)).toList();
+  }
+  Future<void> recordRecentDestination({
+    required String address,required double lat,required double lng,
+  }) async {
+    await dio.post('/api/v1/me/recent-destinations',data:{
+      'address':address,'lat':lat,'lng':lng,
+    });
+  }
+  Future<void> deleteRecentDestination(String id) async {
+    await dio.delete('/api/v1/me/recent-destinations/${Uri.encodeComponent(id)}');
+  }
+  Future<void> clearRecentDestinations() async {
+    await dio.delete('/api/v1/me/recent-destinations');
+  }
+
   Future<List<dynamic>> savedAddresses()async=>List<dynamic>.from((await dio.get('/api/v1/me/addresses')).data);
   Future<void> saveAddress(Map<String,dynamic> x)async{await dio.post('/api/v1/me/addresses',data:x);}
   Future<void> updateSavedAddress(String id,Map<String,dynamic> x)async{await dio.put('/api/v1/me/addresses/$id',data:x);}
