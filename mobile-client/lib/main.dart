@@ -2055,7 +2055,10 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           if(x['selected_driver_id']!=null)Card(child:ListTile(
             leading:const CircleAvatar(child:Icon(Icons.person)),
             title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
-            subtitle:Text('Note : '+(x['driver_rating']??'-').toString()),
+            subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text('Note : '+(x['driver_rating']??'-').toString()),
+              if(x['driver_verified']==true)Text(t('Chauffeur Veyra vérifié')),
+            ]),
           )),
           if(x['customer_total_amount_minor']!=null)BookingFinancialSummary(booking:x,paymentLabel:paymentStatusLabel(x['payment_status']?.toString())),
           if(bookingCanPayOnline(x))

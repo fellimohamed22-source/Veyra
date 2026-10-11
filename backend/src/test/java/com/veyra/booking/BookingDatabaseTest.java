@@ -144,6 +144,11 @@ class BookingDatabaseTest {
     assertEquals(expected,driverDetail.get("plate_number"));
     assertEquals(detail.get("vehicle_brand"),driverDetail.get("vehicle_brand"));
     assertEquals(detail.get("vehicle_model"),driverDetail.get("vehicle_model"));
+    assertEquals(false,detail.get("driver_verified"));
+    db.update("update drivers set kyc_status='APPROVED' where id=?",driver);
+    assertEquals(true,new BookingQueryController(db).detail(booking).get("driver_verified"));
+    db.update("update drivers set kyc_status='REJECTED' where id=?",driver);
+    assertEquals(false,new BookingQueryController(db).detail(booking).get("driver_verified"));
   }
   UUID activeOffer(UUID bookingId) {
     UUID offer=UUID.randomUUID();
