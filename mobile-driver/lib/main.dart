@@ -2688,8 +2688,8 @@ Future<void> logout()async{await activeRideTracker.stop();await api.logout();try
               leading:Icon(approved?Icons.verified:Icons.pending_actions,color:approved?const Color(0xFF16A34A):null),
               title:Text(approved?t('Dossier approuvé'):t('Vérification en cours')),
               subtitle:Text(t('Statut du dossier')+' : '+VeyraStatusLabels.kycStatus(status)),
-              trailing:approved?null:const Icon(Icons.chevron_right),
-              onTap:approved?null:()=>context.push('/kyc'),
+              trailing:const Icon(Icons.chevron_right),
+              onTap:()=>context.push('/kyc'),
             ));
           }),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),DriverDocuments(documents:docs,onRetry:()=>setState((){docs=api.documents();}),onUpload:busy?null:doc),const LanguageSwitch(),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}));}
 
