@@ -1339,6 +1339,21 @@ class _AddressScreenState extends State<AddressScreen>{
         ),
       ),
       Wrap(children:[TextButton.icon(onPressed:()=>selectSavedAddress(isPickup),icon:const Icon(Icons.bookmark_outline),label:Text(t('Mes adresses'))),if((isPickup?pickupPlace:dropoffPlace)!=null)TextButton(onPressed:()=>saveCurrentAddress(isPickup),child:Text(t('Enregistrer cette adresse')))]),
+      if((isPickup?pickupPlace:dropoffPlace)!=null)
+        Padding(
+          padding:const EdgeInsets.only(top:6,bottom:6),
+          child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            const Icon(Icons.check_circle_outline,color:Color(0xFF16A34A),size:20),
+            const SizedBox(width:8),
+            Expanded(child:Text(
+              isPickup
+                ?t('Point de départ sélectionné. Vérifiez que cette adresse correspond exactement au lieu où le chauffeur doit vous retrouver.')
+                :t('Destination sélectionnée. Vérifiez que cette adresse correspond au lieu souhaité.'),
+              style:const TextStyle(fontSize:13,color:Colors.black87),
+            )),
+          ]),
+        ),
+
       for(final item in results.take(5))
         ListTile(
           dense:true,
