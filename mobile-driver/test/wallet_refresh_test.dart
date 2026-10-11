@@ -53,7 +53,15 @@ void main() {
     await tester.scrollUntilVisible(
         find.text('Course terminée (paiement en ligne)'), 100,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Course terminée (paiement en ligne)'));
+    final linkedRide = find.ancestor(
+        of: find.text('Course terminée (paiement en ligne)'),
+        matching: find.byType(ListTile));
+    final rideTile = tester.widget<ListTile>(linkedRide);
+    expect(rideTile.onTap, isNotNull,
+        reason: 'A wallet transaction linked to a ride must be actionable');
+    // Invoke the actual ListTile callback: a text-only tap can miss the
+    // tappable region after a lazy list scroll in a widget test.
+    rideTile.onTap!();
     await tester.pumpAndSettle();
     expect(navigation.routeInformationProvider.value.uri.path,
         '/ride/ride-wallet-1');
