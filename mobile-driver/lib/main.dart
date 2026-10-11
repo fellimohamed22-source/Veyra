@@ -1527,7 +1527,7 @@ class _RequestScreenState extends State<RequestScreen>{
         content:Text(t('Votre offre : ')+VeyraMoneyFormatter.fromMinor(amountMinor)+'\n'+t('Vous serez averti si le client vous sélectionne.')),
         actions:[FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
       ));
-      if(mounted)context.go('/home');
+      if(mounted)context.go('/driver/offers');
     }on DioException catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }catch(_){
