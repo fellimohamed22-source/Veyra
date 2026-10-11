@@ -30,7 +30,10 @@ void main() {
     ]) {
       final filter = tester.widget<DropdownButtonFormField<String>>(
           find.byKey(ValueKey('booking-status-$selected')));
-      expect(filter.items!.any((item) => item.value == status), isTrue);
+      final dropdown = tester.widget<DropdownButton<String>>(find.descendant(
+          of: find.byKey(ValueKey('booking-status-$selected')),
+          matching: find.byType(DropdownButton<String>)));
+      expect(dropdown.items!.any((item) => item.value == status), isTrue);
       filter.onChanged!(status);
       await tester.pumpAndSettle();
       expect(requests.last,

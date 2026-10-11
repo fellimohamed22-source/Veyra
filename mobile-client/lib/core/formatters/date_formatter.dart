@@ -11,15 +11,51 @@ import '../../app_locale.dart';
 class VeyraDateFormatter {
   VeyraDateFormatter._();
 
-  static const _weekdaysFr = ['Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.', 'Dim.'];
-  static const _monthsFr = [
-    'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-    'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'
+  static const _weekdaysFr = [
+    'Lun.',
+    'Mar.',
+    'Mer.',
+    'Jeu.',
+    'Ven.',
+    'Sam.',
+    'Dim.'
   ];
-  static const _weekdaysEn = ['Mon.', 'Tue.', 'Wed.', 'Thu.', 'Fri.', 'Sat.', 'Sun.'];
+  static const _monthsFr = [
+    'janv.',
+    'févr.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'août',
+    'sept.',
+    'oct.',
+    'nov.',
+    'déc.'
+  ];
+  static const _weekdaysEn = [
+    'Mon.',
+    'Tue.',
+    'Wed.',
+    'Thu.',
+    'Fri.',
+    'Sat.',
+    'Sun.'
+  ];
   static const _monthsEn = [
-    'Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.',
-    'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'
+    'Jan.',
+    'Feb.',
+    'Mar.',
+    'Apr.',
+    'May',
+    'Jun.',
+    'Jul.',
+    'Aug.',
+    'Sep.',
+    'Oct.',
+    'Nov.',
+    'Dec.'
   ];
 
   static bool get _isEnglish => AppLocale.code.value == 'en';
@@ -66,15 +102,19 @@ class VeyraDateFormatter {
   }
 
   /// Relatif court pour les listes ("Aujourd'hui", "Demain", ou date).
-  static String relativeDay(dynamic raw) {
+  static String relativeDay(dynamic raw, {DateTime? now}) {
     final dt = _parse(raw);
     if (dt == null) return '—';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final target = DateTime(dt.year, dt.month, dt.day);
+    final current = now ?? DateTime.now();
+    // Count calendar dates, not 24-hour periods: a local day can have
+    // 23 or 25 hours when daylight saving changes.
+    final today = DateTime.utc(current.year, current.month, current.day);
+    final target = DateTime.utc(dt.year, dt.month, dt.day);
     final diff = target.difference(today).inDays;
-    if (diff == 0) return _isEnglish ? 'Today • ${_time(dt)}' : "Aujourd'hui • ${_time(dt)}";
-    if (diff == 1) return _isEnglish ? 'Tomorrow • ${_time(dt)}' : 'Demain • ${_time(dt)}';
+    if (diff == 0)
+      return _isEnglish ? 'Today • ${_time(dt)}' : "Aujourd'hui • ${_time(dt)}";
+    if (diff == 1)
+      return _isEnglish ? 'Tomorrow • ${_time(dt)}' : 'Demain • ${_time(dt)}';
     return dateTime(raw);
   }
 }

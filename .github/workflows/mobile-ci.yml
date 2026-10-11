@@ -1,5 +1,7 @@
 name: mobile-ci
 on: [push, pull_request]
+env:
+  TZ: Europe/Paris
 jobs:
   client:
     runs-on: ubuntu-latest
