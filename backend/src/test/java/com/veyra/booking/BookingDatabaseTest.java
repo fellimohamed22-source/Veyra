@@ -216,6 +216,9 @@ class BookingDatabaseTest {
     assertEquals(1,detail.get("baggage_count"));
     assertEquals("Siège enfant",detail.get("customer_notes"));
     assertNull(detail.get("selected_driver_id"));
+    var deadline=com.veyra.shared.DbTime.toOffsetDateTime(detail.get("offer_window_ends_at"));
+    assertTrue(deadline.isAfter(java.time.OffsetDateTime.now()));
+    assertTrue(deadline.isBefore(request.scheduledAt()));
     var visible=controller.opportunities("date",category,null,null,null,pickup,null,null);
     assertEquals(1,visible.size());
     assertEquals(created,visible.getFirst().get("id"));

@@ -50,15 +50,26 @@ void main() {
         builder: (context, child) => MediaQuery(data: MediaQuery.of(context)
             .copyWith(textScaler: const TextScaler.linear(1.5)), child: child!)));
     await tester.pumpAndSettle();
+    final pageScroll = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('Passagers'), 250, scrollable: pageScroll);
+    await tester.tap(find.byTooltip('Augmenter').first);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Récapitulatif'), 250, scrollable: pageScroll);
+    final recap = find.ancestor(of: find.text('Récapitulatif'), matching: find.byType(Card)).first;
+    expect(find.descendant(of: recap, matching: find.text('Nice')), findsOneWidget);
+    expect(find.descendant(of: recap, matching: find.text('Cannes')), findsOneWidget);
+    expect(find.descendant(of: recap, matching: find.text('Berline')), findsOneWidget);
+    expect(find.descendant(of: recap, matching: find.text('3 passager(s) • 1 bagage(s)')), findsOneWidget);
+    expect(find.descendant(of: recap, matching: find.text('Siège enfant')), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Publier la demande'), 250,
-        scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first);
+        scrollable: pageScroll);
     await tester.tap(find.text('Publier la demande'));
     await tester.pumpAndSettle();
     expect(posts, hasLength(1));
     final body = Map<String, dynamic>.from(posts.single.data as Map);
     expect(body['pickup']['address'], 'Nice');
     expect(body['dropoff']['address'], 'Cannes');
-    expect(body['passengerCount'], 2);
+    expect(body['passengerCount'], 3);
     expect(body['baggageCount'], 1);
     expect(body['paymentMethod'], 'CASH');
     expect(body['customerNotes'], 'Siège enfant');
@@ -72,6 +83,7 @@ void main() {
     expect(openedId, 'new-booking');
     expect(find.byType(BookingDetailScreen), findsOneWidget);
     expect(find.text('Voir les offres'), findsOneWidget);
+    expect(find.textContaining('Réception des offres jusqu’au'), findsOneWidget);
     expect(posts, hasLength(1));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
