@@ -746,7 +746,7 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
     ),
     body:RefreshIndicator(
       onRefresh:()async{setState(_load);try{await Future.wait([me,bookings]);}catch(_){/* FutureBuilders display the load error. */}},
-      child:ListView(padding:const EdgeInsets.all(20),children:[
+      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
         FutureBuilder<Map<String,dynamic>>(
           future:me,
           builder:(context,s){
@@ -829,7 +829,7 @@ class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
             // proche, sans dépendre de l'ordre renvoyé par le serveur.
             const terminalStatuses={
               'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT',
-              'CANCELLED_BY_DRIVER','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER',
+              'CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER',
             };
             Map<String,dynamic>? next;
             DateTime? nextAt;
@@ -2663,11 +2663,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done){
-            return ListView(children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
           }
           if(s.hasError){
             final offline=VeyraErrorMessages.isOffline(s.error!);
-            return ListView(children:[
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
               const SizedBox(height:160),
               if(offline) VeyraOfflineBanner(onRetry:reload)
               else VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload),
@@ -2675,13 +2675,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>{
           }
           final items=s.data??[];
           if(items.isEmpty){
-            return ListView(children:[
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
               SizedBox(height:160),
               Icon(Icons.notifications_none,size:56),
               Center(child:Text(t('Aucune notification pour le moment.'))),
             ]);
           }
-          return ListView.separated(
+          return ListView.separated(physics:const AlwaysScrollableScrollPhysics(),
             padding:const EdgeInsets.all(16),
             itemCount:items.length,
             separatorBuilder:(_,__)=>const SizedBox(height:8),

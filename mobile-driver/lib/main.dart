@@ -1010,7 +1010,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
     ]),
     body:RefreshIndicator(
       onRefresh:()async{final refreshed=load();setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
-      child:ListView(padding:const EdgeInsets.all(16),children:[
+      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
         Container(
           padding:const EdgeInsets.all(16),
           decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
@@ -1198,6 +1198,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
     active=api.driverOffers(scope:'active',page:activePage);
     won=api.driverOffers(scope:'won',page:wonPage);
     closed=api.driverOffers(scope:'closed',page:closedPage);
+    active.ignore();won.ignore();closed.ignore();
   }
 
   void _changePage(String scope,int delta){
@@ -1228,28 +1229,29 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
           _load();
           refreshed=scope=='active'?active:scope=='won'?won:closed;
         });
-        await refreshed;
+        try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}
       },
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done){
-            return const VeyraLoadingView();
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:const [VeyraLoadingView()]);
           }
           if(s.hasError){
-            return VeyraErrorMessages.isOffline(s.error!)
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[VeyraErrorMessages.isOffline(s.error!)
               ?VeyraOfflineBanner(onRetry:()=>setState(_load))
-              :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(_load));
+              :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(_load))]);
           }
           final items=s.data??[];
           if(items.isEmpty){
-              if(page>0)return TextButton(onPressed:()=>_changePage(scope,-1),child:Text(t('Page précédente')));
-            return VeyraEmptyView(
+              if(page>0)return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[TextButton(onPressed:()=>_changePage(scope,-1),child:Text(t('Page précédente')))]);
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[VeyraEmptyView(
               icon:Icons.local_offer_outlined,
               message:t('Aucune offre dans cette catégorie.'),
-            );
+            )]);
           }
           return ListView.builder(
+            physics:const AlwaysScrollableScrollPhysics(),
             padding:const EdgeInsets.all(16),
             itemCount:items.length+1,
             itemBuilder:(context,i){
@@ -1736,7 +1738,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
     appBar:AppBar(title:Text(t('Mes courses'))),
     body:RefreshIndicator(
       onRefresh:()async{final refreshed=_load();setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
-      child:ListView(padding:const EdgeInsets.all(16),children:[
+      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
         LayoutBuilder(builder:(context,constraints){
           final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
           return Wrap(spacing:10,runSpacing:10,children:[
@@ -3036,11 +3038,11 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
         future:future,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done){
-            return ListView(children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
           }
           if(s.hasError){
             final offline=VeyraErrorMessages.isOffline(s.error!);
-            return ListView(children:[
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
               const SizedBox(height:160),
               if(offline) VeyraOfflineBanner(onRetry:reload)
               else VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload),
@@ -3048,13 +3050,13 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
           }
           final items=s.data??[];
           if(items.isEmpty){
-            return ListView(children:[
+            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
               SizedBox(height:160),
               Icon(Icons.notifications_none,size:56),
               Center(child:Text(t('Aucune notification pour le moment.'))),
             ]);
           }
-          return ListView.separated(
+          return ListView.separated(physics:const AlwaysScrollableScrollPhysics(),
             padding:const EdgeInsets.all(16),
             itemCount:items.length+1,
             separatorBuilder:(_,__)=>const SizedBox(height:8),

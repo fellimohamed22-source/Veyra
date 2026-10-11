@@ -8,6 +8,7 @@ void main() {
   tearDown(api.dio.interceptors.clear);
   for (final screen in <Widget>[
     const OpportunitiesScreen(),
+    const MesOffresScreen(),
     const AgendaScreen(),
     const DriverNotificationsScreen()
   ]) {
@@ -34,6 +35,15 @@ void main() {
       }));
       await tester.pumpWidget(MaterialApp(home: screen));
       await tester.pumpAndSettle();
+      final verticalScroll = find
+          .byWidgetPredicate((widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down)
+          .first;
+      final beforeGesture = requests;
+      await tester.drag(verticalScroll, const Offset(0, 400));
+      await tester.pumpAndSettle();
+      expect(requests, greaterThan(beforeGesture));
       final refresh =
           tester.widget<RefreshIndicator>(find.byType(RefreshIndicator));
       final before = requests;
@@ -48,6 +58,10 @@ void main() {
       await tester.pumpAndSettle();
       await expectLater(recovery, completes);
       expect(find.byType(VeyraOfflineBanner), findsNothing);
+      final beforeEmptyGesture = requests;
+      await tester.drag(verticalScroll, const Offset(0, 400));
+      await tester.pumpAndSettle();
+      expect(requests, greaterThan(beforeEmptyGesture));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
