@@ -967,6 +967,9 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
     super.initState();
     future=load();
     categories=api.vehicleCategories();
+    // The collapsed filters do not mount their FutureBuilder immediately.
+    // Handle early failures without changing the future's error for that UI.
+    categories.ignore();
     RefreshBus.tick.addListener(reload);
   }
   // Even risk, same fix as mobile-client's AccueilScreen/HomeScreen
@@ -1005,7 +1008,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
       IconButton(onPressed:()=>context.push('/notifications'),tooltip:t('Notifications'),icon:const Icon(Icons.notifications_outlined)),
     ]),
     body:RefreshIndicator(
-      onRefresh:()async{final refreshed=load();setState(()=>future=refreshed);try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
+      onRefresh:()async{final refreshed=load();setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         Container(
           padding:const EdgeInsets.all(16),
@@ -1728,7 +1731,7 @@ class _AgendaScreenState extends State<AgendaScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Mes courses'))),
     body:RefreshIndicator(
-      onRefresh:()async{final refreshed=_load();setState(()=>future=refreshed);try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
+      onRefresh:()async{final refreshed=_load();setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
       child:ListView(padding:const EdgeInsets.all(16),children:[
         LayoutBuilder(builder:(context,constraints){
           final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
@@ -1905,7 +1908,7 @@ class _RideScreenState extends State<RideScreen>{
 
   Future<void> refreshStatus()async{
     if(refreshing||busy)return;refreshing=true;
-    try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState(()=>future=Future.value(value));}
+    try{final value=await api.bookingDetail(widget.bookingId);if(mounted)setState((){future=Future.value(value);});}
     catch(e){if(mounted)setState(()=>error=t('Actualisation interrompue. Réessayez pour vérifier le statut.'));}
     finally{refreshing=false;}
   }
@@ -2104,7 +2107,7 @@ class _RideScreenState extends State<RideScreen>{
       RefreshBus.bump();
       final updated=await api.bookingDetail(widget.bookingId);
       if(!mounted)return;
-      setState(()=>future=Future.value(updated));
+      setState((){future=Future.value(updated);});
       if(startGps){
         await _startTrackingIfNeeded((updated['status']??'').toString());
       }
@@ -2640,7 +2643,7 @@ class AccountScreen extends StatefulWidget{const AccountScreen({super.key});@ove
     if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));
   }finally{if(mounted)setState(()=>busy=false);}
 }
-Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){if(!mounted||busy)return;setState(()=>busy=true);try{final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState(()=>future=Future.value(u));}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}finally{if(mounted)setState(()=>busy=false);}}}Future<void> password()async{
+Future<void> edit(Map<String,dynamic>m)async{final f=TextEditingController(text:(m['first_name']??'').toString()),l=TextEditingController(text:(m['last_name']??'').toString()),p=TextEditingController(text:(m['phone']??'').toString());final ok=await showDialog<bool>(context:context,builder:(x)=>AlertDialog(title:Text(t('Modifier mes informations')),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:f,decoration:InputDecoration(labelText:t('Prénom'))),TextField(controller:l,decoration:InputDecoration(labelText:t('Nom'))),TextField(controller:p,decoration:InputDecoration(labelText:t('Téléphone')))]),actions:[TextButton(onPressed:()=>Navigator.pop(x,false),child:Text(t('Annuler'))),FilledButton(onPressed:()=>Navigator.pop(x,true),child:Text(t('Enregistrer')))]));if(ok==true&&f.text.trim().isNotEmpty&&p.text.trim().length>=6){if(!mounted||busy)return;setState(()=>busy=true);try{final u=await api.updateProfile(firstName:f.text,lastName:l.text,phone:p.text);if(mounted)setState((){future=Future.value(u);});}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}finally{if(mounted)setState(()=>busy=false);}}}Future<void> password()async{
   if(busy)return;
   final change=await showDialog<(String,String)>(context:context,builder:(_)=>const VeyraPasswordDialog());
   if(change==null||!mounted)return;
@@ -3012,7 +3015,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(t('Notifications'))),
     body:RefreshIndicator(
-      onRefresh:()async{final refreshed=api.notifications(page:page);setState(()=>future=refreshed);try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
+      onRefresh:()async{final refreshed=api.notifications(page:page);setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
       child:FutureBuilder<List<dynamic>>(
         future:future,
         builder:(context,s){

@@ -956,7 +956,7 @@ class _AccountScreenState extends State<AccountScreen> {
       setState(()=>busy=true);
       try{
         final updated=await api.updateProfile(firstName:first.text,lastName:last.text,phone:phone.text);
-        if(mounted)setState(()=>future=Future.value(updated));
+        if(mounted)setState((){future=Future.value(updated);});
       }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
       finally{if(mounted)setState(()=>busy=false);}
     }
