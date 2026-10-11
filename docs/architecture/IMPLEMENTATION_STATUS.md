@@ -6,6 +6,7 @@
 - Gateway de compatibilité Nginx, config versionnée.
 - Overlay Docker Compose opt-in qui démarre le backend monolithique derrière la gateway.
 - Documentation de lancement et limites de sécurité.
+- Première fonctionnalité métier additionnelle : destinations récentes (migration V037, contrôleur propriétaire, méthodes API Flutter). Le nouvel écran UX reste à construire.
 
 ## Non livré / non prétendu
 
