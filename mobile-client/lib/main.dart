@@ -1378,19 +1378,30 @@ class _AddressScreenState extends State<AddressScreen>{
 
   Future<void> chooseDateTime()async{
     final now=DateTime.now();
+    final earliest=now.add(const Duration(hours:2));
+    final latest=now.add(const Duration(days:365));
+    final proposed=scheduledAt??now.add(const Duration(hours:3));
+    // The date picker requires its initial date to remain inside the
+    // selectable interval, including when an old booking is reused.
+    final initial=proposed.isBefore(now)?earliest:(proposed.isAfter(latest)?latest:proposed);
     final date=await showDatePicker(
       context:context,
       firstDate:now,
-      lastDate:now.add(const Duration(days:365)),
-      initialDate:scheduledAt??now.add(const Duration(hours:3)),
+      lastDate:latest,
+      initialDate:initial,
     );
     if(date==null||!mounted)return;
     final time=await showTimePicker(
       context:context,
-      initialTime:TimeOfDay.fromDateTime(scheduledAt??now.add(const Duration(hours:3))),
+      initialTime:TimeOfDay.fromDateTime(initial),
     );
-    if(time==null)return;
-    setState(()=>scheduledAt=DateTime(date.year,date.month,date.day,time.hour,time.minute));
+    if(time==null||!mounted)return;
+    final selected=DateTime(date.year,date.month,date.day,time.hour,time.minute);
+    if(selected.difference(DateTime.now())<const Duration(hours:2)){
+      setState(()=>error=t('Le départ doit être planifié au moins 2 heures à l’avance.'));
+      return;
+    }
+    setState((){scheduledAt=selected;error=null;});
   }
 
   Future<void> publish()async{
