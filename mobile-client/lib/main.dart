@@ -2086,6 +2086,25 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
                 ]),
               ),
             ),
+          if({'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))
+            Card(
+              child:Padding(
+                padding:const EdgeInsets.all(16),
+                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Text(t('Préparer votre trajet'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
+                  const SizedBox(height:8),
+                  Text(t('Départ : ')+(x['pickup_address']??'').toString()),
+                  const SizedBox(height:6),
+                  Text(t('Destination : ')+(x['dropoff_address']??'').toString()),
+                  const SizedBox(height:6),
+                  Text(t('Prise en charge prévue : ')+VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                  if(x['selected_driver_id']!=null)...[
+                    const SizedBox(height:8),
+                    Text(t('Vérifiez le véhicule et son immatriculation avant de monter.')),
+                  ],
+                ]),
+              ),
+            ),
           if(x['selected_driver_id']!=null)Card(child:ListTile(
             leading:const CircleAvatar(child:Icon(Icons.person)),
             title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
