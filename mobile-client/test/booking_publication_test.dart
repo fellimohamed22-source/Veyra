@@ -54,16 +54,21 @@ void main() {
         builder: (context, child) => MediaQuery(data: MediaQuery.of(context)
             .copyWith(textScaler: const TextScaler.linear(1.5)), child: child!)));
     await tester.pumpAndSettle();
-    // Scroll the actual booking form, not a nested scrollable from a map.
-    final form = find.descendant(
-        of: find.byType(AddressScreen), matching: find.byType(ListView)).first;
+    // The route preview contains a FlutterMap that consumes drag gestures.
+    // Move the form's own ScrollPosition directly instead of dragging on
+    // the map; ListView builds off-screen children as its offset changes.
+    final formScroll = find.descendant(
+        of: find.byType(AddressScreen), matching: find.byType(Scrollable)).first;
+    final position = tester.state<ScrollableState>(formScroll).position;
     Future<void> reveal(Finder target) async {
-      for (var i = 0; i < 35 && target.evaluate().isEmpty; i++) {
-        await tester.drag(form, const Offset(0, -180));
+      for (var i = 0; i < 80 && target.evaluate().isEmpty; i++) {
+        if (position.pixels >= position.maxScrollExtent) break;
+        position.jumpTo((position.pixels + 100)
+            .clamp(position.minScrollExtent, position.maxScrollExtent));
         await tester.pump();
       }
       expect(target, findsWidgets,
-          reason: 'Expected control was never built while scrolling booking form');
+          reason: 'Control not found after scrolling the booking ListView');
       await tester.ensureVisible(target.first);
       await tester.pumpAndSettle();
     }
