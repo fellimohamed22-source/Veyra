@@ -59,13 +59,17 @@ void main() {
     final rideTile = tester.widget<ListTile>(linkedRide);
     expect(rideTile.onTap, isNotNull,
         reason: 'A wallet transaction linked to a ride must be actionable');
-    // Invoke the actual ListTile callback: a text-only tap can miss the
-    // tappable region after a lazy list scroll in a widget test.
+    // GoRouter.push adds an imperative route on top of /wallet. Its
+    // routeInformationProvider can keep the base location (/wallet), so
+    // asserting that provider's URI incorrectly reports a navigation failure.
+    // Verify the destination is actually rendered and can be popped instead.
     rideTile.onTap!();
     await tester.pumpAndSettle();
-    expect(navigation.routeInformationProvider.value.uri.path,
-        '/ride/ride-wallet-1');
     expect(find.text('Course ride-wallet-1'), findsOneWidget);
+    expect(navigation.canPop(), isTrue);
+    navigation.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Versement reçu'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
