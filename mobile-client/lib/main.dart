@@ -1451,7 +1451,7 @@ class _AddressScreenState extends State<AddressScreen>{
       // booked -- publishing a request is not a confirmed driver, so this
       // deliberately stays about the request being sent, not about a
       // ride being arranged.
-      await showModalBottomSheet(context:context,isDismissible:false,enableDrag:false,builder:(sheetContext)=>SafeArea(child:Padding(
+      await showModalBottomSheet(context:context,isScrollControlled:true,isDismissible:false,enableDrag:false,builder:(sheetContext)=>SafeArea(child:SingleChildScrollView(child:Padding(
         padding:const EdgeInsets.all(24),
         child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
           const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
@@ -1474,7 +1474,7 @@ class _AddressScreenState extends State<AddressScreen>{
             child:Text(t('Retour à l’accueil')),
           ),
         ]),
-      )));
+      ))));
     }on DioException catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }catch(_){
