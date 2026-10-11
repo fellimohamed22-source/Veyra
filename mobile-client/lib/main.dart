@@ -1489,8 +1489,12 @@ class _AddressScreenState extends State<AddressScreen>{
   Future<void> reviewAndPublish()async{
     if(submitting)return;
     if(!categoriesReady||pickupPlace==null||dropoffPlace==null||
-       scheduledAt==null||categoryId==null||passengerCount>categoryCapacity){
+       scheduledAt==null||categoryId==null){
       setState(()=>error=t('Complétez le trajet, la date et la catégorie avant de continuer.'));
+      return;
+    }
+    if(passengerCount>categoryCapacity){
+      setState(()=>error=t('Le nombre de passagers dépasse la capacité de cette catégorie.'));
       return;
     }
     if(scheduledAt!.difference(DateTime.now())<const Duration(hours:2)){
