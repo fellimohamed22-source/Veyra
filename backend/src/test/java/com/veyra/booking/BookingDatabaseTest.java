@@ -108,6 +108,22 @@ class BookingDatabaseTest {
     assertEquals("IN_PROGRESS",status());
     assertEquals(1,count("booking_status_history"));
   }
+  @ParameterizedTest @ValueSource(strings={"CASH","ONLINE","PARTNER_INVOICE"})
+  void zeroCommissionPolicyStillAllowsCompletion(String method) {
+    snapshot(method);
+    db.update("update booking_financial_snapshots set commission_rate_bps=0,platform_commission_amount_minor=0,customer_total_amount_minor=10000 where booking_id=?",booking);
+    db.update("update scheduled_bookings set status='IN_PROGRESS',payment_method=? where id=?",method,booking);
+    controller.complete(booking);
+    assertEquals("COMPLETED",status());
+    assertEquals(1,count("booking_status_history"));
+    assertEquals(0,count("driver_platform_debts"));
+    assertEquals(method.equals("CASH")?0:1,count("driver_payables"));
+    assertEquals(method.equals("CASH")?0:1,count("ledger_transactions"));
+    if(!method.equals("CASH")) {
+      assertEquals(2,db.queryForObject("select count(*) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Integer.class,booking));
+      assertEquals(0L,db.queryForObject("select sum(case when e.direction='DEBIT' then e.amount_minor else -e.amount_minor end) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Long.class,booking));
+    }
+  }
   @Test void missingFinancialSnapshotRollsBackCompletionAndNotifications() {
     db.update("update scheduled_bookings set status='IN_PROGRESS' where id=?",booking);
     assertThrows(ApiException.class,()->controller.complete(booking));

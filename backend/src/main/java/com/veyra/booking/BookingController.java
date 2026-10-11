@@ -331,6 +331,9 @@ import java.util.*;
         long total=((Number)x.get("customer_total_amount_minor")).longValue();
         String currency=(String)x.get("currency");
         if("CASH".equals(method)){
+            // A policy may legally set a zero commission. There is no cash
+            // receivable in that case, and ledger entries must be positive.
+            if(commission==0)return;
             db.update("insert into driver_platform_debts(driver_id,booking_id,amount_minor,currency) values (?,?,?,?) on conflict(booking_id) do nothing",x.get("selected_driver_id"),id,commission,currency);
             // Driver already holds the customer's cash directly -- only the
             // platform's commission is a receivable here, no DRIVER_PAYABLE
@@ -345,10 +348,11 @@ import java.util.*;
             // ever captured -- the partner owes the total instead, a real
             // receivable rather than PSP-held cash.
             String debitAccount="PARTNER_INVOICE".equals(method)?"PARTNER_RECEIVABLE":"PAYMENT_PROCESSOR_CLEARING";
-            ledger.post("BOOKING_COMPLETED_"+method,id,"Commission and driver payable recognized",currency,List.of(
-                com.veyra.finance.LedgerService.Entry.debit(debitAccount,total),
-                com.veyra.finance.LedgerService.Entry.credit("PLATFORM_REVENUE",commission),
-                com.veyra.finance.LedgerService.Entry.credit("DRIVER_PAYABLE",driverNet)));
+            var entries=new ArrayList<com.veyra.finance.LedgerService.Entry>();
+            entries.add(com.veyra.finance.LedgerService.Entry.debit(debitAccount,total));
+            if(commission!=0)entries.add(com.veyra.finance.LedgerService.Entry.credit("PLATFORM_REVENUE",commission));
+            entries.add(com.veyra.finance.LedgerService.Entry.credit("DRIVER_PAYABLE",driverNet));
+            ledger.post("BOOKING_COMPLETED_"+method,id,"Commission and driver payable recognized",currency,entries);
         }
     }
     @Transactional void driverTransition(UUID id,String from,String to,String pin){
