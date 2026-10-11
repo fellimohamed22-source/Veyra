@@ -205,6 +205,52 @@ class BookingDatabaseTest {
     assertEquals("OFFERS_RECEIVED",status());
     assertEquals(0,count("booking_financial_snapshots"));
   }
+  void seedFilterRows(List<String> states) {
+    db.update("update scheduled_bookings set status='DRAFT' where id=?",booking);
+    int hours=0;
+    for(String state:states) {
+      db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,status,selected_driver_id) select ?,creator_type,creator_user_id,pickup,pickup_address,dropoff,dropoff_address,scheduled_at+(?::integer)*interval '1 hour',category_id,payment_method,payer_type,?,selected_driver_id from scheduled_bookings where id=?",UUID.randomUUID(),++hours,state,booking);
+    }
+  }
+  @Test void customerFiltersAllStatusesAndSortsAcrossPages() {
+    var states=List.of("OPEN_FOR_OFFERS","OFFERS_RECEIVED","CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS","COMPLETED","CLOSED","CANCELLED","DRIVER_CANCELLED","CUSTOMER_NO_SHOW","EXPIRED","NO_OFFER");
+    seedFilterRows(states);
+    for(String state:states) {
+      var rows=controller.mine(state,"asc",0);
+      assertEquals(1,rows.size(),state);
+      assertEquals(state,rows.getFirst().get("status"));
+    }
+    var ascending=controller.mine(null,"asc",null);
+    var descending=controller.mine(null,"desc",null);
+    assertEquals(14,ascending.size());
+    var expected=new ArrayList<>(ascending.stream().map(row->row.get("id")).toList());
+    Collections.reverse(expected);
+    assertEquals(expected,descending.stream().map(row->row.get("id")).toList());
+    var first=controller.mine(null,"desc",0);
+    var second=controller.mine(null,"desc",1);
+    assertEquals(10,first.size()); assertEquals(4,second.size());
+    var paged=new ArrayList<>(first);paged.addAll(second);
+    assertEquals(descending.stream().map(row->row.get("id")).toList(),paged.stream().map(row->row.get("id")).toList());
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(UUID.randomUUID(),null));
+    assertTrue(controller.mine(null,"asc",null).isEmpty());
+  }
+  @Test void driverAllScopeFiltersExactlyEachOperationalAndHistoricalStatus() {
+    var states=List.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS","COMPLETED","CLOSED","CANCELLED","DRIVER_CANCELLED","CUSTOMER_NO_SHOW");
+    seedFilterRows(states);
+    var query=new com.veyra.driver.DriverBookingController(db);
+    for(String state:states) {
+      var rows=query.mine("all",state,"asc",0);
+      assertEquals(1,rows.size(),state);
+      assertEquals(state,rows.getFirst().get("status"));
+      assertEquals("Standard",rows.getFirst().get("category_name"));
+    }
+    var ascending=query.mine("all",null,"asc",0);
+    var descending=query.mine("all",null,"desc",0);
+    assertEquals(9,ascending.size());
+    var expected=new ArrayList<>(ascending.stream().map(row->row.get("id")).toList());
+    Collections.reverse(expected);
+    assertEquals(expected,descending.stream().map(row->row.get("id")).toList());
+  }
   List<String> race(Runnable action) throws Exception { return race(action,action); }
   List<String> race(Runnable firstAction,Runnable secondAction) throws Exception {
     var ready=new CountDownLatch(2);
