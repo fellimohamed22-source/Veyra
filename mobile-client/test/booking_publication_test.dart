@@ -54,23 +54,31 @@ void main() {
         builder: (context, child) => MediaQuery(data: MediaQuery.of(context)
             .copyWith(textScaler: const TextScaler.linear(1.5)), child: child!)));
     await tester.pumpAndSettle();
-    final pageScroll = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(find.text('Passagers'), 250,
-        scrollable: pageScroll, maxScrolls: 60);
-    await tester.ensureVisible(find.byTooltip('Augmenter').first);
-    await tester.pumpAndSettle();
+    // Scroll the actual booking form, not a nested scrollable from a map.
+    final form = find.descendant(
+        of: find.byType(AddressScreen), matching: find.byType(ListView)).first;
+    Future<void> reveal(Finder target) async {
+      for (var i = 0; i < 35 && target.evaluate().isEmpty; i++) {
+        await tester.drag(form, const Offset(0, -180));
+        await tester.pump();
+      }
+      expect(target, findsWidgets,
+          reason: 'Expected control was never built while scrolling booking form');
+      await tester.ensureVisible(target.first);
+      await tester.pumpAndSettle();
+    }
+    await reveal(find.text('Passagers'));
+    await reveal(find.byTooltip('Augmenter'));
     await tester.tap(find.byTooltip('Augmenter').first);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Récapitulatif'), 250,
-        scrollable: pageScroll, maxScrolls: 60);
+    await reveal(find.text('Récapitulatif'));
     final recap = find.ancestor(of: find.text('Récapitulatif'), matching: find.byType(Card)).first;
     expect(find.descendant(of: recap, matching: find.text('Nice')), findsOneWidget);
     expect(find.descendant(of: recap, matching: find.text('Cannes')), findsOneWidget);
     expect(find.descendant(of: recap, matching: find.text('Berline')), findsOneWidget);
     expect(find.descendant(of: recap, matching: find.text('3 passager(s) • 1 bagage(s)')), findsOneWidget);
     expect(find.descendant(of: recap, matching: find.text('Siège enfant')), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Publier la demande'), 250,
-        scrollable: pageScroll, maxScrolls: 60);
+    await reveal(find.text('Publier la demande'));
     await tester.tap(find.text('Publier la demande'));
     await tester.pumpAndSettle();
     expect(find.text('Vérifiez votre demande'), findsOneWidget);
