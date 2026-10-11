@@ -26,10 +26,14 @@ void main() {
     api.dio.interceptors.clear();
     addTearDown(api.dio.interceptors.clear);
     api.dio.interceptors.add(InterceptorsWrapper(onRequest: (request, handler) {
-      if (request.method == 'POST') {
+      if (request.method == 'POST' &&
+          request.path.endsWith('/scheduled-bookings')) {
         posts.add(request);
         handler.resolve(Response(requestOptions: request, statusCode: 201,
             data: {'id': 'new-booking'}));
+      } else if (request.method == 'POST' &&
+          request.path.endsWith('/recent-destinations')) {
+        handler.resolve(Response(requestOptions: request, statusCode: 204));
       } else if (request.path.endsWith('/new-booking')) {
         handler.resolve(Response(requestOptions: request, statusCode: 200,
             data: {...initial, 'status': 'OPEN_FOR_OFFERS',
