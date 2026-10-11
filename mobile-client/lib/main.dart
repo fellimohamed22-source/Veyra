@@ -1566,23 +1566,27 @@ class _AddressScreenState extends State<AddressScreen>{
         },
       ),
       const SizedBox(height:18),
-      Row(children:[
-        Expanded(child:_CountStepper(
+      LayoutBuilder(builder:(context,constraints){
+        final passengers=_CountStepper(
           label:t('Passagers'),
           value:passengerCount,
           min:1,
           max:categoryCapacity,
           onChanged:(v)=>setState(()=>passengerCount=v),
-        )),
-        const SizedBox(width:12),
-        Expanded(child:_CountStepper(
+        );
+        final baggage=_CountStepper(
           label:t('Bagages'),
           value:baggageCount,
           min:0,
           max:6,
           onChanged:(v)=>setState(()=>baggageCount=v),
-        )),
-      ]),
+        );
+        final minimumWidth=112+MediaQuery.textScalerOf(context).scale(18);
+        if(constraints.maxWidth<minimumWidth*2+12){
+          return Column(children:[passengers,const SizedBox(height:12),baggage]);
+        }
+        return Row(children:[Expanded(child:passengers),const SizedBox(width:12),Expanded(child:baggage)]);
+      }),
       const SizedBox(height:18),
       if(widget.initialBooking?['preferred_driver_id']!=null)Text(t('Votre chauffeur favori sera indiqué comme préférence. Son attribution dépend de sa disponibilité et de votre choix parmi les offres.')),
       const Text('Paiement',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
