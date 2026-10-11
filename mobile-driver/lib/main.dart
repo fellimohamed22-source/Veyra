@@ -1442,9 +1442,15 @@ class _RequestScreenState extends State<RequestScreen>{
   @override void initState(){
     super.initState();
     amount.addListener(_refreshEconomics);
-    detail=api.opportunityDetail(widget.bookingId);
-    detail.then((x){_loadTripEconomics(x);loadApproach();}).catchError((_){ });
+    detail=loadDetail();
   }
+
+  Future<Map<String,dynamic>> loadDetail(){
+    final result=api.opportunityDetail(widget.bookingId);
+    result.then((x){if(mounted){_loadTripEconomics(x);loadApproach();}}).catchError((_){ });
+    return result;
+  }
+  void retryDetail()=>setState((){detail=loadDetail();});
 
   void _refreshEconomics(){if(!mounted)return;setState((){});}
 
@@ -1532,12 +1538,9 @@ class _RequestScreenState extends State<RequestScreen>{
         future:detail,
         builder:(context,s){
           if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
-          if(s.hasError)return Card(child:ListTile(
-            leading:const Icon(Icons.error_outline),
-            title:Text(t('Demande indisponible')),
-            subtitle:Text(t('Elle a peut-être déjà été fermée.')),
-            trailing:TextButton(onPressed:()=>setState((){detail=api.opportunityDetail(widget.bookingId);}),child:Text(t('Réessayer'))),
-          ));
+          if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+            ?VeyraOfflineBanner(onRetry:retryDetail)
+            :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:retryDetail);
           final x=s.data??{};
           return Column(children:[
             Card(child:ListTile(
