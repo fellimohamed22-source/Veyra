@@ -6,6 +6,8 @@ import com.veyra.shared.ApiException;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.*;
@@ -63,10 +65,10 @@ class BookingDatabaseTest {
   void authenticate() { SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(user,null)); }
   String status() { return db.queryForObject("select status from scheduled_bookings where id=?",String.class,booking); }
   int count(String table) { return db.queryForObject("select count(*) from "+table+" where booking_id=?",Integer.class,booking); }
-  void snapshot() {
+  void snapshot(String method) {
     UUID offer=UUID.randomUUID();
     db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status) values (?,?,?,10000,'EUR','ACCEPTED')",offer,booking,driver);
-    db.update("insert into booking_financial_snapshots select ?,?,id,1000,10000,1000,11000,10000,'EUR','CASH' from commission_policy_versions where scope_type='STANDARD' limit 1",booking,offer);
+    db.update("insert into booking_financial_snapshots select ?,?,id,1000,10000,1000,11000,10000,'EUR',? from commission_policy_versions where scope_type='STANDARD' limit 1",booking,offer,method);
   }
   @Test void failedPinCommitsAttemptsAndLockButDoesNotAdvanceRide() {
     for(int i=1;i<=5;i++) {
@@ -83,15 +85,28 @@ class BookingDatabaseTest {
     assertEquals("IN_PROGRESS",status());
     assertEquals(1,count("booking_status_history"));
   }
-  @Test void competingCompletionsSettleOnlyOnce() throws Exception {
-    snapshot();
-    db.update("update scheduled_bookings set status='IN_PROGRESS' where id=?",booking);
+  @ParameterizedTest @ValueSource(strings={"CASH","ONLINE","PARTNER_INVOICE"})
+  void competingCompletionsSettleOnlyOnce(String method) throws Exception {
+    snapshot(method);
+    db.update("update scheduled_bookings set status='IN_PROGRESS',payment_method=? where id=?",method,booking);
     assertEquals(List.of("OK","INVALID_BOOKING_TRANSITION"),race(()->controller.complete(booking)));
     assertEquals("COMPLETED",status());
-    assertEquals(1,count("driver_platform_debts"));
+    assertEquals(method.equals("CASH")?1:0,count("driver_platform_debts"));
+    assertEquals(method.equals("CASH")?0:1,count("driver_payables"));
     assertEquals(1,count("ledger_transactions"));
     assertEquals(1,count("booking_status_history"));
-    assertEquals(2,db.queryForObject("select count(*) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Integer.class,booking));
+    assertEquals(method.equals("CASH")?2:3,db.queryForObject("select count(*) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Integer.class,booking));
+    assertEquals(0L,db.queryForObject("select sum(case when e.direction='DEBIT' then e.amount_minor else -e.amount_minor end) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Long.class,booking));
+  }
+  @Test void onlineStartRequiresCapturedPaymentInDatabase() {
+    db.update("update scheduled_bookings set payment_method='ONLINE' where id=?",booking);
+    assertEquals("PAYMENT_REQUIRED",assertThrows(ApiException.class,
+        ()->controller.start(booking,new BookingController.Pin("0427"))).code());
+    assertEquals("DRIVER_ARRIVED",status());
+    db.update("insert into payments(booking_id,payer_user_id,amount_minor,currency,method,status,idempotency_key) values (?,?,11000,'EUR','ONLINE','CAPTURED',?)",booking,user,booking.toString());
+    controller.start(booking,new BookingController.Pin("0427"));
+    assertEquals("IN_PROGRESS",status());
+    assertEquals(1,count("booking_status_history"));
   }
   @Test void missingFinancialSnapshotRollsBackCompletionAndNotifications() {
     db.update("update scheduled_bookings set status='IN_PROGRESS' where id=?",booking);
