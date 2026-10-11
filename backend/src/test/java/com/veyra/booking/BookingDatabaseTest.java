@@ -141,11 +141,72 @@ class BookingDatabaseTest {
     assertEquals(expected,detail.get("plate_number"));
     assertEquals("Standard",detail.get("category_name"));
   }
-  List<String> race(Runnable action) throws Exception {
+  UUID activeOffer(UUID bookingId) {
+    UUID offer=UUID.randomUUID();
+    db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,10000,'EUR','ACTIVE',now()+interval '1 hour')",offer,bookingId,driver);
+    return offer;
+  }
+  UUID prepareSelection() {
+    db.update("update drivers set status='ACTIVE',kyc_status='APPROVED',marketplace_enabled=true where id=?",driver);
+    db.update("insert into vehicles(driver_id,category_id,brand,model,year,plate_number,status) select ?,id,'Test','Car',2024,?,'APPROVED' from vehicle_categories where code='STANDARD'",driver,booking.toString().substring(0,16));
+    db.update("update scheduled_bookings set status='OFFERS_RECEIVED',selected_driver_id=null,offer_window_ends_at=now()+interval '1 hour' where id=?",booking);
+    return activeOffer(booking);
+  }
+  @Test void selectionCreatesSnapshotAndJourneyCanComplete() {
+    UUID offer=prepareSelection();
+    var accepted=controller.accept(booking,offer);
+    assertEquals(11000L,accepted.get("totalMinor"));
+    assertEquals(10000L,accepted.get("driverNetMinor"));
+    assertEquals(1,count("booking_financial_snapshots"));
+    String encrypted=db.queryForObject("select pin_encrypted from scheduled_bookings where id=?",String.class,booking);
+    String pin=new PinCrypto("test-only-key").decrypt(encrypted);
+    controller.enroute(booking); controller.arrived(booking);
+    controller.start(booking,new BookingController.Pin(pin)); controller.complete(booking);
+    assertEquals("COMPLETED",status());
+    assertEquals(5,count("booking_status_history"));
+    assertEquals(1,count("ledger_transactions"));
+  }
+  @Test void competingSelectionsDoNotDuplicateSnapshot() throws Exception {
+    UUID offer=prepareSelection();
+    assertEquals(List.of("OK","BOOKING_CLOSED"),race(()->controller.accept(booking,offer)));
+    assertEquals(1,count("booking_financial_snapshots"));
+    assertEquals(1,count("booking_status_history"));
+  }
+  @Test void oneDriverCannotBeAssignedOverlappingBookingsConcurrently() throws Exception {
+    UUID offer=prepareSelection(), otherBooking=UUID.randomUUID();
+    db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,status,offer_window_ends_at) select ?,creator_type,creator_user_id,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,'OFFERS_RECEIVED',offer_window_ends_at from scheduled_bookings where id=?",otherBooking,booking);
+    UUID otherOffer=activeOffer(otherBooking);
+    assertEquals(List.of("OK","DRIVER_SCHEDULE_CONFLICT"),race(()->controller.accept(booking,offer),()->controller.accept(otherBooking,otherOffer)));
+    assertEquals(1,db.queryForObject("select count(*) from scheduled_bookings where id in (?,?) and status='CONFIRMED'",Integer.class,booking,otherBooking));
+    assertEquals(1,db.queryForObject("select count(*) from booking_financial_snapshots where booking_id in (?,?)",Integer.class,booking,otherBooking));
+  }
+  @Test void expiredOfferCannotBeChosenFromAnOldScreen() {
+    UUID offer=prepareSelection();
+    db.update("update driver_offers set expires_at=now()-interval '1 second' where id=?",offer);
+    assertEquals("OFFER_CLOSED",assertThrows(ApiException.class,()->controller.accept(booking,offer)).code());
+    assertEquals("OFFERS_RECEIVED",status());
+    assertEquals(0,count("booking_financial_snapshots"));
+  }
+  @ParameterizedTest @ValueSource(strings={"inactive","kyc","marketplace","vehicle","category"})
+  void selectionRechecksEligibilityAndApprovedVehicle(String revoked) {
+    UUID offer=prepareSelection();
+    switch(revoked) {
+      case "inactive" -> db.update("update drivers set status='SUSPENDED' where id=?",driver);
+      case "kyc" -> db.update("update drivers set kyc_status='REJECTED' where id=?",driver);
+      case "marketplace" -> db.update("update drivers set marketplace_enabled=false where id=?",driver);
+      case "vehicle" -> db.update("update vehicles set status='REJECTED' where driver_id=?",driver);
+      case "category" -> db.update("update vehicles set category_id=(select id from vehicle_categories where code='VAN') where driver_id=?",driver);
+    }
+    assertEquals("OFFER_CLOSED",assertThrows(ApiException.class,()->controller.accept(booking,offer)).code());
+    assertEquals("OFFERS_RECEIVED",status());
+    assertEquals(0,count("booking_financial_snapshots"));
+  }
+  List<String> race(Runnable action) throws Exception { return race(action,action); }
+  List<String> race(Runnable firstAction,Runnable secondAction) throws Exception {
     var ready=new CountDownLatch(2);
     var go=new CountDownLatch(1);
     try(var pool=Executors.newFixedThreadPool(2)) {
-      Callable<String> task=()->{
+      java.util.function.Function<Runnable,Callable<String>> task=action->()->{
         authenticate();
         try {
           ready.countDown();
@@ -153,7 +214,7 @@ class BookingDatabaseTest {
           try { action.run(); return "OK"; } catch(ApiException e) { return e.code(); }
         } finally { SecurityContextHolder.clearContext(); }
       };
-      var first=pool.submit(task); var second=pool.submit(task);
+      var first=pool.submit(task.apply(firstAction)); var second=pool.submit(task.apply(secondAction));
       assertTrue(ready.await(10,TimeUnit.SECONDS)); go.countDown();
       var results=new ArrayList<>(List.of(first.get(20,TimeUnit.SECONDS),second.get(20,TimeUnit.SECONDS)));
       results.sort(Comparator.reverseOrder());

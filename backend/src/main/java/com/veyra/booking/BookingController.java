@@ -288,10 +288,18 @@ import java.util.*;
         owner(b);
             if(!Set.of("OPEN_FOR_OFFERS",
         "OFFERS_RECEIVED").contains(b.get("status")))throw new ApiException(HttpStatus.CONFLICT,"BOOKING_CLOSED");
-        Map<String,Object>o=one("select driver_id,proposed_amount_minor,currency,status from driver_offers where id=? and booking_id=? for update",offerId,bookingId);
+        Map<String,Object>o=one("select driver_id,proposed_amount_minor,currency,status,expires_at from driver_offers where id=? and booking_id=? for update",offerId,bookingId);
         if(!"ACTIVE".equals(o.get("status")))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
+        if(o.get("expires_at")==null||!DbTime.toOffsetDateTime(o.get("expires_at")).isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         if(b.get("offer_window_ends_at")!=null&&!DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         UUID d=(UUID)o.get("driver_id");
+        // Different bookings must serialize their assignment to the same
+        // driver before checking the schedule. A booking lock alone cannot
+        // prevent two concurrent acceptances for overlapping rides.
+        Map<String,Object>driverState=one("select status,kyc_status,marketplace_enabled from drivers where id=? for update",d);
+        if(!"ACTIVE".equals(driverState.get("status"))||!"APPROVED".equals(driverState.get("kyc_status"))||!Boolean.TRUE.equals(driverState.get("marketplace_enabled")))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
+        Integer vehicles=db.queryForObject("select count(*) from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED'",Integer.class,bookingId,d);
+        if(vehicles==null||vehicles==0)throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         conflict(d,DbTime.toOffsetDateTime(b.get("scheduled_at")));
         int rate=rate((UUID)b.get("partner_id"));
         long p=((Number)o.get("proposed_amount_minor")).longValue(),c=commission(p,rate),total=p+c;
