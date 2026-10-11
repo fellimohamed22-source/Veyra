@@ -48,7 +48,11 @@ void main() {
       final send = find.text(adjusting ? 'Mettre à jour mon offre' : 'Envoyer mon offre');
       await tester.scrollUntilVisible(send, 180, scrollable: pageScroll);
       await tester.tap(send);
-      await tester.pumpAndSettle();
+      // The submit action stays busy until its confirmation is dismissed.
+      // Its progress indicator keeps animating behind the dialog.
+      for (var frame = 0; frame < 10; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       expect(submissions, hasLength(1));
       expect(submissions.single.method, adjusting ? 'PATCH' : 'POST');
       expect(submissions.single.data['amountMinor'], 3000);
