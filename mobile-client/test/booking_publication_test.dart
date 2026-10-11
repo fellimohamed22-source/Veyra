@@ -30,6 +30,7 @@ void main() {
       } else if (request.path.endsWith('/new-booking')) {
         handler.resolve(Response(requestOptions: request, statusCode: 200,
             data: {...initial, 'status': 'OPEN_FOR_OFFERS',
+              'passenger_count': posts.single.data['passengerCount'],
               'scheduled_at': posts.single.data['scheduledAt'],
               'offer_window_ends_at': DateTime.now().add(const Duration(hours: 1)).toUtc().toIso8601String()}));
       } else {
@@ -52,6 +53,8 @@ void main() {
     await tester.pumpAndSettle();
     final pageScroll = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('Passagers'), 250, scrollable: pageScroll);
+    await tester.ensureVisible(find.byTooltip('Augmenter').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Augmenter').first);
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Récapitulatif'), 250, scrollable: pageScroll);
