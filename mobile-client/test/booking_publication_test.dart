@@ -87,6 +87,8 @@ void main() {
     await tester.tap(find.text('Publier la demande'));
     await tester.pumpAndSettle();
     expect(find.text('Vérifiez votre demande'), findsOneWidget);
+    await tester.ensureVisible(find.text('Confirmer et publier'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Confirmer et publier'));
     await tester.pumpAndSettle();
     expect(posts, hasLength(1));
