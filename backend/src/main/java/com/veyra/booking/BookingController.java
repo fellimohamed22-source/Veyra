@@ -191,7 +191,7 @@ import java.util.*;
             // Business rule: the driver may only see the current lowest
             // price among the OTHER drivers' active offers -- never their
             // identity, and this must never block submission, only inform.
-            Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",Long.class,bookingId,d);
+            Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and expires_at>now() and driver_id<>?",Long.class,bookingId,d);
             response.put("currentBestOtherOfferMinor",bestOthers);
             if(bestOthers!=null)response.put("differenceFromBestMinor",r.amountMinor()-bestOthers);
         }
@@ -234,7 +234,7 @@ import java.util.*;
         Map<String,Object>response=new HashMap<>(Map.of("offerId",newOfferId));
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
         if("BEST_VISIBLE".equals(visibilityMode)){
-            Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",Long.class,bookingId,d);
+            Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and expires_at>now() and driver_id<>?",Long.class,bookingId,d);
             response.put("currentBestOtherOfferMinor",bestOthers);
         }
         return response;

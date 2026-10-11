@@ -161,6 +161,22 @@ class BookingDatabaseTest {
     db.update("update scheduled_bookings set status='OFFERS_RECEIVED',selected_driver_id=null,offer_window_ends_at=now()+interval '1 hour' where id=?",booking);
     return activeOffer(booking);
   }
+  @Test void marketReferenceIgnoresOwnAndExpiredOffersWithoutInventingAPrice() {
+    prepareSelection();
+    db.update("update scheduled_bookings set offer_visibility_mode='BEST_VISIBLE' where id=?",booking);
+    UUID otherUser=UUID.randomUUID(),otherDriver=UUID.randomUUID();
+    db.update("insert into users(id,first_name,email,password_hash) values (?,'Other',?,'unused')",otherUser,otherUser+"@example.test");
+    db.update("insert into drivers(id,user_id) values (?,?)",otherDriver,otherUser);
+    UUID current=UUID.randomUUID();
+    db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,500,'EUR','ACTIVE',now()-interval '1 minute')",current,booking,otherDriver);
+    var query=new com.veyra.driver.DriverOpportunityController(db);
+    assertNull(query.detail(booking).get("currentBestOtherOfferMinor"));
+    db.update("update driver_offers set proposed_amount_minor=12000,expires_at=now()+interval '1 hour' where id=?",current);
+    assertEquals(12000L,query.detail(booking).get("currentBestOtherOfferMinor"));
+    assertEquals(10000L,query.detail(booking).get("ownActiveOfferAmountMinor"));
+    db.update("update driver_offers set status='WITHDRAWN' where id=?",current);
+    assertNull(query.detail(booking).get("currentBestOtherOfferMinor"));
+  }
   @Test void selectionCreatesSnapshotAndJourneyCanComplete() {
     UUID offer=prepareSelection();
     var accepted=controller.accept(booking,offer);

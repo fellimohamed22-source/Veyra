@@ -43,7 +43,7 @@ public class DriverOpportunityController {
       // Same rule as at submission time: lowest price among the OTHER
       // drivers' active offers only, never an identity, never blocking.
       Long bestOthers=db.queryForObject(
-          "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and driver_id<>?",
+          "select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and expires_at>now() and driver_id<>?",
           Long.class,bookingId,driverId);
       result.put("currentBestOtherOfferMinor",bestOthers);
     }
