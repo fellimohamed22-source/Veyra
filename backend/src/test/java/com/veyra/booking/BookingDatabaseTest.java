@@ -198,6 +198,32 @@ class BookingDatabaseTest {
     assertEquals(expected,((Number)controller.mine(null,"desc",null).getFirst().get("offer_count")).intValue());
     assertEquals(expected,((Number)new BookingQueryController(db).detail(booking).get("offer_count")).intValue());
   }
+  @Test void concurrentPublicationCreatesOneOpenRequestVisibleToEligibleDriver() throws Exception {
+    prepareSelection();
+    UUID category=db.queryForObject("select id from vehicle_categories where code='STANDARD'",UUID.class);
+    String pickup="Nice-"+booking;
+    var request=new BookingDtos.Create(new BookingDtos.Point(43.7,7.2,pickup),
+        new BookingDtos.Point(43.5,7.0,"Cannes"),java.time.OffsetDateTime.now().plusHours(5),
+        category,"CASH","CLIENT",null,null,null,2,1,"Siège enfant",null);
+    String key="publication-"+booking;
+    assertEquals(List.of("OK","OK"),race(()->controller.createIdempotently(request,key)));
+    UUID created=db.queryForObject("select booking_id from booking_creation_requests where user_id=? and request_key=?",UUID.class,user,key);
+    assertEquals(1,db.queryForObject("select count(*) from scheduled_bookings where creator_user_id=? and pickup_address=?",Integer.class,user,pickup));
+    assertEquals(1,db.queryForObject("select count(*) from outbox_events where aggregate_id=? and event_type='booking.published'",Integer.class,created));
+    var detail=new BookingQueryController(db).detail(created);
+    assertEquals("OPEN_FOR_OFFERS",detail.get("status"));
+    assertEquals(2,detail.get("passenger_count"));
+    assertEquals(1,detail.get("baggage_count"));
+    assertEquals("Siège enfant",detail.get("customer_notes"));
+    assertNull(detail.get("selected_driver_id"));
+    var visible=controller.opportunities("date",category,null,null,null,pickup,null,null);
+    assertEquals(1,visible.size());
+    assertEquals(created,visible.getFirst().get("id"));
+    assertEquals(created,controller.createIdempotently(request,key).getBody().get("id"));
+    db.update("update drivers set marketplace_enabled=false where id=?",driver);
+    assertEquals("DRIVER_NOT_ELIGIBLE",assertThrows(ApiException.class,
+        ()->controller.opportunities("date",category,null,null,null,pickup,null,null)).code());
+  }
   @Test void selectionCreatesSnapshotAndJourneyCanComplete() {
     UUID offer=prepareSelection();
     var accepted=controller.accept(booking,offer);
