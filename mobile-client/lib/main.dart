@@ -1570,6 +1570,25 @@ class _AddressScreenState extends State<AddressScreen>{
         ],
         onChanged:(v){if(v!=null)setState(()=>paymentMethod=v);},
       ),
+      const SizedBox(height:12),
+      Card(
+        child:Padding(
+          padding:const EdgeInsets.all(14),
+          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(t('Comment fonctionne Veyra ?'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
+            const SizedBox(height:8),
+            Text(t('1. Vous publiez une demande de trajet programmé.')),
+            const SizedBox(height:4),
+            Text(t('2. Les chauffeurs disponibles proposent librement leur prix.')),
+            const SizedBox(height:4),
+            Text(t('3. Vous comparez les offres et choisissez votre chauffeur.')),
+            const SizedBox(height:4),
+            Text(t('4. Le prix total vous est présenté avant de confirmer le paiement.')),
+            const SizedBox(height:8),
+            Text(t('Publier une demande ne confirme pas encore un chauffeur et ne déclenche pas de paiement.'),style:const TextStyle(color:Colors.black54,fontSize:13)),
+          ]),
+        ),
+      ),
       TextField(controller:notes,maxLength:1000,maxLines:3,onChanged:(_)=>setState((){}),decoration:InputDecoration(labelText:t('Remarques pour le chauffeur (facultatif)'))),
       const SizedBox(height:18),
       // Ajouté suite à l'étude UX/navigation : rien ne permettait
