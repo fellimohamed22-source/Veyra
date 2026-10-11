@@ -2099,11 +2099,31 @@ class _PaymentScreenState extends State<PaymentScreen>{
     return Scaffold(
       appBar:AppBar(title:Text(t('Paiement sécurisé')),actions:[IconButton(onPressed:loading||bookingLoading?null:loadBooking,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
       body:SafeArea(child:ListView(padding:const EdgeInsets.all(24),children:[
-        const Icon(Icons.lock_outline,size:56),
+        const Icon(Icons.lock_outline,size:56,color:VeyraColors.primaryDark),
+        const SizedBox(height:8),
+        Text(t('Paiement de votre réservation'),textAlign:TextAlign.center,
+          style:Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height:16),
         Text(t('Total à payer : ')+VeyraMoneyFormatter.fromMinor(booking?['customer_total_amount_minor']),style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold),textAlign:TextAlign.center),
         const SizedBox(height:12),
+        if(booking!=null)Card(child:Padding(
+          padding:const EdgeInsets.all(16),
+          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            _RecapLine(icon:Icons.trip_origin,
+              text:(booking!['pickup_address']??'').toString()),
+            _RecapLine(icon:Icons.location_on,
+              text:(booking!['dropoff_address']??'').toString()),
+            _RecapLine(icon:Icons.event,
+              text:VeyraDateFormatter.dateTime(booking!['scheduled_at'])),
+            _RecapLine(icon:Icons.verified_outlined,
+              text:t('Statut : ')+paymentStatusLabel(booking!['payment_status']?.toString())),
+          ]),
+        )),
+        const SizedBox(height:12),
         const Text('Ce total inclut le prix proposé par le chauffeur et la commission Veyra.',textAlign:TextAlign.center),
+        const SizedBox(height:8),
+        Text(t('Le paiement est sécurisé. La confirmation finale dépend du traitement du prestataire de paiement.'),
+          textAlign:TextAlign.center,style:const TextStyle(color:Colors.black54)),
         if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error),textAlign:TextAlign.center)),
         if(booking==null&&error!=null)TextButton(onPressed:loadBooking,child:Text(t('Réessayer'))),
         if(booking?['payment_status']=='CAPTURED')Text(t('Ce paiement est déjà réglé.'),textAlign:TextAlign.center),
@@ -2114,6 +2134,9 @@ class _PaymentScreenState extends State<PaymentScreen>{
           icon:const Icon(Icons.credit_card),
           label:loading?Text(t('Paiement…')):Text(t('Payer maintenant')),
         ),
+        const SizedBox(height:12),
+        OutlinedButton.icon(onPressed:loading?null:()=>context.go('/booking/'+widget.bookingId),
+          icon:const Icon(Icons.receipt_long_outlined),label:Text(t('Voir ma réservation'))),
       ])),
     );
   }
