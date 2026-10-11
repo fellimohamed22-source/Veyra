@@ -5,6 +5,8 @@ import 'package:latlong2/latlong.dart';
 /// Preview of a *requested* trip, not a driver tracking or price quote.
 /// Route metrics are supplied by /api/v1/routes/estimate.
 class BookingRoutePreview extends StatelessWidget {
+  /// Tests can disable external tile requests while retaining route overlays.
+  static bool enableNetworkTiles = true;
   const BookingRoutePreview({
     super.key,
     required this.pickupLat, required this.pickupLng,
@@ -41,7 +43,7 @@ class BookingRoutePreview extends StatelessWidget {
               initialCameraFit:CameraFit.bounds(bounds:bounds,
                 padding:const EdgeInsets.all(40))),
             children:[
-              TileLayer(
+              if(enableNetworkTiles) TileLayer(
                 urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName:'com.veyra.client',
               ),
