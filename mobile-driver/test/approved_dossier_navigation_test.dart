@@ -70,8 +70,8 @@ void main() {
                         }));
     }));
     final router = GoRouter(initialLocation: '/account', routes: [
-      GoRoute(path: '/account', builder: (_, _) => const AccountScreen()),
-      GoRoute(path: '/kyc', builder: (_, _) => const KycScreen())
+      GoRoute(path: '/account', builder: (_, __) => const AccountScreen()),
+      GoRoute(path: '/kyc', builder: (_, __) => const KycScreen())
     ]);
     addTearDown(router.dispose);
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
