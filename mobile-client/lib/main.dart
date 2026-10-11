@@ -2053,7 +2053,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
         ],
       ),
     );
-    if(confirmed!=true)return;
+    if(confirmed!=true||!mounted)return;
     await cancel();
   }
 
@@ -2062,8 +2062,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     setState(()=>cancelling=true);
     try{
       final result=await api.cancel(widget.bookingId);
-      if(mounted)setState(()=>message=t('Réservation annulée. Frais éventuels : ')+VeyraMoneyFormatter.fromMinor(result['cancellationFeeMinor']));
       RefreshBus.bump();
+      if(!mounted)return;
+      setState(()=>message=t('Réservation annulée. Frais éventuels : ')+VeyraMoneyFormatter.fromMinor(result['cancellationFeeMinor']));
       reload();
     }catch(e){
       if(mounted)setState(()=>message=VeyraErrorMessages.forException(e));
