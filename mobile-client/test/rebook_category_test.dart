@@ -41,7 +41,8 @@ void main() {
         'dropoff_lng': 7.0
       })));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Publier la demande'));
+      await tester.scrollUntilVisible(find.text('Publier la demande'), 300,
+          scrollable: find.byType(Scrollable).first, maxScrolls: 60);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('Publier la demande'));
