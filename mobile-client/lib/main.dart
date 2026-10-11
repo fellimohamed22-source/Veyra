@@ -2727,7 +2727,8 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     final lat=available?((location!['lat'] as num).toDouble()):(pickupLat??43.2965);
     final lng=available?((location!['lng'] as num).toDouble()):(pickupLng??5.3698);
     return Scaffold(
-      appBar:AppBar(title:Text(t('Suivi en direct'))),
+      appBar:AppBar(title:Text(t('Suivi en direct')),
+        actions:[IconButton(onPressed:refresh,icon:const Icon(Icons.refresh),tooltip:t('Actualiser le suivi'))]),
       body:Stack(children:[
         FlutterMap(
           options:MapOptions(initialCenter:LatLng(lat,lng),initialZoom:available?14:9),
@@ -2761,6 +2762,17 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
             padding:const EdgeInsets.all(16),
             child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
               VeyraStatusBadge(status:bookingMap?['status']?.toString()),
+              const SizedBox(height:8),
+              if(bookingMap!=null)Text(
+                bookingMap!['status']=='IN_PROGRESS'
+                  ?t('Votre trajet est en cours')
+                  :t('Suivez l’arrivée de votre chauffeur'),
+                style:Theme.of(context).textTheme.titleMedium),
+              if(bookingMap!=null)Text(
+                (bookingMap!['pickup_address']??'').toString()+' → '+
+                (bookingMap!['dropoff_address']??'').toString(),
+                maxLines:2,overflow:TextOverflow.ellipsis),
+              const SizedBox(height:8),
               Text(available?t('Position actuelle du chauffeur'):t('Position indisponible'),style:const TextStyle(fontWeight:FontWeight.bold)),
               Text(error??(available?t('Mise à jour automatique toutes les 10 secondes.'):t('En attente de la première position GPS.'))),
               if(etaInfo!=null&&canEstimateTrackingEta(bookingMap,location,DateTime.now()))Text(
@@ -2779,6 +2791,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
                   style:const TextStyle(color:Color(0xFFDC2626),fontSize:12),
                 ),
               ),
+              const SizedBox(height:8),
+              TextButton.icon(onPressed:()=>context.push('/booking/'+widget.bookingId),
+                icon:const Icon(Icons.info_outline),label:Text(t('Détails de la réservation'))),
             ]),
           )),
         ),
