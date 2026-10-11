@@ -2052,6 +2052,40 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           if(x['payment_method']=='ONLINE')Text(t('Paiement')+' : '+paymentStatusLabel(x['payment_status']?.toString())),
           const SizedBox(height:12),
           Card(child:ListTile(title:Text(t('Statut')),trailing:VeyraStatusBadge(status:status))),
+          Card(
+            child:Padding(
+              padding:const EdgeInsets.all(16),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(t('Étapes de votre réservation'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
+                const SizedBox(height:8),
+                Text(
+                  {'OPEN_FOR_OFFERS':t('Demande publiée • En attente des offres des chauffeurs'),
+                   'OFFERS_RECEIVED':t('Offres reçues • Comparez et choisissez librement votre chauffeur'),
+                   'PENDING_PAYMENT':t('Chauffeur choisi • Paiement à finaliser'),
+                   'CONFIRMED':t('Trajet confirmé • Votre chauffeur se prépare'),
+                   'DRIVER_EN_ROUTE':t('Chauffeur en route vers le lieu de prise en charge'),
+                   'DRIVER_ARRIVED':t('Chauffeur arrivé • Vérifiez le véhicule et communiquez le PIN à bord'),
+                   'IN_PROGRESS':t('Course en cours'),
+                   'COMPLETED':t('Course terminée • Vous pouvez noter votre chauffeur'),
+                   'CLOSED':t('Course terminée'),
+                  }[status]??t('Consultez le statut de votre réservation ci-dessous'),
+                ),
+              ]),
+            ),
+          ),
+          if(!{'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED'}.contains(status))
+            Card(
+              child:Padding(
+                padding:const EdgeInsets.all(16),
+                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Text(t('Bon à savoir'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
+                  const SizedBox(height:8),
+                  Text(t('Présentez-vous au point de prise en charge à l’heure prévue.')),
+                  const SizedBox(height:6),
+                  Text(t('Les éventuels frais d’annulation sont calculés selon les conditions de votre réservation. Leur montant exact est affiché avant confirmation de l’annulation.')),
+                ]),
+              ),
+            ),
           if(x['selected_driver_id']!=null)Card(child:ListTile(
             leading:const CircleAvatar(child:Icon(Icons.person)),
             title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
