@@ -2101,7 +2101,10 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           if(x['selected_driver_id']!=null)Text([x['vehicle_brand'],x['vehicle_model'],x['vehicle_color'],x['plate_number']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' • ')),
           if(x['payment_method']=='ONLINE')Text(t('Paiement')+' : '+paymentStatusLabel(x['payment_status']?.toString())),
           const SizedBox(height:12),
-          Card(child:ListTile(title:Text(t('Statut')),trailing:VeyraStatusBadge(status:status))),
+          Card(child:Padding(padding:const EdgeInsets.all(16),child:SizedBox(width:double.infinity,child:Wrap(
+            alignment:WrapAlignment.spaceBetween,crossAxisAlignment:WrapCrossAlignment.center,
+            spacing:8,runSpacing:8,children:[Text(t('Statut')),VeyraStatusBadge(status:status)],
+          )))),
           Card(
             child:Padding(
               padding:const EdgeInsets.all(16),
