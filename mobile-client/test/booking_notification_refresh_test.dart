@@ -7,6 +7,7 @@ void main() {
   testWidgets('notification updates an open booking before its polling interval',
       (tester) async {
     var status = 'CONFIRMED';
+    var verified = true;
     var reads = 0;
     api.dio.interceptors.clear();
     addTearDown(api.dio.interceptors.clear);
@@ -14,6 +15,9 @@ void main() {
       reads++;
       handler.resolve(Response(requestOptions: request, statusCode: 200, data: {
         'status': status,
+        'selected_driver_id': 'driver-1',
+        'driver_first_name': 'Alexandre',
+        'driver_verified': verified,
         'payment_method': 'CASH',
         'pickup_address': 'Nice',
         'dropoff_address': 'Cannes',
@@ -25,11 +29,14 @@ void main() {
     await tester.pumpAndSettle();
     final initialReads = reads;
     expect(find.text('Votre chauffeur est arrivé'), findsNothing);
+    expect(find.text('Chauffeur Veyra vérifié'), findsOneWidget);
     status = 'DRIVER_ARRIVED';
+    verified = false;
     RefreshBus.bump();
     await tester.pumpAndSettle();
     expect(reads, initialReads + 1);
     expect(find.text('Votre chauffeur est arrivé'), findsOneWidget);
+    expect(find.text('Chauffeur Veyra vérifié'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     RefreshBus.bump();
