@@ -4,9 +4,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:veyra_client/main.dart';
+import 'package:veyra_client/core/widgets/booking_route_preview.dart';
 import 'package:veyra_client/app/theme.dart';
 
 void main() {
+  setUp(() => BookingRoutePreview.enableNetworkTiles = false);
+  tearDown(() => BookingRoutePreview.enableNetworkTiles = true);
   testWidgets('publication fits enlarged text and opens its pending request', (tester) async {
     FlutterSecureStorage.setMockInitialValues({});
     tester.view.physicalSize = const Size(320, 900);
@@ -67,6 +70,9 @@ void main() {
     await tester.scrollUntilVisible(find.text('Publier la demande'), 250,
         scrollable: pageScroll);
     await tester.tap(find.text('Publier la demande'));
+    await tester.pumpAndSettle();
+    expect(find.text('Vérifiez votre demande'), findsOneWidget);
+    await tester.tap(find.text('Confirmer et publier'));
     await tester.pumpAndSettle();
     expect(posts, hasLength(1));
     final body = Map<String, dynamic>.from(posts.single.data as Map);
