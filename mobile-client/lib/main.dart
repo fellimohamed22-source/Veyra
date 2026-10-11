@@ -2113,12 +2113,12 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
                    'IN_PROGRESS':t('Course en cours'),
                    'COMPLETED':t('Course terminée • Vous pouvez noter votre chauffeur'),
                    'CLOSED':t('Course terminée'),
-                  }[status]??t('Consultez le statut de votre réservation ci-dessous'),
+                  }[status]??VeyraStatusLabels.bookingStatus(status),
                 ),
               ]),
             ),
           ),
-          if(!{'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED'}.contains(status))
+          if(!{'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER'}.contains(status))
             Card(
               child:Padding(
                 padding:const EdgeInsets.all(16),
@@ -2185,7 +2185,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             ],
             TextButton(onPressed:(cancelling||loadingPreview)?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):loadingPreview?t('Calcul des frais…'):t('Annuler la réservation'))),
           ],
-          if({'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED'}.contains(status))
+          if({'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER'}.contains(status))
             OutlinedButton.icon(onPressed:()=>context.push('/addresses',extra:x),icon:const Icon(Icons.replay),label:Text(t('Réserver à nouveau'))),
           if({'COMPLETED','CLOSED'}.contains(status))OutlinedButton.icon(onPressed:favoriteBusy?null:()=>toggleFavorite(x),icon:Icon(favorite?Icons.favorite:Icons.favorite_border),label:Text(favorite?t('Retirer des favoris'):t('Ajouter le chauffeur aux favoris'))),
           if({'COMPLETED','CLOSED'}.contains(status))
