@@ -40,11 +40,11 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(theme: veyraTheme(), routerConfig: router));
       await tester.pumpAndSettle();
       final amount = find.byType(TextField);
-      await tester.ensureVisible(amount);
+      await tester.scrollUntilVisible(amount, 180);
       if (adjusting) expect(tester.widget<TextField>(amount).controller!.text, '25,00');
       await tester.enterText(amount, '30,00');
       final send = find.text(adjusting ? 'Mettre à jour mon offre' : 'Envoyer mon offre');
-      await tester.ensureVisible(send);
+      await tester.scrollUntilVisible(send, 180);
       await tester.tap(send);
       await tester.pumpAndSettle();
       expect(submissions, hasLength(1));
