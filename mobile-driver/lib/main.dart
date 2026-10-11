@@ -2673,7 +2673,7 @@ Future<void> logout()async{await activeRideTracker.stop();await api.logout();try
               trailing:approved?null:const Icon(Icons.chevron_right),
               onTap:approved?null:()=>context.push('/kyc'),
             ));
-          }),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),DriverDocuments(documents:docs,onRetry:()=>setState(()=>docs=api.documents()),onUpload:busy?null:doc),const LanguageSwitch(),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}));}
+          }),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),DriverDocuments(documents:docs,onRetry:()=>setState((){docs=api.documents();}),onUpload:busy?null:doc),const LanguageSwitch(),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}));}
 
 /// Coquille de navigation persistante chauffeur (bottom nav 4 onglets),
 /// conforme à la maquette D14 : Demandes / Planning / Revenus / Compte.
