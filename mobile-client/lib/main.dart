@@ -1508,7 +1508,7 @@ class _AddressScreenState extends State<AddressScreen>{
       builder:(sheetContext)=>SafeArea(child:Padding(
         padding:EdgeInsets.fromLTRB(
           20,12,20,20+MediaQuery.viewInsetsOf(sheetContext).bottom),
-        child:Column(
+        child:SingleChildScrollView(child:Column(
           mainAxisSize:MainAxisSize.min,
           crossAxisAlignment:CrossAxisAlignment.stretch,
           children:[
@@ -1543,7 +1543,7 @@ class _AddressScreenState extends State<AddressScreen>{
               child:Text(t('Modifier ma demande')),
             ),
           ],
-        ),
+        )),
       )),
     );
     if(confirmed==true&&mounted)await publish();
