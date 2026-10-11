@@ -11,10 +11,11 @@ Branche `feature/client-ux-ui-v5` issue directement de `feature/product-marketpl
 - Méthodes correspondantes dans `mobile-client/lib/api.dart`.
 - Widget Flutter réutilisable `RecentDestinationsSection` : chargement, erreur, liste, sélection, suppression.
 - Tests de widget Flutter écrits (non exécutés).
+- Widget branché au formulaire de réservation existant : sélection, suppression, chargement et erreur.
+- Enregistrement de la destination après publication réussie d’une réservation (échec non bloquant).
 
 ## Non livré / prochaines étapes
 
-- Brancher le widget sur le formulaire de recherche existant et appeler l'API après confirmation explicite d'une destination.
 - Ajouter un job de purge des destinations âgées de plus de 90 jours, et des tests d'isolation utilisateurs.
 - Refonte visuelle complète du parcours réservation selon les maquettes : carte, choix du trajet, récapitulatif, offres, suivi, paiement.
 - Rappels, calendrier, assistance, reçus.
