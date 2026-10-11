@@ -966,7 +966,7 @@ Future<void> logout() async {
             return const VeyraLoadingView();
           }
           if (snapshot.hasError) {
-            return VeyraErrorView(customMessage: VeyraErrorMessages.forException(snapshot.error!));
+            return VeyraErrorView(customMessage: VeyraErrorMessages.forException(snapshot.error!),onRetry:()=>setState((){future=api.me();}));
           }
           final profile = snapshot.data ?? <String, dynamic>{};
           final name = ('${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}').trim();
