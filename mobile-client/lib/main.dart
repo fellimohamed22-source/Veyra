@@ -1673,6 +1673,11 @@ class _AddressScreenState extends State<AddressScreen>{
           pickupLng:(pickupPlace!['lng'] as num).toDouble(),
           dropoffLat:(dropoffPlace!['lat'] as num).toDouble(),
           dropoffLng:(dropoffPlace!['lng'] as num).toDouble(),
+          routePoints:(routeEstimate?['points'] is List)
+            ?(routeEstimate!['points'] as List).whereType<Map>().where((p)=>
+              p['lat'] is num&&p['lng'] is num).map((p)=>LatLng(
+              (p['lat'] as num).toDouble(),(p['lng'] as num).toDouble())).toList()
+            :const <LatLng>[],
           distanceMeters:routeEstimate?['distanceMeters'] as num?,
           durationSeconds:routeEstimate?['durationSeconds'] as num?,
           loading:routeEstimateLoading,
