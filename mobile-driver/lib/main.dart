@@ -1184,6 +1184,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
   int activePage=0;
   int wonPage=0;
   int closedPage=0;
+  final Set<String> withdrawingOffers={};
 
   @override void initState(){
     super.initState();
@@ -1270,7 +1271,9 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
               final expires=x['expires_at'];
               final bookingStatus=x['booking_status']?.toString();
               Future<void> withdraw()async{
-                if(offerId==null)return;
+                if(offerId==null||withdrawingOffers.contains(offerId))return;
+                setState(()=>withdrawingOffers.add(offerId));
+                try{
                 final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
                   title:Text(t('Retirer cette offre ?')),
                   content:Text(t('Elle ne sera plus proposée au client. Vous pourrez soumettre une nouvelle offre tant que la demande reste ouverte.')),
@@ -1278,6 +1281,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                 ));
                 if(ok!=true)return;
                 try{await api.withdrawOffer(offerId);if(mounted){setState(_load);ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Offre retirée.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+                }finally{if(mounted)setState(()=>withdrawingOffers.remove(offerId));}
               }
               return Card(
                 margin:const EdgeInsets.only(bottom:10),
@@ -1316,7 +1320,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                     if(scope=='active')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
                       Expanded(child:OutlinedButton.icon(onPressed:bookingId==null?null:()=>context.push('/request/'+bookingId),icon:const Icon(Icons.edit_outlined),label:Text(t('Modifier')))),
                       const SizedBox(width:8),
-                      Expanded(child:TextButton.icon(onPressed:offerId==null?null:withdraw,icon:const Icon(Icons.delete_outline),label:Text(t('Retirer')))),
+                      Expanded(child:TextButton.icon(onPressed:offerId==null||withdrawingOffers.contains(offerId)?null:withdraw,icon:const Icon(Icons.delete_outline),label:Text(t('Retirer')))),
                     ])),
                   ])),
                 ),
