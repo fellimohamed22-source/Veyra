@@ -232,6 +232,7 @@ class AppLocale {
     'Impossible de lire cette image.': 'Could not read this image.',
     'Photo de profil mise à jour.': 'Profile photo updated.',
     'Impossible d’enregistrer la photo de profil.': 'Could not save your profile photo.',
+    'Nom de l’adresse requis.': 'An address name is required.',
     'Prénom requis.': 'First name is required.',
     'Téléphone de 6 caractères minimum requis.': 'A phone number of at least 6 characters is required.',
     'Mot de passe actuel requis.': 'Current password is required.',

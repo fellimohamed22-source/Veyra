@@ -17,21 +17,24 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen>{
     List<dynamic> results=[];
     String? error;
     bool searching=false;
+    int revision=0;
+    final form=GlobalKey<FormState>();
     final confirmed=await showDialog<bool>(context:context,builder:(d)=>StatefulBuilder(builder:(d,setDialog)=>AlertDialog(
       title:Text(t('Modifier cette adresse')),
-      content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
-        TextField(controller:label,maxLength:80,decoration:InputDecoration(labelText:t('Nom : Maison, Travail…'))),
-        TextField(controller:search,onChanged:(_)=>setDialog(()=>selected=null),decoration:InputDecoration(labelText:t('Adresse'))),
+      content:SingleChildScrollView(child:Form(key:form,child:Column(mainAxisSize:MainAxisSize.min,children:[
+        TextFormField(controller:label,maxLength:80,decoration:InputDecoration(labelText:t('Nom : Maison, Travail…')),validator:(value)=>value==null||value.trim().isEmpty?t('Nom de l’adresse requis.'):null),
+        TextField(controller:search,onChanged:(_)=>setDialog((){selected=null;results=[];revision++;}),decoration:InputDecoration(labelText:t('Adresse'))),
         TextButton(onPressed:searching?null:()async{
+          final requestedRevision=revision;
           setDialog((){searching=true;error=null;});
-          try{final values=await api.autocomplete(search.text);if(d.mounted)setDialog(()=>results=values);}
-          catch(e){if(d.mounted)setDialog(()=>error=VeyraErrorMessages.forException(e));}
+          try{final values=await api.autocomplete(search.text);if(d.mounted&&requestedRevision==revision)setDialog(()=>results=values);}
+          catch(e){if(d.mounted&&requestedRevision==revision)setDialog(()=>error=VeyraErrorMessages.forException(e));}
           finally{if(d.mounted)setDialog(()=>searching=false);}
         },child:Text(t('Rechercher'))),
         for(final raw in results)ListTile(title:Text(raw['label'].toString()),onTap:()=>setDialog((){selected=Map<String,dynamic>.from(raw as Map);search.text=selected!['label'].toString();results=[];})),
         if(error!=null)Text(error!),
-      ])),
-      actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Annuler'))),FilledButton(onPressed:selected==null?null:()=>Navigator.pop(d,true),child:Text(t('Enregistrer')))],
+      ]))),
+      actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Annuler'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:selected==null?null:(){if(form.currentState!.validate())Navigator.pop(d,true);},child:Text(t('Enregistrer')))],
     )));
     if(confirmed==true&&selected!=null&&label.text.trim().isNotEmpty){
       await mutate(()=>api.updateSavedAddress(item['id'].toString(),{'label':label.text.trim(),'address':selected!['label'],'lat':selected!['lat'],'lng':selected!['lng']}));
@@ -45,7 +48,7 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen>{
     finally{if(mounted)setState(()=>busy=false);}
   }
   Future<void> remove(Map<String,dynamic> item)async{
-    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Supprimer cette adresse ?')),content:Text(item['label'].toString()),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Conserver'))),FilledButton(onPressed:()=>Navigator.pop(d,true),child:Text(t('Supprimer')))]));
+    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Supprimer cette adresse ?')),content:Text(item['label'].toString()),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Conserver'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Supprimer')))]));
     if(yes==true)await mutate(()=>api.deleteSavedAddress(item['id'].toString()));
   }
   @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Mes adresses'))),body:FutureBuilder<List<dynamic>>(future:future,builder:(context,s){
@@ -82,6 +85,6 @@ class _FavoriteDriversScreenState extends State<FavoriteDriversScreen>{
     if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.favoriteDrivers();}));
     final items=s.data??[];
     if(items.isEmpty)return Center(child:Text(t('Ajoutez un chauffeur aux favoris après une course terminée.')));
-    return ListView(children:[for(final raw in items)Builder(builder:(context){final x=Map<String,dynamic>.from(raw as Map);return Card(child:Column(children:[ListTile(title:Text([x['first_name'],x['last_name']].whereType<String>().join(' ')),subtitle:Text([x['rating'],x['brand'],x['model'],x['color'],x['category_name']].where((v)=>v!=null).join(' • ')),onTap:()=>context.push('/booking/'+x['booking_id'].toString())),Wrap(children:[FilledButton(onPressed:busy?null:()=>rebook(x),child:Text(t('Réserver à nouveau'))),TextButton(onPressed:busy?null:()=>remove(x['driver_id'].toString()),child:Text(t('Retirer des favoris')))])]));})]);
+    return ListView(children:[for(final raw in items)Builder(builder:(context){final x=Map<String,dynamic>.from(raw as Map);return Card(child:Column(children:[ListTile(title:Text([x['first_name'],x['last_name']].whereType<String>().join(' ')),subtitle:Text([x['rating'],x['brand'],x['model'],x['color'],x['category_name']].where((v)=>v!=null).join(' • ')),onTap:()=>context.push('/booking/'+x['booking_id'].toString())),Wrap(children:[FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:busy?null:()=>rebook(x),child:Text(t('Réserver à nouveau'))),TextButton(onPressed:busy?null:()=>remove(x['driver_id'].toString()),child:Text(t('Retirer des favoris')))])]));})]);
   }));
 }
