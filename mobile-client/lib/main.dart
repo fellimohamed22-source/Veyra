@@ -2089,6 +2089,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
           if((x['customer_notes']??'').toString().isNotEmpty)Text(t('Remarques')+' : '+x['customer_notes'].toString()),
           if({'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status))...[
             Text(t('Réception des offres jusqu’au')+' '+VeyraDateFormatter.dateTime(x['offer_window_ends_at'])),
+            Text(x['offer_count']==1?t('1 offre reçue'):(x['offer_count']??0).toString()+' '+t('offres reçues')),
             FilledButton(onPressed:()=>context.push('/offers/'+widget.bookingId),child:Text(t('Voir les offres'))),
             TextButton(onPressed:cancelling?null:confirmAndCancel,child:Text(t('Annuler la réservation'))),
           ],

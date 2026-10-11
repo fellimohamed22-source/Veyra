@@ -24,7 +24,7 @@ public class BookingQueryController {
         "select sb.id,sb.creator_type,sb.creator_user_id,sb.partner_id,sb.beneficiary_name_snapshot," +
         "sb.beneficiary_phone_snapshot,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,sb.scheduled_at,sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.status," +
         "sb.preferred_driver_id,exists(select 1 from customer_favorite_drivers f where f.user_id=sb.creator_user_id and f.driver_id=sb.selected_driver_id) as favorite_driver,sb.category_id,vc.display_name as category_name,sb.payment_method,sb.offer_window_ends_at,sb.selected_driver_id," +
-        "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
+        AvailableOfferQuery.COUNT_SQL + " as offer_count,bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +
         "concat(du.first_name,' ',du.last_name) as driver_name,du.first_name as driver_first_name,du.last_name as driver_last_name,du.phone as driver_phone,d.rating as driver_rating,coalesce(d.kyc_status='APPROVED',false) as driver_verified," +
         "(select p.status from payments p where p.booking_id=sb.id order by p.created_at desc limit 1) as payment_status,v.brand as vehicle_brand,v.model as vehicle_model,v.plate_number,v.color as vehicle_color " +
         "from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id " +

@@ -177,6 +177,27 @@ class BookingDatabaseTest {
     db.update("update driver_offers set status='WITHDRAWN' where id=?",current);
     assertNull(query.detail(booking).get("currentBestOtherOfferMinor"));
   }
+  @ParameterizedTest @ValueSource(strings={"driver","kyc","marketplace","vehicle","category","expiry","window","booking"})
+  void offerCountsMatchSelectableOffersAfterEligibilityChanges(String change) {
+    UUID offer=prepareSelection();
+    assertOfferCounts(1);
+    switch(change) {
+      case "driver" -> db.update("update drivers set status='INACTIVE' where id=?",driver);
+      case "kyc" -> db.update("update drivers set kyc_status='REJECTED' where id=?",driver);
+      case "marketplace" -> db.update("update drivers set marketplace_enabled=false where id=?",driver);
+      case "vehicle" -> db.update("update vehicles set status='REJECTED' where driver_id=?",driver);
+      case "category" -> db.update("update vehicles set category_id=(select id from vehicle_categories where code='VAN') where driver_id=?",driver);
+      case "expiry" -> db.update("update driver_offers set expires_at=now()-interval '1 minute' where id=?",offer);
+      case "window" -> db.update("update scheduled_bookings set offer_window_ends_at=now()-interval '1 minute' where id=?",booking);
+      case "booking" -> db.update("update scheduled_bookings set status='CONFIRMED' where id=?",booking);
+    }
+    assertOfferCounts(0);
+  }
+  void assertOfferCounts(int expected) {
+    assertEquals(expected,controller.ownerOffers(booking).size());
+    assertEquals(expected,((Number)controller.mine(null,"desc",null).getFirst().get("offer_count")).intValue());
+    assertEquals(expected,((Number)new BookingQueryController(db).detail(booking).get("offer_count")).intValue());
+  }
   @Test void selectionCreatesSnapshotAndJourneyCanComplete() {
     UUID offer=prepareSelection();
     var accepted=controller.accept(booking,offer);
