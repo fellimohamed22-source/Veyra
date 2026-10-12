@@ -1,14 +1,19 @@
 name: android-apk
-# Trigger APK build after V3 driver repair.
+# Build both V5 APKs and attach them to the rolling debug GitHub Release.
 
 on:
   workflow_dispatch:
   push:
-    branches: [main, feature/product-marketplace-v3]
+    branches: [main, feature/client-ux-ui-v5]
     paths:
       - 'mobile-client/**'
       - 'mobile-driver/**'
       - '.github/workflows/android-apk.yml'
+
+# Avoid two pushes racing to replace the same rolling Release.
+concurrency:
+  group: android-apk-release
+  cancel-in-progress: false
 
 jobs:
   build-apks:
