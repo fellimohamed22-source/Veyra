@@ -40,6 +40,9 @@ class BookingRoutePreview extends StatelessWidget {
           height:210,
           child:FlutterMap(
             options:MapOptions(initialCenter:center,initialZoom:11,
+              // This is a route preview embedded in a scrolling booking form.
+              // Let vertical swipes scroll the form instead of panning the map.
+              interactionOptions:const InteractionOptions(flags:InteractiveFlag.none),
               initialCameraFit:CameraFit.bounds(bounds:bounds,
                 padding:const EdgeInsets.all(40))),
             children:[
