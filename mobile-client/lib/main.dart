@@ -1874,6 +1874,7 @@ class _OffersScreenState extends State<OffersScreen>{
   late Future<Map<String,dynamic>> bookingFuture;
   String? error;
   String? acceptingOfferId;
+  bool confirmingOffer=false;
   String offerSort='price';
   Timer? refreshTimer;
   bool refreshing=false;
@@ -1892,15 +1893,21 @@ class _OffersScreenState extends State<OffersScreen>{
   }
 
   Future<void> refreshOffers()async{
-    if(refreshing||acceptingOfferId!=null)return;refreshing=true;
+    if(refreshing||acceptingOfferId!=null||confirmingOffer)return;refreshing=true;
     try{final b=await api.bookingDetail(widget.bookingId);final values=await api.offers(widget.bookingId);if(mounted)setState((){future=Future.value(values);bookingFuture=Future.value(b);error=null;});}
     catch(e){if(mounted)setState(()=>error=t('Actualisation interrompue. Vérifiez votre connexion.'));}
     finally{refreshing=false;}
   }
   @override void dispose(){RefreshBus.tick.removeListener(refreshOffers);refreshTimer?.cancel();super.dispose();}
   Future<void> confirmOffer(Map<String,dynamic> offer)async{
-    if(acceptingOfferId!=null)return;
-    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Choisir ce chauffeur ?')),content:Text([offer['driverFirstName'],offer['driverLastName'],offer['vehicleBrand'],offer['vehicleModel'],offer['vehicleColor'],offer['vehicleYear'],t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(offer['totalMinor'])].where((v)=>v!=null).join(' • ')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Comparer encore'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Confirmer mon choix')))]));
+    if(acceptingOfferId!=null||confirmingOffer)return;
+    setState(()=>confirmingOffer=true);
+    bool? yes;
+    try{
+      yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Choisir ce chauffeur ?')),content:Text([offer['driverFirstName'],offer['driverLastName'],offer['vehicleBrand'],offer['vehicleModel'],offer['vehicleColor'],offer['vehicleYear'],t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(offer['totalMinor'])].where((v)=>v!=null).join(' • ')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Comparer encore'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Confirmer mon choix')))]));
+    }finally{
+      if(mounted)setState(()=>confirmingOffer=false);
+    }
     if(yes==true&&mounted)await chooseOffer(offer['offerId'].toString());
   }
   Future<void> chooseOffer(String offerId)async{
@@ -2031,7 +2038,7 @@ class _OffersScreenState extends State<OffersScreen>{
                 const SizedBox(height:14),
                 SizedBox(width:double.infinity,child:FilledButton(
                   style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-                  onPressed:acceptingOfferId!=null?null:()=>confirmOffer(x),
+                  onPressed:acceptingOfferId!=null||confirmingOffer?null:()=>confirmOffer(x),
                   child:acceptingOfferId==x['offerId'].toString()
                     ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
                     :Text(t('Choisir cette offre')),
