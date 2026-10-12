@@ -1924,7 +1924,17 @@ class _OffersScreenState extends State<OffersScreen>{
         context.push('/booking/'+widget.bookingId);
       }
     }on DioException catch(e){
-      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+      if(mounted){
+        setState(()=>error=e.response?.statusCode==409||e.response?.statusCode==410
+          ?t('Cette offre n’est plus disponible. La liste des offres va être actualisée.')
+          :VeyraErrorMessages.forException(e));
+        if(e.response?.statusCode==409||e.response?.statusCode==410){
+          // Defer refresh until acceptingOfferId is released in finally.
+          WidgetsBinding.instance.addPostFrameCallback((_){
+            if(mounted)refreshOffers();
+          });
+        }
+      }
     }catch(_){
       if(mounted)setState(()=>error=t('Impossible de choisir cette offre pour le moment.'));
     }finally{
