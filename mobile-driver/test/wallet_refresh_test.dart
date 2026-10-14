@@ -55,9 +55,11 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Course terminée (paiement en ligne)'));
     await tester.pumpAndSettle();
-    expect(navigation.routeInformationProvider.value.uri.path,
-        '/ride/ride-wallet-1');
     expect(find.text('Course ride-wallet-1'), findsOneWidget);
+    expect(navigation.canPop(), isTrue);
+    navigation.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(WalletScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

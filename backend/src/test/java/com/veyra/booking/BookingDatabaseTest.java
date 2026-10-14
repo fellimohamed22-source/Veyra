@@ -1,6 +1,7 @@
 package com.veyra.booking;
 
 import com.veyra.finance.LedgerService;
+import com.veyra.finance.CancellationFinanceService;
 import com.veyra.security.PinCrypto;
 import com.veyra.shared.ApiException;
 import org.flywaydb.core.Flyway;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.*;
@@ -42,6 +44,12 @@ class BookingDatabaseTest {
     @Bean JdbcTemplate jdbcTemplate(DataSource ds) { return new JdbcTemplate(ds); }
     @Bean PlatformTransactionManager transactionManager(DataSource ds) { return new DataSourceTransactionManager(ds); }
     @Bean LedgerService ledger(JdbcTemplate db) { return new LedgerService(db); }
+    @Bean CancellationFinanceService cancellationFinance(JdbcTemplate db) {
+      return new CancellationFinanceService(db);
+    }
+    @Bean BookingExtraController bookingExtra(JdbcTemplate db, CancellationFinanceService finance) {
+      return new BookingExtraController(db,finance,new BookingStatusHistoryService(db));
+    }
     @Bean BookingController controller(JdbcTemplate db, LedgerService ledger) {
       return new BookingController(db,new BCryptPasswordEncoder(4),new PinCrypto("test-only-key"),
           ledger,120,24,60,30,new BookingStatusHistoryService(db));
@@ -98,6 +106,44 @@ class BookingDatabaseTest {
     assertEquals(method.equals("CASH")?2:3,db.queryForObject("select count(*) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Integer.class,booking));
     assertEquals(0L,db.queryForObject("select sum(case when e.direction='DEBIT' then e.amount_minor else -e.amount_minor end) from ledger_entries e join ledger_transactions t on t.id=e.transaction_id where t.booking_id=?",Long.class,booking));
   }
+  @ParameterizedTest
+  @CsvSource({"CASH,1440", "CASH,180", "CASH,30", "ONLINE,1440", "ONLINE,180", "ONLINE,30",
+      "PARTNER_INVOICE,1440", "PARTNER_INVOICE,180", "PARTNER_INVOICE,30"})
+  void cancellationPreviewMatchesSingleConcurrentCharge(String method,int minutes) throws Exception {
+    snapshot(method);
+    db.update("update scheduled_bookings set status='CONFIRMED',payment_method=?,scheduled_at=now()+(? * interval '1 minute') where id=?",
+        method,minutes,booking);
+    if(method.equals("ONLINE")) {
+      db.update("insert into payments(booking_id,payer_user_id,amount_minor,currency,method,status,idempotency_key) values (?,?,11000,'EUR','ONLINE','CAPTURED',?)",
+          booking,user,booking.toString());
+    }
+    var cancellation=context.getBean(BookingExtraController.class);
+    var preview=cancellation.cancellationPreview(booking);
+    long fee=((Number)preview.get("cancellationFeeMinor")).longValue();
+    assertEquals(minutes==1440,fee==0);
+    assertEquals(0,count("cancellation_charges"));
+    assertEquals(0,count("refunds"));
+    assertEquals(0,count("customer_platform_debts"));
+    assertEquals(0,count("driver_payables"));
+    assertEquals(List.of("OK","CANNOT_CANCEL"),race(()->cancellation.cancel(booking)));
+    assertEquals("CANCELLED",status());
+    assertEquals(1,count("booking_status_history"));
+    assertEquals(1,db.queryForObject("select count(*) from outbox_events where aggregate_id=? and event_type='booking.status.cancelled'",Integer.class,booking));
+    assertEquals(fee==0?0:1,count("cancellation_charges"));
+    if(fee>0) {
+      var charged=db.queryForMap("select * from cancellation_charges where booking_id=?",booking);
+      assertEquals(fee,((Number)charged.get("charged_amount_minor")).longValue());
+      assertEquals(fee,((Number)charged.get("driver_compensation_minor")).longValue()
+          +((Number)charged.get("platform_amount_minor")).longValue());
+    }
+    assertEquals(method.equals("CASH")&&fee>0?1:0,count("customer_platform_debts"));
+    assertEquals(!method.equals("CASH")&&fee>0?1:0,count("driver_payables"));
+    assertEquals(method.equals("ONLINE")?1:0,count("refunds"));
+    if(method.equals("ONLINE")) {
+      assertEquals(11000-fee,db.queryForObject("select amount_minor from refunds where booking_id=?",Long.class,booking));
+    }
+  }
+
   @Test void onlineStartRequiresCapturedPaymentInDatabase() {
     db.update("update scheduled_bookings set payment_method='ONLINE' where id=?",booking);
     assertEquals("PAYMENT_REQUIRED",assertThrows(ApiException.class,
