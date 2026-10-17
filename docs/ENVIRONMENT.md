@@ -33,3 +33,23 @@ Ne jamais réutiliser les valeurs dev en production.
   (défaut `PENDING_LEGAL_REVIEW`) : version des textes enregistrée avec chaque
   consentement (`user_consents`). À renseigner avec la version validée
   juridiquement (DEC-14).
+
+## Rotation de JWT_SECRET et PIN_ENCRYPTION_KEY
+
+Si Render définit déjà ces deux variables, rien à faire : elles sont
+conservées et acceptées par le garde-fou.
+
+Si elles n'étaient pas définies (la production utilisait alors les valeurs
+par défaut publiques d'`application.yml`) :
+
+1. `JWT_SECRET` : définir une nouvelle valeur aléatoire (≥ 32 octets). Effet :
+   les access tokens en cours (15 min) deviennent invalides, les apps se
+   reconnectent automatiquement via leur refresh token (stocké en base).
+2. `PIN_ENCRYPTION_KEY` : définir une nouvelle valeur aléatoire, **et**
+   `PIN_ENCRYPTION_KEY_PREVIOUS=dev-pin-key-must-be-32-bytes-long` (l'ancienne
+   valeur) pour que les PIN des réservations déjà confirmées restent
+   affichables. Les nouveaux PIN sont chiffrés avec la nouvelle clé.
+3. Une fois les réservations confirmées avant la rotation terminées, supprimer
+   `PIN_ENCRYPTION_KEY_PREVIOUS`.
+
+Génération (exemple) : `openssl rand -base64 48`.
