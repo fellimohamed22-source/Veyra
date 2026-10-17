@@ -33,6 +33,7 @@ import 'core/formatters/status_labels.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/signup_consents.dart';
 import 'core/widgets/saved_cards_screen.dart';
+import 'core/widgets/phone_verification_screen.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/status_badge.dart';
@@ -138,6 +139,50 @@ class RefreshBus {
   RefreshBus._();
   static final ValueNotifier<int> tick = ValueNotifier<int>(0);
   static void bump() => tick.value++;
+}
+
+/// DEC-07 Firebase Phone Auth. Token obtained when Android verifies the
+/// number without a typed code (auto-retrieval).
+String? _autoVerifiedPhoneToken;
+
+/// Sends the OTP by SMS; returns the verification id, or null when the
+/// device verified the number by itself.
+Future<String?> firebaseSendSmsCode(String e164) async {
+  if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+  _autoVerifiedPhoneToken=null;
+  final done=Completer<String?>();
+  await FirebaseAuth.instance.verifyPhoneNumber(
+    phoneNumber:e164,
+    verificationCompleted:(credential)async{
+      try{
+        final user=await FirebaseAuth.instance.signInWithCredential(credential);
+        _autoVerifiedPhoneToken=await user.user?.getIdToken();
+        if(!done.isCompleted)done.complete(null);
+      }catch(e){
+        if(!done.isCompleted)done.completeError(e);
+      }
+    },
+    verificationFailed:(e){if(!done.isCompleted)done.completeError(e);},
+    codeSent:(verificationId,_){if(!done.isCompleted)done.complete(verificationId);},
+    codeAutoRetrievalTimeout:(_){},
+  );
+  return done.future;
+}
+
+/// Confirms the SMS code with Firebase and returns its ID token (provider
+/// "phone"), then signs out of Firebase: the VEYRA session is unaffected.
+Future<String> firebaseConfirmSmsCode(String? verificationId,String smsCode) async {
+  String? token;
+  if(verificationId==null){
+    token=_autoVerifiedPhoneToken;
+  }else{
+    final credential=PhoneAuthProvider.credential(verificationId:verificationId,smsCode:smsCode);
+    final user=await FirebaseAuth.instance.signInWithCredential(credential);
+    token=await user.user?.getIdToken();
+  }
+  await FirebaseAuth.instance.signOut();
+  if(token==null)throw StateError('PHONE_TOKEN_MISSING');
+  return token;
 }
 
 Future<void> configurePush() async {
@@ -326,6 +371,14 @@ final router=GoRouter(
   routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
   GoRoute(path:'/register',builder:(c,s)=>const RegisterScreen()),
+  GoRoute(path:'/verify-phone',builder:(c,s)=>PhoneVerificationScreen(
+    initialPhone:(s.extra as String?)??'',
+    sendCode:firebaseSendSmsCode,
+    confirm:firebaseConfirmSmsCode,
+    submit:api.verifyPhone,
+    onDone:()=>c.go('/home'),
+    onLater:()=>c.go('/home'),
+  )),
   GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
   GoRoute(path:'/reset-password',builder:(c,s)=>const ResetPasswordScreen()),
   // Coquille de navigation persistante (bottom nav), conforme aux
@@ -2621,7 +2674,8 @@ class _RegisterScreenState extends State<RegisterScreen>{
         marketingOptIn:marketingOptIn,
       );
       if(!mounted)return;
-      context.go('/home');
+      // CL-AUTH-05: confirm the phone number by SMS before entering the app.
+      context.go('/verify-phone',extra:phone.text);
       await configurePush();
     }catch(e){
       if(!mounted)return;

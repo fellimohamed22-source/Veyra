@@ -219,6 +219,10 @@ class Api {
   Future<Map<String,dynamic>> createPaymentIntent(String bookingId,String idempotencyKey) async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/payments/bookings/$bookingId/intent',options:Options(headers:{'Idempotency-Key':idempotencyKey}))).data);
 
+  /// DEC-07: Firebase ID token obtained after the SMS code.
+  Future<void> verifyPhone(String idToken) async =>
+      dio.post('/api/v1/me/phone/verify',data:{'idToken':idToken});
+
   /// DEC-04: cards saved on the user's Stripe customer.
   Future<List<dynamic>> savedCards() async =>
       List<dynamic>.from((await dio.get('/api/v1/payments/methods')).data);

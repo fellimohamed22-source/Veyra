@@ -46,6 +46,19 @@ class AppLocale {
   }
 
   static const Map<String, String> _en = {
+    'Vérifiez votre numéro': 'Verify your phone number',
+    'Valider': 'Verify',
+    'Code reçu': 'Code received',
+    'Envoyer le code': 'Send the code',
+    'Renvoyer le code': 'Resend the code',
+    'Vérifier plus tard': 'Verify later',
+    'Le code contient 6 chiffres.': 'The code has 6 digits.',
+    'Code incorrect ou expiré.': 'Incorrect or expired code.',
+    'Connexion indisponible. Réessayez.': 'No connection. Try again.',
+    'Numéro invalide. Exemple : 06 12 34 56 78 ou +33 6 12 34 56 78.': 'Invalid number. Example: +33 6 12 34 56 78.',
+    'Envoi du code impossible. Vérifiez le numéro puis réessayez.': 'Could not send the code. Check the number and try again.',
+    'Nous avons envoyé un code à 6 chiffres par SMS.': 'We sent a 6-digit code by SMS.',
+    'Nous allons vous envoyer un code par SMS pour confirmer votre numéro.': 'We will send you a code by SMS to confirm your number.',
     'Mes moyens de paiement': 'My payment methods',
     'Supprimer cette carte ?': 'Remove this card?',
     'Annuler': 'Cancel',
