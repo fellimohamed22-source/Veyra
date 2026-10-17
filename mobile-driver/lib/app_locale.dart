@@ -32,6 +32,7 @@ class AppLocale {
   }
 
   static const Map<String, String> _en = {
+    'Prix conseillé (net)': 'Suggested price (net)',
     'Prix total pour le client': 'Total price for the customer',
     'Commission VEYRA incluse': 'VEYRA commission included',
     'Vous recevez': 'You receive',

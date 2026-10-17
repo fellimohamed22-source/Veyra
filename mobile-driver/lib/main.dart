@@ -34,6 +34,7 @@ import 'core/widgets/driver_documents.dart';
 import 'core/widgets/status_badge.dart';
 import 'core/widgets/customer_favorite_chip.dart';
 import 'core/widgets/offer_price_preview.dart';
+import 'core/widgets/suggested_price_hint.dart';
 import 'core/maps/route_geometry.dart';
 import 'core/maps/veyra_map.dart';
 import 'core/maps/driver_location_tracker.dart';
@@ -1699,6 +1700,7 @@ class _RequestScreenState extends State<RequestScreen>{
             ]);
           }
           return Column(children:[
+            SuggestedPriceHint(load:()=>api.suggestedPrice(widget.bookingId)),
             TextField(
               controller:amount,
               keyboardType:const TextInputType.numberWithOptions(decimal:true),
