@@ -50,6 +50,11 @@ veyra:
     # Identifiant public (présent dans google-services.json), pas un secret.
     project-id: ${FIREBASE_PROJECT_ID:veyra-4806a}
 
+  google:
+    # DEC-08 : Google Maps Platform (Places, Geocoding, Routes) côté serveur.
+    # Sans clé, les fournisseurs OpenStreetMap actuels restent utilisés.
+    maps-api-key: ${GOOGLE_MAPS_API_KEY:}
+
   twilio:
     # DEC-06/07 : SMS passager (et, plus tard, appels masqués). Inactif tant
     # que ces trois valeurs ne sont pas définies. TWILIO_FROM : numéro
