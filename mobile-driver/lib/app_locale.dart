@@ -32,6 +32,10 @@ class AppLocale {
   }
 
   static const Map<String, String> _en = {
+    'Prix total pour le client': 'Total price for the customer',
+    'Commission VEYRA incluse': 'VEYRA commission included',
+    'Vous recevez': 'You receive',
+    'Aperçu du prix client indisponible.': 'Customer price preview unavailable.',
     'Acceptation obligatoire': 'Acceptance required',
     "J'accepte les conditions générales d'utilisation": 'I accept the terms of use',
     "J'accepte la politique de confidentialité": 'I accept the privacy policy',

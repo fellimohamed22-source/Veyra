@@ -216,6 +216,11 @@ class Api {
     return Map<String,dynamic>.from(r.data);
   }
 
+  /// DR-04 preview: customer total and commission for a net price.
+  Future<Map<String,dynamic>> offerQuote(String bookingId,int amountMinor) async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/driver/opportunities/$bookingId/quote',
+        queryParameters:{'amountMinor':amountMinor})).data);
+
   Future<void> withdrawOffer(String offerId) async =>
       dio.delete('/api/v1/driver/offers/$offerId');
 

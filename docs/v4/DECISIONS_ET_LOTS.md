@@ -11,6 +11,7 @@
 | L7 | Messagerie ouverte de H-30 min avant la prise en charge à H+1 h après la fin (CL-15), contrôlée côté serveur ; historique toujours lisible ; support et admin non limités ; `GET /bookings/{id}/chat/availability` | — | CHAT-01, dérogation support |
 | L4 | Consentements à l'inscription : CGU et confidentialité obligatoires, marketing facultatif et non coché, journal append-only avec version des textes ; `GET/POST /me/consents` | V040 `user_consents` | CONSENT_REQUIRED, widget Flutter |
 | — | Test sur vraie base : le paiement capturé du jeu de données porte maintenant son PSP (`backend-ci` était déjà rouge sur `b1e3c95`) | — | 41 tests sur PostgreSQL et PostGIS |
+| L6 | **Moteur de commission V4** (DEC-01 A, DEC-02, DEC-03) : règles en base par portée USER > PARTNER > PARTNER_CATEGORY > PROFILE > STANDARD, pourcentage + fixe + plancher/plafond, dates d'effet, versions immuables ; API admin `/admin/commission-rules` (liste, création avec contrôle de conflit, désactivation, **simulation**), audit avant/après + justification ; aperçu du prix client pour le chauffeur (`GET /driver/opportunities/{id}/quote`) ; suppression des 600 bps en dur | V041 (barème initial : STANDARD 10 %, PROFILE PARTNER 6 %) | COM-01..04, arrondi, fixe, bornes, priorité vérifiée sur PostgreSQL |
 
 Rollback : chaque migration documente son `DROP` dans son en-tête.
 
@@ -34,3 +35,22 @@ Rollback : chaque migration documente son `DROP` dans son en-tête.
 ## Lots non démarrés (bloqués par une décision)
 
 Moteur de commission V4 avec portées client, catégorie et profil, et simulation admin (DEC-01 à 03) · contrôle GPS à l'arrivée et au démarrage (DEC-10) · flux Stripe définitif (DEC-04) · OTP SMS et appels masqués (DEC-06, 07) · connexion Apple et refonte UI écran par écran (DEC-12) · portails partenaire, société VTC et admin (DEC-13, 15).
+
+## Décisions prises (17/10/2026)
+
+| Décision | Réponse |
+|---|---|
+| DEC-01 / 17 | Méthode **A** : prix client = prix net chauffeur + commission |
+| DEC-02 | Barème en base (initial : 10 % standard, 6 % partenaires) |
+| DEC-03 | Fixe / plancher / plafond configurables en base |
+| DEC-04 | Carte enregistrée et **débit à la réservation** (confirmation de l'offre) |
+| DEC-06 | Twilio Proxy, France au départ |
+| DEC-07 | Firebase Phone Auth (OTP) ; Twilio pour les SMS passager |
+| DEC-08 | Passage à **Google Maps** |
+| DEC-09 | Délai minimum 120 min, configurable en base ; politique d'annulation V3 conservée |
+| DEC-10 | Démarrage : **200 m** du point de prise en charge + PIN 4 chiffres, 5 essais |
+| DEC-12 | Couleurs relevées sur les maquettes, à valider |
+| DEC-13 | Écrans partenaire / société / admin conçus dans le style des maquettes, validés avant code |
+| DEC-16 | Index corrigé des maquettes **validé** |
+| DEC-18 | Pas de contre-offre ; prix conseillé via une grille en base (fournie par le propriétaire) ; validité liée à la fenêtre d'offres |
+| DEC-21 | Capacité bagages non fixée pour l'instant (évolution ultérieure) |

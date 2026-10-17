@@ -29,7 +29,7 @@ class OwnerOfferSummaryTest {
 
   @Test void legacyOfferWithoutSnapshotFallsBackToTheActivePolicy() throws Exception {
     when(db.queryForList(anyString(),eq(booking))).thenReturn(List.of(Map.of("creator_user_id",user)));
-    when(db.queryForList(contains("from commission_policy_versions"),(Object)isNull(),(Object)isNull()))
+    when(db.queryForList(contains("from commission_policy_versions"),any(Object[].class)))
         .thenReturn(List.of(Map.of("id",UUID.randomUUID(),"commission_bps",1500)));
     ResultSet row=mock(ResultSet.class);
     when(row.getLong("proposed_amount_minor")).thenReturn(10000L);
@@ -59,7 +59,7 @@ class OwnerOfferSummaryTest {
     Map<String,Object> result=controller.ownerOffers(booking).getFirst();
     assertEquals(1000L,result.get("commissionMinor"));
     assertEquals(11000L,result.get("totalMinor"));
-    verify(db,never()).queryForList(contains("from commission_policy_versions"),(Object)any(),(Object)any());
+    verify(db,never()).queryForList(contains("from commission_policy_versions"),any(Object[].class));
   }
 
   @Test void summaryKeepsCustomerTotalAndApprovedVehicleDetails() throws Exception {

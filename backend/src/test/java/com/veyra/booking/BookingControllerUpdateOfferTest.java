@@ -80,7 +80,13 @@ class BookingControllerUpdateOfferTest {
   }
 
   private void stubStandardPolicy(int bps) {
-    when(db.queryForList(contains("from commission_policy_versions"), (Object) isNull(), (Object) isNull()))
+    Map<String, Object> account = new HashMap<>();
+    account.put("creator_type", "CLIENT");
+    account.put("creator_user_id", UUID.randomUUID());
+    account.put("partner_id", null);
+    when(db.queryForList(contains("from scheduled_bookings sb left join partner_organizations"), eq(bookingId)))
+        .thenReturn(List.of(account));
+    when(db.queryForList(contains("from commission_policy_versions"), any(Object[].class)))
         .thenReturn(List.of(Map.of("id", policyId, "commission_bps", bps)));
   }
 

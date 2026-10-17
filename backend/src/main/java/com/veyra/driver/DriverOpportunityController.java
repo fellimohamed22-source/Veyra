@@ -52,6 +52,27 @@ public class DriverOpportunityController {
     return result;
   }
 
+  /**
+   * DR-04 price preview (DEC-01 method A): the driver types their net
+   * price and sees the customer total, using exactly the resolution and
+   * arithmetic applied when the offer is submitted. Read-only.
+   */
+  @GetMapping("/{bookingId}/quote")
+  public Map<String,Object> quote(@PathVariable UUID bookingId,@RequestParam long amountMinor){
+    UUID driverId=driverId();
+    assertEligible(driverId);
+    if(amountMinor<=0||amountMinor>10_000_000)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_AMOUNT");
+    Integer open=db.queryForObject(
+        "select count(*) from scheduled_bookings where id=? and status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now()",
+        Integer.class,bookingId);
+    if(open==null||open==0)throw new ApiException(HttpStatus.GONE,"BOOKING_OFFERS_CLOSED");
+    var q=new com.veyra.commission.CommissionEngine(db).quoteForBooking(bookingId,amountMinor);
+    Map<String,Object> result=new LinkedHashMap<>();
+    result.put("driverNetMinor",amountMinor);
+    q.putInto(result);
+    return result;
+  }
+
   private UUID driverId(){
     List<UUID> rows=db.queryForList(
         "select id from drivers where user_id=?",

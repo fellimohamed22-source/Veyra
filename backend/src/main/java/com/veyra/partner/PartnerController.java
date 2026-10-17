@@ -49,11 +49,9 @@ public class PartnerController {
       "insert into user_roles(user_id,role_id) select ?,id from roles where code='PARTNER_OWNER' on conflict do nothing",
       CurrentUser.id());
 
-    db.update(
-      "insert into commission_policy_versions(id,scope_type,partner_id,commission_bps,version_no,status,effective_from) " +
-      "values (gen_random_uuid(),'PARTNER',?,600,1,'ACTIVE',now())",
-      partnerId);
-
+    // No per-organisation commission row any more: the organisation
+    // inherits its category / PARTNER profile rule (V041) until an admin
+    // sets a specific exception.
     return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("partnerId",partnerId));
   }
 
@@ -111,15 +109,21 @@ public class PartnerController {
   @GetMapping("/{partnerId}/finance")
   public Map<String,Object> finance(@PathVariable UUID partnerId){
     memberWithRole(partnerId,FINANCE_ROLES);
-    return db.queryForMap(
-      "select po.credit_status,po.credit_limit_minor," +
+    Map<String,Object> result=new LinkedHashMap<>(db.queryForMap(
+      "select po.partner_type,po.credit_status,po.credit_limit_minor," +
       "coalesce(pia.outstanding_minor,0) outstanding_minor," +
-      "coalesce(pia.overdue_minor,0) overdue_minor," +
-      "coalesce((select commission_bps from commission_policy_versions cp " +
-      "where cp.partner_id=po.id and cp.scope_type='PARTNER' and cp.status='ACTIVE' " +
-      "order by cp.version_no desc limit 1),600) commission_bps " +
+      "coalesce(pia.overdue_minor,0) overdue_minor " +
       "from partner_organizations po left join partner_invoice_accounts pia on pia.partner_id=po.id where po.id=?",
-      partnerId);
+      partnerId));
+    // Commercial conditions visible to the partner (PART-17): the rule the
+    // engine would apply to its next booking, not a hard-coded default.
+    var rule=new com.veyra.commission.CommissionEngine(db).resolve(
+        com.veyra.commission.CommissionEngine.Context.partner(partnerId,(String)result.remove("partner_type")));
+    result.put("commission_bps",rule.rateBps());
+    result.put("commission_fixed_minor",rule.fixedMinor());
+    result.put("commission_min_minor",rule.minMinor());
+    result.put("commission_max_minor",rule.maxMinor());
+    return result;
   }
 
   private void member(UUID partnerId){

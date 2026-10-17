@@ -1,5 +1,7 @@
 package com.veyra.booking;
 import com.veyra.booking.BookingDtos.*;
+import com.veyra.commission.CommissionEngine;
+import com.veyra.commission.CommissionEngine.Quote;
 import com.veyra.security.CurrentUser;
 import jakarta.validation.constraints.Pattern;
 import com.veyra.shared.ApiException;
@@ -36,6 +38,7 @@ import java.util.*;
     private final com.veyra.security.PinCrypto pinCrypto;
     private final com.veyra.finance.LedgerService ledger;
     private final BookingStatusHistoryService history;
+    private final CommissionEngine commissions;
     private final SecureRandom rnd=new SecureRandom();
     private final long minLead,maxWindow,normalClose,shortClose;
     public BookingController(JdbcTemplate d,PasswordEncoder e,com.veyra.security.PinCrypto pc,com.veyra.finance.LedgerService l,@Value("${veyra.marketplace.min-lead-minutes}")long a,@Value("${veyra.marketplace.max-offer-window-hours}")long b,@Value("${veyra.marketplace.normal-close-before-minutes}")long c,@Value("${veyra.marketplace.short-close-before-minutes}")long f,BookingStatusHistoryService h){
@@ -48,6 +51,7 @@ import java.util.*;
         normalClose=c;
         shortClose=f;
         history=h;
+        commissions=new CommissionEngine(d);
     }
     @PostMapping("/scheduled-bookings") @Transactional
     ResponseEntity<Map<String,Object>> createIdempotently(@Valid@RequestBody Create r,@RequestHeader(value="Idempotency-Key",required=false) String key){
@@ -181,7 +185,7 @@ import java.util.*;
             }
         }
         UUID id=UUID.randomUUID();
-        Quote q=quote((UUID)b.get("partner_id"),r.amountMinor());
+        Quote q=commissions.quoteForBooking(bookingId,r.amountMinor());
         insertOffer(id,bookingId,d,r,q,b.get("offer_window_ends_at"));
         int transitioned=db.update("update scheduled_bookings set status='OFFERS_RECEIVED',updated_at=now() where id=? and status='OPEN_FOR_OFFERS'",bookingId);
         // The UPDATE above is conditional (WHERE status='OPEN_FOR_OFFERS')
@@ -242,7 +246,7 @@ import java.util.*;
         UUID newOfferId=UUID.randomUUID();
         // A revised price is a new publication: its commission is frozen
         // now, like any new offer, and never retro-applied to the old row.
-        Quote q=quote((UUID)b.get("partner_id"),r.amountMinor());
+        Quote q=commissions.quoteForBooking(bookingId,r.amountMinor());
         insertOffer(newOfferId,bookingId,d,r,q,b.get("offer_window_ends_at"));
         Map<String,Object>response=new HashMap<>(Map.of("offerId",newOfferId));
         q.putInto(response);
@@ -256,11 +260,10 @@ import java.util.*;
     @GetMapping("/scheduled-bookings/{bookingId}/offers") List<Map<String,Object>> ownerOffers(@PathVariable UUID bookingId){
         Map<String,Object>b=one("select creator_user_id,partner_id from scheduled_bookings where id=?",bookingId);
         owner(b);
-        UUID partnerId=(UUID)b.get("partner_id");
             return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.commission_policy_id,o.commission_rate_bps,o.commission_minor,o.customer_total_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id join scheduled_bookings sb on sb.id=o.booking_id join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' and o.expires_at>now() and sb.offer_window_ends_at>now() and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true order by o.proposed_amount_minor,o.id",(rs,
             n)->{
                 long p=rs.getLong("proposed_amount_minor");
-                Quote q=frozenOrQuote(partnerId,p,(UUID)rs.getObject("commission_policy_id"),(Integer)rs.getObject("commission_rate_bps"),(Long)rs.getObject("commission_minor"),(Long)rs.getObject("customer_total_minor"));
+                Quote q=frozenOrQuote(bookingId,p,(UUID)rs.getObject("commission_policy_id"),(Integer)rs.getObject("commission_rate_bps"),(Long)rs.getObject("commission_minor"),(Long)rs.getObject("customer_total_minor"));
                 long commissionAmount=q.commissionMinor();
                 Map<String,Object>result=new LinkedHashMap<>();
                 result.put("offerId",
@@ -319,7 +322,7 @@ import java.util.*;
         // The client confirms exactly the price displayed: the commission
         // frozen on the offer when it was submitted, never today's rate.
         long p=((Number)o.get("proposed_amount_minor")).longValue();
-        Quote q=frozenOrQuote((UUID)b.get("partner_id"),p,(UUID)o.get("commission_policy_id"),toInteger(o.get("commission_rate_bps")),toLong(o.get("commission_minor")),toLong(o.get("customer_total_minor")));
+        Quote q=frozenOrQuote(bookingId,p,(UUID)o.get("commission_policy_id"),toInteger(o.get("commission_rate_bps")),toLong(o.get("commission_minor")),toLong(o.get("customer_total_minor")));
         long c=q.commissionMinor(),total=q.totalMinor();
         if("PARTNER_INVOICE".equals(b.get("payment_method"))){
             UUID partnerId=(UUID)b.get("partner_id");
@@ -445,36 +448,13 @@ import java.util.*;
         Integer n=db.queryForObject("select count(*) from partner_organizations po join partner_invoice_accounts pia on pia.partner_id=po.id where po.id=? and po.status='APPROVED' and po.credit_status='APPROVED' and pia.status='ACTIVE' and pia.outstanding_minor<po.credit_limit_minor",Integer.class,p);
         if(n==0)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"PARTNER_INVOICE_NOT_ELIGIBLE");
     }
-    /**
-     * Commission frozen on an offer. Formula unchanged from V3 (driver
-     * price + commission on the driver price, HALF_UP to the minor unit);
-     * method A/B arbitration (DEC-01) is still open and deliberately not
-     * decided here.
-     */
-    record Quote(UUID policyId,int rateBps,long commissionMinor,long totalMinor){
-        void putInto(Map<String,Object> m){
-            m.put("commissionRateBps",rateBps);
-            m.put("commissionMinor",commissionMinor);
-            m.put("customerTotalMinor",totalMinor);
-        }
-    }
-    /** Active policy for the booking account: partner override, else standard -- one query, so rate and policy id always match. */
-    private Quote quote(UUID partnerId,long driverPriceMinor){
-        Map<String,Object>policy=one("select id,commission_bps from commission_policy_versions where status='ACTIVE' and ((?::uuid is not null and scope_type='PARTNER' and partner_id=?) or scope_type='STANDARD') order by case when scope_type='PARTNER' then 0 else 1 end,version_no desc limit 1",partnerId,partnerId);
-        int bps=((Number)policy.get("commission_bps")).intValue();
-        long c=commission(driverPriceMinor,bps);
-        return new Quote((UUID)policy.get("id"),bps,c,Math.addExact(driverPriceMinor,c));
-    }
-    /** Frozen snapshot when present; legacy offers created before V038 fall back to the active policy. */
-    private Quote frozenOrQuote(UUID partnerId,long driverPriceMinor,UUID policyId,Integer bps,Long commissionMinor,Long totalMinor){
-        if(policyId!=null&&bps!=null&&commissionMinor!=null&&totalMinor!=null)return new Quote(policyId,bps,commissionMinor,totalMinor);
-        return quote(partnerId,driverPriceMinor);
+    /** Frozen snapshot when present; legacy offers created before V038 fall back to the engine. */
+    private Quote frozenOrQuote(UUID bookingId,long driverPriceMinor,UUID policyId,Integer bps,Long commissionMinor,Long totalMinor){
+        if(policyId!=null&&bps!=null&&commissionMinor!=null&&totalMinor!=null)return new Quote(policyId,null,bps,commissionMinor,totalMinor);
+        return commissions.quoteForBooking(bookingId,driverPriceMinor);
     }
     private void insertOffer(UUID id,UUID bookingId,UUID driverId,Offer r,Quote q,Object expiresAt){
         db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at,commission_policy_id,commission_rate_bps,commission_minor,customer_total_minor) values (?,?,?,?,?,'ACTIVE',?,?,?,?,?)",id,bookingId,driverId,r.amountMinor(),r.currency(),expiresAt,q.policyId(),q.rateBps(),q.commissionMinor(),q.totalMinor());
-    }
-    static long commission(long p,int r){
-        return BigDecimal.valueOf(p).multiply(BigDecimal.valueOf(r)).divide(BigDecimal.valueOf(10000),0,RoundingMode.HALF_UP).longValue();
     }
     private static Integer toInteger(Object v){
         return v==null?null:((Number)v).intValue();

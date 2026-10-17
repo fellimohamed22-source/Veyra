@@ -33,6 +33,7 @@ import 'core/widgets/password_dialog.dart';
 import 'core/widgets/driver_documents.dart';
 import 'core/widgets/status_badge.dart';
 import 'core/widgets/customer_favorite_chip.dart';
+import 'core/widgets/offer_price_preview.dart';
 import 'core/maps/route_geometry.dart';
 import 'core/maps/veyra_map.dart';
 import 'core/maps/driver_location_tracker.dart';
@@ -1696,6 +1697,7 @@ class _RequestScreenState extends State<RequestScreen>{
                 helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
               ),
             ),
+            OfferPricePreview(amountText:amount.text,fetchQuote:(minor)=>api.offerQuote(widget.bookingId,minor)),
             if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
             if(x['has_eligible_vehicle']==false)Padding(padding:const EdgeInsets.only(top:12),child:Text(t('Aucun véhicule validé de cette catégorie : offre impossible.'),style:TextStyle(color:Theme.of(context).colorScheme.error,fontWeight:FontWeight.w700))),
             const SizedBox(height:20),
