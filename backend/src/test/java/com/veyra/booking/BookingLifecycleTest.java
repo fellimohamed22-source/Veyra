@@ -37,6 +37,9 @@ class BookingLifecycleTest {
         .thenReturn(List.of(driver));
     when(db.queryForList(contains("from scheduled_bookings where id=? for update"), eq(booking)))
         .thenAnswer(invocation -> List.of(new HashMap<>(state)));
+    // Driver's last tracked position is within the pickup radius (DEC-10).
+    when(db.queryForList(contains("current_driver_locations"), eq(Boolean.class), any(Object[].class)))
+        .thenReturn(List.of(true));
     doAnswer(invocation -> { state.put("status", invocation.getArgument(1)); return 1; })
         .when(db).update(eq("update scheduled_bookings set status=?,updated_at=now() where id=?"),
             anyString(), eq(booking));

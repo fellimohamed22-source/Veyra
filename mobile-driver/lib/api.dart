@@ -312,9 +312,13 @@ class Api {
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/onboarding/status')).data);
 
   Future<void> enRoute(String id) async => dio.post('/api/v1/bookings/$id/en-route');
-  Future<void> arrived(String id) async => dio.post('/api/v1/bookings/$id/arrived');
-  Future<void> start(String id,String pin) async =>
-      dio.post('/api/v1/bookings/$id/start',data:{'pin':pin});
+  /// DEC-10: the server checks the driver is within the pickup radius;
+  /// the current position is sent when available, otherwise the server
+  /// uses the last tracked position.
+  Future<void> arrived(String id,{double? lat,double? lng}) async =>
+      dio.post('/api/v1/bookings/$id/arrived',data:{'lat':lat,'lng':lng});
+  Future<void> start(String id,String pin,{double? lat,double? lng}) async =>
+      dio.post('/api/v1/bookings/$id/start',data:{'pin':pin,'lat':lat,'lng':lng});
   Future<void> complete(String id) async => dio.post('/api/v1/bookings/$id/complete');
 
   Future<void> noShow(String id) async => dio.post('/api/v1/bookings/$id/no-show');

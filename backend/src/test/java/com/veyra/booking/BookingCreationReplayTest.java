@@ -58,7 +58,8 @@ class BookingCreationReplayTest {
     verify(db,never()).update(anyString(),any(Object[].class));
   }
   @Test void entryPointsOwnTransactionsAndPinFailuresPersist()throws Exception{
-    for(String method:List.of("enroute","arrived"))assertNotNull(BookingController.class.getDeclaredMethod(method,UUID.class).getAnnotation(Transactional.class));
+    assertNotNull(BookingController.class.getDeclaredMethod("enroute",UUID.class).getAnnotation(Transactional.class));
+    assertNotNull(BookingController.class.getDeclaredMethod("arrived",UUID.class,BookingController.Position.class).getAnnotation(Transactional.class));
     var annotation=BookingController.class.getDeclaredMethod("start",UUID.class,BookingController.Pin.class).getAnnotation(Transactional.class);
     assertTrue(Arrays.asList(annotation.noRollbackFor()).contains(ApiException.class));
   }

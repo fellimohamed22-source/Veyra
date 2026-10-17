@@ -1,6 +1,7 @@
 package com.veyra.booking;
 import com.veyra.booking.BookingDtos.*;
 import com.veyra.commission.CommissionEngine;
+import com.veyra.config.PlatformSettings;
 import com.veyra.commission.CommissionEngine.Quote;
 import com.veyra.security.CurrentUser;
 import jakarta.validation.constraints.Pattern;
@@ -39,6 +40,7 @@ import java.util.*;
     private final com.veyra.finance.LedgerService ledger;
     private final BookingStatusHistoryService history;
     private final CommissionEngine commissions;
+    private final PlatformSettings settings;
     private final SecureRandom rnd=new SecureRandom();
     private final long minLead,maxWindow,normalClose,shortClose;
     public BookingController(JdbcTemplate d,PasswordEncoder e,com.veyra.security.PinCrypto pc,com.veyra.finance.LedgerService l,@Value("${veyra.marketplace.min-lead-minutes}")long a,@Value("${veyra.marketplace.max-offer-window-hours}")long b,@Value("${veyra.marketplace.normal-close-before-minutes}")long c,@Value("${veyra.marketplace.short-close-before-minutes}")long f,BookingStatusHistoryService h){
@@ -52,6 +54,7 @@ import java.util.*;
         shortClose=f;
         history=h;
         commissions=new CommissionEngine(d);
+        settings=new PlatformSettings(d);
     }
     @PostMapping("/scheduled-bookings") @Transactional
     ResponseEntity<Map<String,Object>> createIdempotently(@Valid@RequestBody Create r,@RequestHeader(value="Idempotency-Key",required=false) String key){
@@ -72,7 +75,7 @@ import java.util.*;
     @Transactional ResponseEntity<Map<String,Object>> create(Create r){
         UUID u=CurrentUser.id();
         long mins=Duration.between(OffsetDateTime.now(),r.scheduledAt()).toMinutes();
-        if(mins<minLead)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"LEAD_TIME_TOO_SHORT");
+        if(mins<settings.get(PlatformSettings.MIN_LEAD_MINUTES,minLead))throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"LEAD_TIME_TOO_SHORT");
         Integer activeZones=db.queryForObject("select count(*) from service_zone_versions where status='ACTIVE' and effective_from<=now() and (effective_to is null or effective_to>now())",Integer.class);
         if(activeZones!=null&&activeZones>0){
             Integer covered=db.queryForObject("select count(*) from service_zone_versions where status='ACTIVE' and effective_from<=now() and (effective_to is null or effective_to>now()) and ST_Covers(polygon::geometry,ST_SetSRID(ST_MakePoint(?,?),4326))",Integer.class,r.pickup().lng(),r.pickup().lat());
@@ -80,7 +83,7 @@ import java.util.*;
         }
         if(r.partnerId()!=null)member(r.partnerId(),u);
         if("PARTNER_INVOICE".equals(r.paymentMethod()))invoiceEligible(r.partnerId());
-        OffsetDateTime now=OffsetDateTime.now(),close=mins>=240?min(r.scheduledAt().minusMinutes(normalClose),now.plusHours(maxWindow)):r.scheduledAt().minusMinutes(shortClose);
+        OffsetDateTime now=OffsetDateTime.now(),close=mins>=240?min(r.scheduledAt().minusMinutes(settings.get(PlatformSettings.NORMAL_CLOSE_BEFORE_MINUTES,normalClose)),now.plusHours(settings.get(PlatformSettings.MAX_OFFER_WINDOW_HOURS,maxWindow))):r.scheduledAt().minusMinutes(settings.get(PlatformSettings.SHORT_CLOSE_BEFORE_MINUTES,shortClose));
         UUID id=UUID.randomUUID();
         int passengerCount=r.passengerCount()==null?1:r.passengerCount();
         int baggageCount=r.baggageCount()==null?0:r.baggageCount();
@@ -342,13 +345,23 @@ import java.util.*;
     @PostMapping("/bookings/{id}/en-route") @Transactional void enroute(@PathVariable UUID id){
         driverTransition(id,"CONFIRMED","DRIVER_EN_ROUTE",null);
     }
-    @PostMapping("/bookings/{id}/arrived") @Transactional void arrived(@PathVariable UUID id){
-        driverTransition(id,"DRIVER_EN_ROUTE","DRIVER_ARRIVED",null);
+    /** Driver position sent with "arrived"/"start" (optional: the last tracked position is used otherwise). */
+    public record Position(@jakarta.validation.constraints.DecimalMin("-90") @jakarta.validation.constraints.DecimalMax("90") Double lat,
+                           @jakarta.validation.constraints.DecimalMin("-180") @jakarta.validation.constraints.DecimalMax("180") Double lng){
     }
-    public record Pin(@Pattern(regexp="\\d{4}")String pin){
+    @PostMapping("/bookings/{id}/arrived") @Transactional void arrived(@PathVariable UUID id,@Valid@RequestBody(required=false) Position p){
+        driverTransition(id,"DRIVER_EN_ROUTE","DRIVER_ARRIVED",null,p);
+    }
+    void arrived(UUID id){
+        arrived(id,null);
+    }
+    public record Pin(@Pattern(regexp="\\d{4}")String pin,Double lat,Double lng){
+        public Pin(String pin){
+            this(pin,null,null);
+        }
     }
     @PostMapping("/bookings/{id}/start") @Transactional(noRollbackFor=ApiException.class) void start(@PathVariable UUID id,@Valid@RequestBody Pin p){
-        driverTransition(id,"DRIVER_ARRIVED","IN_PROGRESS",p.pin());
+        driverTransition(id,"DRIVER_ARRIVED","IN_PROGRESS",p.pin(),new Position(p.lat(),p.lng()));
     }
     @PostMapping("/bookings/{id}/complete") @Transactional void complete(@PathVariable UUID id){
         driverTransition(id,"IN_PROGRESS","COMPLETED",null);
@@ -384,10 +397,16 @@ import java.util.*;
         }
     }
     @Transactional void driverTransition(UUID id,String from,String to,String pin){
+        driverTransition(id,from,to,pin,null);
+    }
+    @Transactional void driverTransition(UUID id,String from,String to,String pin,Position position){
         UUID d=driver();
         Map<String,Object>b=one("select selected_driver_id,status,pin_hash,pin_failed_attempts,pin_locked_until from scheduled_bookings where id=? for update",id);
         if(!d.equals(b.get("selected_driver_id")))throw new ApiException(HttpStatus.FORBIDDEN,"NOT_SELECTED_DRIVER");
         if(!from.equals(b.get("status")))throw new ApiException(HttpStatus.CONFLICT,"INVALID_BOOKING_TRANSITION");
+        // DEC-10: "arrived" and "start" only near the pickup point. Checked
+        // before the PIN so a remote attempt never consumes PIN tries.
+        if("DRIVER_ARRIVED".equals(to)||"IN_PROGRESS".equals(to))assertAtPickup(id,d,position);
         if("IN_PROGRESS".equals(to)){
             OffsetDateTime locked=DbTime.toOffsetDateTime(b.get("pin_locked_until"));
             if(locked!=null&&locked.isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"PIN_TEMPORARILY_LOCKED");
@@ -408,6 +427,27 @@ import java.util.*;
         db.update("update scheduled_bookings set status=?,updated_at=now() where id=?",to,id);
         history.record(id,from,to,"DRIVER",CurrentUser.id(),null);
         event(id,"booking.status."+to.toLowerCase());
+    }
+    /**
+     * DEC-10 / RIDE-01: the driver must be within ride.pickup_radius_meters
+     * (default 200 m) of the pickup. Uses the position sent with the
+     * action, else the driver's last tracked position if recent enough
+     * (ride.location_max_age_seconds); no position at all is refused.
+     */
+    private void assertAtPickup(UUID bookingId,UUID driverId,Position position){
+        long radius=settings.get(PlatformSettings.PICKUP_RADIUS_METERS,200);
+        Boolean within;
+        if(position!=null&&position.lat()!=null&&position.lng()!=null){
+            within=db.queryForObject("select ST_DWithin(sb.pickup,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?) from scheduled_bookings sb where sb.id=?",
+                Boolean.class,position.lng(),position.lat(),radius,bookingId);
+        }else{
+            long maxAge=settings.get(PlatformSettings.LOCATION_MAX_AGE_SECONDS,120);
+            List<Boolean> tracked=db.queryForList("select ST_DWithin(sb.pickup,ST_SetSRID(ST_MakePoint(cdl.lng,cdl.lat),4326)::geography,?) from scheduled_bookings sb join current_driver_locations cdl on cdl.driver_id=? where sb.id=? and cdl.recorded_at>now()-make_interval(secs=>?)",
+                Boolean.class,radius,driverId,bookingId,(double)maxAge);
+            if(tracked==null||tracked.isEmpty())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"DRIVER_LOCATION_REQUIRED");
+            within=tracked.getFirst();
+        }
+        if(!Boolean.TRUE.equals(within))throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"TOO_FAR_FROM_PICKUP");
     }
     private UUID driver(){
         List<UUID>x=db.queryForList("select id from drivers where user_id=?",UUID.class,CurrentUser.id());

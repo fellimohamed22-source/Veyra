@@ -51,6 +51,8 @@ class BookingControllerOfferVisibilityOverrideTest {
     // override logic, not geofencing.
     when(db.queryForObject(contains("from service_zone_versions"), eq(Integer.class))).thenReturn(0);
     when(db.queryForList(contains("select capacity"),any(UUID.class))).thenReturn(java.util.List.of(java.util.Map.<String,Object>of("capacity",4)));
+    // No platform_settings rows: the controller falls back to its defaults.
+    lenient().when(db.queryForList(contains("from platform_settings"),eq(Long.class),any(Object[].class))).thenReturn(java.util.List.of());
   }
 
   @AfterEach

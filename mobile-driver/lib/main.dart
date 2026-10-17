@@ -146,6 +146,17 @@ Future<void> configureDriverPush() async {
 }
 
 final api=Api(const String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8080'));
+
+/// DEC-10: best-effort current position for 'arrived'/'start'; null when
+/// permission is missing or the fix times out (the server then falls
+/// back to the last tracked position).
+Future<Position?> currentPositionOrNull()async{
+  try{
+    final permission=await Geolocator.checkPermission();
+    if(permission!=LocationPermission.always&&permission!=LocationPermission.whileInUse)return null;
+    return await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:8)));
+  }catch(_){return null;}
+}
 final activeRideTracker=DriverLocationTracker(api:api);
 
 Future<void> main() async {
@@ -2350,7 +2361,7 @@ class _RideScreenState extends State<RideScreen>{
                 ],
                 if(status=='DRIVER_EN_ROUTE')
                   FilledButton.icon(
-                    onPressed:busy?null:()=>action(()=>api.arrived(widget.bookingId)),
+                    onPressed:busy?null:()=>action(()async{final p=await currentPositionOrNull();await api.arrived(widget.bookingId,lat:p?.latitude,lng:p?.longitude);}),
                     icon:const Icon(Icons.flag_outlined),
                     label:Text(t('Je suis arrivé')),
                   ),
@@ -2371,7 +2382,7 @@ class _RideScreenState extends State<RideScreen>{
                   FilledButton(
                     onPressed:busy||pin.text.length!=4
                       ?null
-                      :()=>action(()=>api.start(widget.bookingId,pin.text),startGps:true),
+                      :()=>action(()async{final p=await currentPositionOrNull();await api.start(widget.bookingId,pin.text,lat:p?.latitude,lng:p?.longitude);},startGps:true),
                     child:Text(t('Démarrer la course')),
                   ),
                   TextButton(

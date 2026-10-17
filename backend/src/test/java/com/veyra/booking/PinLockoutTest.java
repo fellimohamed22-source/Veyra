@@ -66,6 +66,11 @@ class PinLockoutTest {
   private void stubDriverLookup() {
     when(db.queryForList(eq("select id from drivers where user_id=?"), eq(UUID.class), any(Object[].class)))
         .thenReturn(List.of(driverId));
+    // At the pickup (DEC-10), so these tests exercise the PIN logic only.
+    lenient().when(db.queryForList(contains("current_driver_locations"), eq(Boolean.class), any(Object[].class)))
+        .thenReturn(List.of(true));
+    lenient().when(db.queryForList(contains("from platform_settings"), eq(Long.class), any(Object[].class)))
+        .thenReturn(List.of());
   }
 
   private void stubBookingRow(int failedAttempts, OffsetDateTime lockedUntil) {

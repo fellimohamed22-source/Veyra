@@ -12,6 +12,7 @@
 | L4 | Consentements à l'inscription : CGU et confidentialité obligatoires, marketing facultatif et non coché, journal append-only avec version des textes ; `GET/POST /me/consents` | V040 `user_consents` | CONSENT_REQUIRED, widget Flutter |
 | — | Test sur vraie base : le paiement capturé du jeu de données porte maintenant son PSP (`backend-ci` était déjà rouge sur `b1e3c95`) | — | 41 tests sur PostgreSQL et PostGIS |
 | L6 | **Moteur de commission V4** (DEC-01 A, DEC-02, DEC-03) : règles en base par portée USER > PARTNER > PARTNER_CATEGORY > PROFILE > STANDARD, pourcentage + fixe + plancher/plafond, dates d'effet, versions immuables ; API admin `/admin/commission-rules` (liste, création avec contrôle de conflit, désactivation, **simulation**), audit avant/après + justification ; aperçu du prix client pour le chauffeur (`GET /driver/opportunities/{id}/quote`) ; suppression des 600 bps en dur | V041 (barème initial : STANDARD 10 %, PROFILE PARTNER 6 %) | COM-01..04, arrondi, fixe, bornes, priorité vérifiée sur PostgreSQL |
+| L8 | **Contrôle GPS** (DEC-10) : « Arrivé » et « Démarrer » refusés à plus de `ride.pickup_radius_meters` (200 m) du point de prise en charge, avant toute tentative de PIN ; position envoyée par l'app, sinon dernière position suivie récente ; **paramètres plateforme en base** (DEC-09) : délai minimum 120 min, fenêtre d'offres, rayon, âge max de position ; API `/admin/settings` auditée | V042 `platform_settings` | RIDE-01, 41 tests sur PostGIS |
 
 Rollback : chaque migration documente son `DROP` dans son en-tête.
 

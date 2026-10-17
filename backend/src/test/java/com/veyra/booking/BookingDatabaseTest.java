@@ -80,16 +80,16 @@ class BookingDatabaseTest {
   }
   @Test void failedPinCommitsAttemptsAndLockButDoesNotAdvanceRide() {
     for(int i=1;i<=5;i++) {
-      assertThrows(ApiException.class,()->controller.start(booking,new BookingController.Pin("9999")));
+      assertThrows(ApiException.class,()->controller.start(booking,new BookingController.Pin("9999",48.0,2.0)));
       assertEquals(i,db.queryForObject("select pin_failed_attempts from scheduled_bookings where id=?",Integer.class,booking));
     }
     assertEquals("PIN_TEMPORARILY_LOCKED",assertThrows(ApiException.class,
-        ()->controller.start(booking,new BookingController.Pin("0427"))).code());
+        ()->controller.start(booking,new BookingController.Pin("0427",48.0,2.0))).code());
     assertEquals("DRIVER_ARRIVED",status());
     assertEquals(0,count("booking_status_history"));
   }
   @Test void competingStartsAdvanceOnlyOnce() throws Exception {
-    assertEquals(List.of("OK","INVALID_BOOKING_TRANSITION"),race(()->controller.start(booking,new BookingController.Pin("0427"))));
+    assertEquals(List.of("OK","INVALID_BOOKING_TRANSITION"),race(()->controller.start(booking,new BookingController.Pin("0427",48.0,2.0))));
     assertEquals("IN_PROGRESS",status());
     assertEquals(1,count("booking_status_history"));
   }
@@ -149,10 +149,10 @@ class BookingDatabaseTest {
   @Test void onlineStartRequiresCapturedPaymentInDatabase() {
     db.update("update scheduled_bookings set payment_method='ONLINE' where id=?",booking);
     assertEquals("PAYMENT_REQUIRED",assertThrows(ApiException.class,
-        ()->controller.start(booking,new BookingController.Pin("0427"))).code());
+        ()->controller.start(booking,new BookingController.Pin("0427",48.0,2.0))).code());
     assertEquals("DRIVER_ARRIVED",status());
     db.update("insert into payments(booking_id,payer_user_id,amount_minor,currency,method,status,idempotency_key) values (?,?,11000,'EUR','ONLINE','CAPTURED',?)",booking,user,booking.toString());
-    controller.start(booking,new BookingController.Pin("0427"));
+    controller.start(booking,new BookingController.Pin("0427",48.0,2.0));
     assertEquals("IN_PROGRESS",status());
     assertEquals(1,count("booking_status_history"));
   }
@@ -283,8 +283,8 @@ class BookingDatabaseTest {
     assertEquals(1,count("booking_financial_snapshots"));
     String encrypted=db.queryForObject("select pin_encrypted from scheduled_bookings where id=?",String.class,booking);
     String pin=new PinCrypto("test-only-key").decrypt(encrypted);
-    controller.enroute(booking); controller.arrived(booking);
-    controller.start(booking,new BookingController.Pin(pin)); controller.complete(booking);
+    controller.enroute(booking); controller.arrived(booking,new BookingController.Position(48.0,2.0));
+    controller.start(booking,new BookingController.Pin(pin,48.0,2.0)); controller.complete(booking);
     assertEquals("COMPLETED",status());
     assertEquals(5,count("booking_status_history"));
     assertEquals(1,count("ledger_transactions"));
