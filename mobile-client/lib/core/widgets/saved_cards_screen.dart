@@ -20,7 +20,8 @@ class SavedCardsScreen extends StatefulWidget {
 class _SavedCardsScreenState extends State<SavedCardsScreen> {
   late Future<List<dynamic>> cards = widget.load();
 
-  void reload() => setState(() => cards = widget.load());
+  // Block body: a setState callback must not return the Future it assigns.
+  void reload() => setState(() { cards = widget.load(); });
 
   Future<void> confirmRemove(Map card) async {
     final ok = await showDialog<bool>(
