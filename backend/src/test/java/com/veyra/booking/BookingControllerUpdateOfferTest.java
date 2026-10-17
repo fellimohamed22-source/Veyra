@@ -72,6 +72,13 @@ class BookingControllerUpdateOfferTest {
         .thenReturn(List.of(row));
   }
 
+  private final UUID policyId = UUID.randomUUID();
+
+  private void stubStandardPolicy(int bps) {
+    when(db.queryForList(contains("from commission_policy_versions"), (Object) isNull(), (Object) isNull()))
+        .thenReturn(List.of(Map.of("id", policyId, "commission_bps", bps)));
+  }
+
   @Test
   void adjustingSupersedesTheOldOfferAndInsertsANewOneRatherThanOverwriting() {
     // History explicitly requested by the user: this used to be a
@@ -90,19 +97,22 @@ class BookingControllerUpdateOfferTest {
     when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(UUID.class), eq(bookingId), eq(driverId)))
         .thenReturn(List.of(oldOfferId));
     when(db.queryForObject(contains("offer_visibility_mode"), eq(String.class), eq(bookingId))).thenReturn("PRIVATE");
+    stubStandardPolicy(1000);
 
     Map<String, Object> result = controller().updateOffer(bookingId, new BookingDtos.Offer(5500, "EUR"));
 
     verify(db).update(contains("set status='SUPERSEDED' where booking_id=? and driver_id=? and status='ACTIVE'"), eq(bookingId), eq(driverId));
 
+    // The revised offer carries its own frozen commission snapshot.
     ArgumentCaptor<UUID> newIdCaptor = ArgumentCaptor.forClass(UUID.class);
     verify(db).update(
-        contains("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,?,?,'ACTIVE',?)"),
-        newIdCaptor.capture(), eq(bookingId), eq(driverId), eq(5500L), eq("EUR"), any());
+        contains("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at,commission_policy_id,commission_rate_bps,commission_minor,customer_total_minor)"),
+        newIdCaptor.capture(), eq(bookingId), eq(driverId), eq(5500L), eq("EUR"), any(), eq(policyId), eq(1000), eq(550L), eq(6050L));
 
     UUID newOfferId = newIdCaptor.getValue();
     assertNotEquals(oldOfferId, newOfferId);
     assertEquals(newOfferId, result.get("offerId"));
+    assertEquals(6050L, result.get("customerTotalMinor"));
   }
 
   @Test
@@ -151,6 +161,7 @@ class BookingControllerUpdateOfferTest {
         .thenReturn(List.of(oldOfferId));
     when(db.queryForObject(contains("offer_visibility_mode"), eq(String.class), eq(bookingId))).thenReturn("BEST_VISIBLE");
     when(db.queryForObject(contains("min(proposed_amount_minor)"), eq(Long.class), eq(bookingId), eq(driverId))).thenReturn(4200L);
+    stubStandardPolicy(1000);
 
     Map<String, Object> result = controller().updateOffer(bookingId, new BookingDtos.Offer(5500, "EUR"));
 

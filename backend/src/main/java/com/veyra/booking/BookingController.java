@@ -161,7 +161,7 @@ import java.util.*;
     @PostMapping("/driver/opportunities/{bookingId}/offers") @Transactional ResponseEntity<Map<String,Object>> offer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
         UUID d=driver();
         eligible(d);
-        Map<String,Object>b=one("select status,offer_window_ends_at,scheduled_at from scheduled_bookings where id=? for update",bookingId);
+        Map<String,Object>b=one("select status,offer_window_ends_at,scheduled_at,partner_id from scheduled_bookings where id=? for update",bookingId);
             if(!Set.of("OPEN_FOR_OFFERS",
         "OFFERS_RECEIVED").contains(b.get("status"))||DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         Integer exists=db.queryForObject("select count(*) from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",Integer.class,bookingId,d);
@@ -177,7 +177,8 @@ import java.util.*;
             }
         }
         UUID id=UUID.randomUUID();
-        db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,?,?,'ACTIVE',?)",id,bookingId,d,r.amountMinor(),r.currency(),b.get("offer_window_ends_at"));
+        Quote q=quote((UUID)b.get("partner_id"),r.amountMinor());
+        insertOffer(id,bookingId,d,r,q,b.get("offer_window_ends_at"));
         int transitioned=db.update("update scheduled_bookings set status='OFFERS_RECEIVED',updated_at=now() where id=? and status='OPEN_FOR_OFFERS'",bookingId);
         // The UPDATE above is conditional (WHERE status='OPEN_FOR_OFFERS')
         // -- only the FIRST offer on a booking actually causes this
@@ -186,6 +187,7 @@ import java.util.*;
         if(transitioned>0)history.record(bookingId,"OPEN_FOR_OFFERS","OFFERS_RECEIVED","DRIVER",CurrentUser.id(),null);
         event(bookingId,"offer.created");
         Map<String,Object>response=new HashMap<>(Map.of("offerId",id));
+        q.putInto(response);
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
         if("BEST_VISIBLE".equals(visibilityMode)){
             // Business rule: the driver may only see the current lowest
@@ -224,14 +226,18 @@ import java.util.*;
     // was revised).
     @PatchMapping("/driver/opportunities/{bookingId}/offers") @Transactional Map<String,Object> updateOffer(@PathVariable UUID bookingId,@Valid@RequestBody Offer r){
         UUID d=driver();
-        Map<String,Object>b=one("select status,offer_window_ends_at from scheduled_bookings where id=? for update",bookingId);
+        Map<String,Object>b=one("select status,offer_window_ends_at,partner_id from scheduled_bookings where id=? for update",bookingId);
         if(!Set.of("OPEN_FOR_OFFERS","OFFERS_RECEIVED").contains(b.get("status"))||DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         List<UUID> offerIds=db.queryForList("select id from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",UUID.class,bookingId,d);
         if(offerIds.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"NO_ACTIVE_OFFER");
         db.update("update driver_offers set status='SUPERSEDED' where booking_id=? and driver_id=? and status='ACTIVE'",bookingId,d);
         UUID newOfferId=UUID.randomUUID();
-        db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at) values (?,?,?,?,?,'ACTIVE',?)",newOfferId,bookingId,d,r.amountMinor(),r.currency(),b.get("offer_window_ends_at"));
+        // A revised price is a new publication: its commission is frozen
+        // now, like any new offer, and never retro-applied to the old row.
+        Quote q=quote((UUID)b.get("partner_id"),r.amountMinor());
+        insertOffer(newOfferId,bookingId,d,r,q,b.get("offer_window_ends_at"));
         Map<String,Object>response=new HashMap<>(Map.of("offerId",newOfferId));
+        q.putInto(response);
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
         if("BEST_VISIBLE".equals(visibilityMode)){
             Long bestOthers=db.queryForObject("select min(proposed_amount_minor) from driver_offers where booking_id=? and status='ACTIVE' and expires_at>now() and driver_id<>?",Long.class,bookingId,d);
@@ -242,11 +248,12 @@ import java.util.*;
     @GetMapping("/scheduled-bookings/{bookingId}/offers") List<Map<String,Object>> ownerOffers(@PathVariable UUID bookingId){
         Map<String,Object>b=one("select creator_user_id,partner_id from scheduled_bookings where id=?",bookingId);
         owner(b);
-        int rate=rate((UUID)b.get("partner_id"));
-            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id join scheduled_bookings sb on sb.id=o.booking_id join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' and o.expires_at>now() and sb.offer_window_ends_at>now() and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true order by o.proposed_amount_minor,o.id",(rs,
+        UUID partnerId=(UUID)b.get("partner_id");
+            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.commission_policy_id,o.commission_rate_bps,o.commission_minor,o.customer_total_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id join scheduled_bookings sb on sb.id=o.booking_id join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' and o.expires_at>now() and sb.offer_window_ends_at>now() and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true order by o.proposed_amount_minor,o.id",(rs,
             n)->{
-                long p=rs.getLong("proposed_amount_minor"),commissionAmount=commission(p,
-                rate);
+                long p=rs.getLong("proposed_amount_minor");
+                Quote q=frozenOrQuote(partnerId,p,(UUID)rs.getObject("commission_policy_id"),(Integer)rs.getObject("commission_rate_bps"),(Long)rs.getObject("commission_minor"),(Long)rs.getObject("customer_total_minor"));
+                long commissionAmount=q.commissionMinor();
                 Map<String,Object>result=new LinkedHashMap<>();
                 result.put("offerId",
                 rs.getObject("id",
@@ -259,7 +266,7 @@ import java.util.*;
                 result.put("commissionMinor",
                 commissionAmount);
                 result.put("totalMinor",
-                p+commissionAmount);
+                q.totalMinor());
                 result.put("currency",
                 rs.getString("currency"));
                 result.put("rating",
@@ -288,7 +295,7 @@ import java.util.*;
         owner(b);
             if(!Set.of("OPEN_FOR_OFFERS",
         "OFFERS_RECEIVED").contains(b.get("status")))throw new ApiException(HttpStatus.CONFLICT,"BOOKING_CLOSED");
-        Map<String,Object>o=one("select driver_id,proposed_amount_minor,currency,status,expires_at from driver_offers where id=? and booking_id=? for update",offerId,bookingId);
+        Map<String,Object>o=one("select driver_id,proposed_amount_minor,commission_policy_id,commission_rate_bps,commission_minor,customer_total_minor,currency,status,expires_at from driver_offers where id=? and booking_id=? for update",offerId,bookingId);
         if(!"ACTIVE".equals(o.get("status")))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         if(o.get("expires_at")==null||!DbTime.toOffsetDateTime(o.get("expires_at")).isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         if(b.get("offer_window_ends_at")!=null&&!DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isAfter(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
@@ -301,8 +308,11 @@ import java.util.*;
         Integer vehicles=db.queryForObject("select count(*) from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED'",Integer.class,bookingId,d);
         if(vehicles==null||vehicles==0)throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         conflict(d,DbTime.toOffsetDateTime(b.get("scheduled_at")));
-        int rate=rate((UUID)b.get("partner_id"));
-        long p=((Number)o.get("proposed_amount_minor")).longValue(),c=commission(p,rate),total=p+c;
+        // The client confirms exactly the price displayed: the commission
+        // frozen on the offer when it was submitted, never today's rate.
+        long p=((Number)o.get("proposed_amount_minor")).longValue();
+        Quote q=frozenOrQuote((UUID)b.get("partner_id"),p,(UUID)o.get("commission_policy_id"),toInteger(o.get("commission_rate_bps")),toLong(o.get("commission_minor")),toLong(o.get("customer_total_minor")));
+        long c=q.commissionMinor(),total=q.totalMinor();
         if("PARTNER_INVOICE".equals(b.get("payment_method"))){
             UUID partnerId=(UUID)b.get("partner_id");
             Map<String,Object>credit=one("select po.credit_limit_minor,coalesce(pia.outstanding_minor,0) outstanding_minor,po.credit_status,pia.status from partner_organizations po join partner_invoice_accounts pia on pia.partner_id=po.id where po.id=? for update",partnerId);
@@ -313,8 +323,7 @@ import java.util.*;
         String pin=String.format("%04d",rnd.nextInt(10000));
         db.update("update driver_offers set status=case when id=? then 'ACCEPTED' else 'REJECTED_BY_SELECTION' end where booking_id=? and status='ACTIVE'",offerId,bookingId);
         db.update("update scheduled_bookings set selected_offer_id=?,selected_driver_id=?,pin_hash=?,pin_encrypted=?,status='CONFIRMED',updated_at=now() where id=?",offerId,d,enc.encode(pin),pinCrypto.encrypt(pin),bookingId);
-        UUID policy=db.queryForObject("select id from commission_policy_versions where status='ACTIVE' and ((?::uuid is not null and scope_type='PARTNER' and partner_id=?) or scope_type='STANDARD') order by case when scope_type='PARTNER' then 0 else 1 end,version_no desc limit 1",UUID.class,b.get("partner_id"),b.get("partner_id"));
-        db.update("insert into booking_financial_snapshots values (?,?,?,?,?,?,?,?,?,?)",bookingId,offerId,policy,rate,p,c,total,p,o.get("currency"),b.get("payment_method"));
+        db.update("insert into booking_financial_snapshots(booking_id,offer_id,commission_policy_id,commission_rate_bps,driver_proposed_amount_minor,platform_commission_amount_minor,customer_total_amount_minor,driver_net_amount_minor,currency,payment_method) values (?,?,?,?,?,?,?,?,?,?)",bookingId,offerId,q.policyId(),q.rateBps(),p,c,total,p,o.get("currency"),b.get("payment_method"));
         history.record(bookingId,(String)b.get("status"),"CONFIRMED",b.get("partner_id")!=null?"PARTNER":"CLIENT",CurrentUser.id(),null);
         event(bookingId,"booking.confirmed");
         return Map.of("bookingId",bookingId,"status","CONFIRMED","driverId",d,"driverNetMinor",p,"commissionMinor",c,"totalMinor",total,"currency",o.get("currency"));
@@ -420,15 +429,42 @@ import java.util.*;
         Integer n=db.queryForObject("select count(*) from partner_organizations po join partner_invoice_accounts pia on pia.partner_id=po.id where po.id=? and po.status='APPROVED' and po.credit_status='APPROVED' and pia.status='ACTIVE' and pia.outstanding_minor<po.credit_limit_minor",Integer.class,p);
         if(n==0)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"PARTNER_INVOICE_NOT_ELIGIBLE");
     }
-    private int rate(UUID p){
-        if(p!=null){
-            List<Integer>x=db.queryForList("select commission_bps from commission_policy_versions where status='ACTIVE' and scope_type='PARTNER' and partner_id=? order by version_no desc limit 1",Integer.class,p);
-            if(!x.isEmpty())return x.getFirst();
+    /**
+     * Commission frozen on an offer. Formula unchanged from V3 (driver
+     * price + commission on the driver price, HALF_UP to the minor unit);
+     * method A/B arbitration (DEC-01) is still open and deliberately not
+     * decided here.
+     */
+    record Quote(UUID policyId,int rateBps,long commissionMinor,long totalMinor){
+        void putInto(Map<String,Object> m){
+            m.put("commissionRateBps",rateBps);
+            m.put("commissionMinor",commissionMinor);
+            m.put("customerTotalMinor",totalMinor);
         }
-        return db.queryForObject("select commission_bps from commission_policy_versions where status='ACTIVE' and scope_type='STANDARD' order by version_no desc limit 1",Integer.class);
     }
-    private long commission(long p,int r){
+    /** Active policy for the booking account: partner override, else standard -- one query, so rate and policy id always match. */
+    private Quote quote(UUID partnerId,long driverPriceMinor){
+        Map<String,Object>policy=one("select id,commission_bps from commission_policy_versions where status='ACTIVE' and ((?::uuid is not null and scope_type='PARTNER' and partner_id=?) or scope_type='STANDARD') order by case when scope_type='PARTNER' then 0 else 1 end,version_no desc limit 1",partnerId,partnerId);
+        int bps=((Number)policy.get("commission_bps")).intValue();
+        long c=commission(driverPriceMinor,bps);
+        return new Quote((UUID)policy.get("id"),bps,c,Math.addExact(driverPriceMinor,c));
+    }
+    /** Frozen snapshot when present; legacy offers created before V038 fall back to the active policy. */
+    private Quote frozenOrQuote(UUID partnerId,long driverPriceMinor,UUID policyId,Integer bps,Long commissionMinor,Long totalMinor){
+        if(policyId!=null&&bps!=null&&commissionMinor!=null&&totalMinor!=null)return new Quote(policyId,bps,commissionMinor,totalMinor);
+        return quote(partnerId,driverPriceMinor);
+    }
+    private void insertOffer(UUID id,UUID bookingId,UUID driverId,Offer r,Quote q,Object expiresAt){
+        db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at,commission_policy_id,commission_rate_bps,commission_minor,customer_total_minor) values (?,?,?,?,?,'ACTIVE',?,?,?,?,?)",id,bookingId,driverId,r.amountMinor(),r.currency(),expiresAt,q.policyId(),q.rateBps(),q.commissionMinor(),q.totalMinor());
+    }
+    static long commission(long p,int r){
         return BigDecimal.valueOf(p).multiply(BigDecimal.valueOf(r)).divide(BigDecimal.valueOf(10000),0,RoundingMode.HALF_UP).longValue();
+    }
+    private static Integer toInteger(Object v){
+        return v==null?null:((Number)v).intValue();
+    }
+    private static Long toLong(Object v){
+        return v==null?null:((Number)v).longValue();
     }
     private Map<String,Object> one(String q,Object...a){
         List<Map<String,Object>>x=db.queryForList(q,a);
