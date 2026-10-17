@@ -30,7 +30,7 @@ import java.util.*;
         // /auth/refresh, jamais détecté par le test existant parce qu'il
         // mocke JdbcTemplate avec un vrai String Java, contournant
         // exactement le comportement du vrai driver PostgreSQL.
-        List<Map<String,Object>>x=db.queryForList("select s.id,s.user_id,u.email::text as email from user_sessions s join users u on u.id=s.user_id where s.refresh_token_hash=? and s.revoked_at is null and s.expires_at>now() for update",h);
+        List<Map<String,Object>>x=db.queryForList("select s.id,s.user_id,u.email::text as email from user_sessions s join users u on u.id=s.user_id where s.refresh_token_hash=? and s.revoked_at is null and u.status='ACTIVE' and s.expires_at>now() for update",h);
         if(x.isEmpty())throw new ApiException(HttpStatus.UNAUTHORIZED,"INVALID_REFRESH_TOKEN");
         Map<String,Object>s=x.getFirst();
         db.update("update user_sessions set revoked_at=now() where id=?",s.get("id"));

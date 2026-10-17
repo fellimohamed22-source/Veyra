@@ -21,17 +21,20 @@ public class AuthController {
   private final PasswordEncoder encoder;
   private final JwtService jwt;
   private final JdbcTemplate db;
+  private final String firebaseProjectId;
   private final SecureRandom random=new SecureRandom();
 
   public AuthController(
       UserRepository users,
       PasswordEncoder encoder,
       JwtService jwt,
-      JdbcTemplate db){
+      JdbcTemplate db,
+      @org.springframework.beans.factory.annotation.Value("${veyra.firebase.project-id}") String firebaseProjectId){
     this.users=users;
     this.encoder=encoder;
     this.jwt=jwt;
     this.db=db;
+    this.firebaseProjectId=firebaseProjectId==null?"":firebaseProjectId.trim();
   }
 
   public record Register(
@@ -102,11 +105,27 @@ public class AuthController {
     if(firebaseUid.isEmpty())throw new ApiException(HttpStatus.UNAUTHORIZED,"FIREBASE_TOKEN_INVALID");
     String provider=Objects.toString(claims.get("provider"),"").trim();
     String email=Objects.toString(claims.get("email"),"").trim().toLowerCase(Locale.ROOT);
+    boolean emailVerified=Boolean.TRUE.equals(claims.get("email_verified"));
     String phone=Objects.toString(claims.get("phone_number"),"").trim();
+    // A phone_number claim is only proven by Firebase when the sign-in
+    // itself was an SMS verification; other providers may carry an
+    // unverified, user-supplied number.
+    boolean phoneVerified="phone".equals(provider)&&!phone.isEmpty();
     String role=request.role()==null?"CLIENT":request.role();
     User user=null;
-    if(!email.isEmpty())user=users.findByEmailIgnoreCase(email).orElse(null);
-    if(user==null&&!phone.isEmpty()){
+    List<UUID> bound=db.queryForList("select id from users where firebase_uid=?",UUID.class,firebaseUid);
+    if(!bound.isEmpty())user=users.findById(bound.getFirst()).orElse(null);
+    if(user==null&&!email.isEmpty()){
+      User byEmail=users.findByEmailIgnoreCase(email).orElse(null);
+      if(byEmail!=null){
+        // Linking an existing VEYRA account to a Firebase identity is only
+        // safe when Firebase has proven ownership of that email; otherwise
+        // anyone could register the victim's address on Firebase first.
+        if(!emailVerified)throw new ApiException(HttpStatus.CONFLICT,"FIREBASE_EMAIL_NOT_VERIFIED");
+        user=byEmail;
+      }
+    }
+    if(user==null&&phoneVerified){
       List<UUID> ids=db.queryForList("select id from users where phone=?",UUID.class,phone);
       if(!ids.isEmpty())user=users.findById(ids.getFirst()).orElse(null);
     }
@@ -115,8 +134,12 @@ public class AuthController {
       String name=Objects.toString(claims.get("name"),role.equals("DRIVER")?"Chauffeur Veyra":"Client Veyra").trim();
       if(name.isEmpty())name=role.equals("DRIVER")?"Chauffeur Veyra":"Client Veyra";
       user=users.save(new User(name,null,email,encoder.encode(UUID.randomUUID().toString()+UUID.randomUUID())));
-      if(!phone.isEmpty())db.update("update users set phone=? where id=?",phone,user.id());
+      if(phoneVerified)db.update("update users set phone=? where id=?",phone,user.id());
     }
+    if(!"ACTIVE".equals(user.status()))throw new ApiException(HttpStatus.FORBIDDEN,"ACCOUNT_NOT_ACTIVE");
+    // Bind only an unbound account: a row already bound to another uid is
+    // never re-pointed (unique index enforces one account per identity).
+    db.update("update users set firebase_uid=? where id=? and firebase_uid is null",firebaseUid,user.id());
     db.update("insert into user_roles(user_id,role_id) select ?,id from roles where code=? on conflict do nothing",user.id(),role);
     if("DRIVER".equals(role)){
       Integer count=db.queryForObject("select count(*) from drivers where user_id=?",Integer.class,user.id());
@@ -126,7 +149,7 @@ public class AuthController {
   }
 
   @SuppressWarnings("unchecked")
-  private Map<String,Object> verifyFirebaseIdToken(String idToken){
+  Map<String,Object> verifyFirebaseIdToken(String idToken){
     try{
       String[] parts=idToken.split("\\.");
       if(parts.length!=3)throw new ApiException(HttpStatus.UNAUTHORIZED,"FIREBASE_TOKEN_INVALID");
@@ -151,18 +174,33 @@ public class AuthController {
       signature.update((parts[0]+"."+parts[1]).getBytes(StandardCharsets.UTF_8));
       if(!signature.verify(Base64.getUrlDecoder().decode(parts[2])))throw new ApiException(HttpStatus.UNAUTHORIZED,"FIREBASE_TOKEN_INVALID");
       Map<String,Object> claims=new com.fasterxml.jackson.databind.ObjectMapper().readValue(Base64.getUrlDecoder().decode(parts[1]),Map.class);
-      long now=System.currentTimeMillis()/1000L;
-      long exp=((Number)claims.getOrDefault("exp",0)).longValue();
-      long iat=((Number)claims.getOrDefault("iat",0)).longValue();
-      String aud=Objects.toString(claims.get("aud"),"");
-      String iss=Objects.toString(claims.get("iss"),"");
-      String project=iss.startsWith("https://securetoken.google.com/")?iss.substring("https://securetoken.google.com/".length()):"";
-      if(project.isEmpty()||!project.equals(aud)||exp<=now||iat>now+60)throw new ApiException(HttpStatus.UNAUTHORIZED,"FIREBASE_TOKEN_INVALID");
-      Object firebase=claims.get("firebase");
-      if(firebase instanceof Map<?,?> fm)claims.put("provider",Objects.toString(fm.get("sign_in_provider"),"firebase"));
+      validateFirebaseClaims(claims,firebaseProjectId,System.currentTimeMillis()/1000L);
       return claims;
     }catch(ApiException e){throw e;}
     catch(Exception e){throw new ApiException(HttpStatus.UNAUTHORIZED,"FIREBASE_TOKEN_INVALID");}
+  }
+
+  /**
+   * Firebase ID token claim checks (signature is verified separately).
+   * The token must have been minted for VEYRA's own Firebase project: a
+   * Google-signed token from any other project is equally well signed,
+   * so comparing aud with iss alone accepted tokens from projects an
+   * attacker controls.
+   */
+  static void validateFirebaseClaims(Map<String,Object> claims,String expectedProjectId,long nowEpochSeconds){
+    if(expectedProjectId==null||expectedProjectId.isBlank())throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,"FIREBASE_NOT_CONFIGURED");
+    long exp=((Number)claims.getOrDefault("exp",0)).longValue();
+    long iat=((Number)claims.getOrDefault("iat",0)).longValue();
+    String aud=Objects.toString(claims.get("aud"),"");
+    String iss=Objects.toString(claims.get("iss"),"");
+    String sub=Objects.toString(claims.get("sub"),"");
+    if(!expectedProjectId.equals(aud)
+        ||!("https://securetoken.google.com/"+expectedProjectId).equals(iss)
+        ||sub.isEmpty()||sub.length()>128
+        ||exp<=nowEpochSeconds||iat>nowEpochSeconds+60)
+      throw new ApiException(HttpStatus.UNAUTHORIZED,"FIREBASE_TOKEN_INVALID");
+    Object firebase=claims.get("firebase");
+    if(firebase instanceof Map<?,?> fm)claims.put("provider",Objects.toString(fm.get("sign_in_provider"),"firebase"));
   }
 
   @PostMapping("/login")

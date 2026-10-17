@@ -43,6 +43,19 @@ veyra:
 
   firebase:
     enabled: ${FIREBASE_ENABLED:false}
+    # Projet Firebase dont les ID tokens sont acceptés par /auth/firebase.
+    # Identifiant public (présent dans google-services.json), pas un secret.
+    project-id: ${FIREBASE_PROJECT_ID:veyra-4806a}
+
+  security:
+    # true uniquement en développement local : autorise les valeurs par
+    # défaut publiques de JWT_SECRET / PIN_ENCRYPTION_KEY ci-dessus.
+    allow-dev-secrets: ${VEYRA_ALLOW_DEV_SECRETS:false}
+
+  test-accounts:
+    # false en production : suspend les comptes de test des migrations
+    # V029/V030/V034 (mots de passe publics). Voir TestAccountsGuard.
+    enabled: ${VEYRA_TEST_ACCOUNTS_ENABLED:true}
     credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
 
   bootstrap-admin:

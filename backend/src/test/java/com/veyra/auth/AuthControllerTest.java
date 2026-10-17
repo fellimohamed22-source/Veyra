@@ -47,7 +47,7 @@ class AuthControllerTest {
   }
 
   private AuthController controller() {
-    return new AuthController(users, encoder, jwt, db);
+    return new AuthController(users, encoder, jwt, db, "veyra-4806a");
   }
 
   @Test
