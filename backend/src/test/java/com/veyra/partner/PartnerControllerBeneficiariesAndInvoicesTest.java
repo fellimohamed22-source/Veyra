@@ -77,17 +77,32 @@ class PartnerControllerBeneficiariesAndInvoicesTest {
     verify(db).queryForList(contains("where partner_id=?"), eq(partnerId));
   }
 
+  private void stubFinanceMember(int count) {
+    when(db.queryForObject(contains("partner_role in"),
+        eq(Integer.class), eq(partnerId), eq(userId), eq("PARTNER_FINANCE"), eq("PARTNER_OWNER"))).thenReturn(count);
+  }
+
   @Test
   void invoicesRejectsNonMembers() {
-    when(db.queryForObject(contains("from partner_users where partner_id=? and user_id=? and status='ACTIVE'"),
-        eq(Integer.class), eq(partnerId), eq(userId))).thenReturn(0);
+    stubFinanceMember(0);
 
     assertThrows(AccessDeniedException.class, () -> controller().invoices(partnerId));
   }
 
   @Test
+  void receptionStaffCannotReadInvoicesOrFinance() {
+    // An active PARTNER_STAFF member: the role-scoped count is 0, so both
+    // finance endpoints are denied even though plain membership holds.
+    stubFinanceMember(0);
+
+    assertThrows(AccessDeniedException.class, () -> controller().invoices(partnerId));
+    assertThrows(AccessDeniedException.class, () -> controller().finance(partnerId));
+    verify(db, never()).queryForList(contains("from partner_invoices"), any(Object[].class));
+  }
+
+  @Test
   void invoicesReturnsTheListScopedToThatPartnerOnly() {
-    stubActiveMember();
+    stubFinanceMember(1);
     when(db.queryForList(contains("from partner_invoices pi where pi.partner_id=?"), eq(partnerId)))
         .thenReturn(List.of(Map.of("id", UUID.randomUUID(), "status", "ISSUED")));
 

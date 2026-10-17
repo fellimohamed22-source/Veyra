@@ -1,6 +1,8 @@
 package com.veyra.partner;
 
 import com.veyra.security.CurrentUser;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,12 +19,23 @@ public class PartnerController {
     this.db=db;
   }
 
-  public record Org(String name,String partnerType,String billingEmail){}
-  public record Guest(String fullName,String phone,String email,String externalReference){}
+  // Sizes mirror the V001 columns so bad input is a 400, not a SQL error.
+  public record Org(
+      @NotBlank @Size(max=180) String name,
+      @NotBlank @Pattern(regexp="[A-Z_]{2,40}") String partnerType,
+      @Email @Size(max=254) String billingEmail){}
+  public record Guest(
+      @NotBlank @Size(max=180) String fullName,
+      @Size(max=32) @Pattern(regexp="\\+?[0-9 .()-]{6,32}") String phone,
+      @Email @Size(max=254) String email,
+      @Size(max=100) String externalReference){}
+
+  /** Spec §05: invoices and finance belong to the owner and accounting, not to reception staff. */
+  static final Set<String> FINANCE_ROLES=Set.of("PARTNER_OWNER","PARTNER_FINANCE");
 
   @PostMapping("/organizations")
   @Transactional
-  public ResponseEntity<Map<String,UUID>> createOrganization(@RequestBody Org request){
+  public ResponseEntity<Map<String,UUID>> createOrganization(@Valid @RequestBody Org request){
     UUID partnerId=UUID.randomUUID();
     db.update(
       "insert into partner_organizations(id,name,partner_type,status,billing_email) values (?,?,?,'SUBMITTED',?)",
@@ -56,7 +69,7 @@ public class PartnerController {
   @PostMapping("/{partnerId}/beneficiaries")
   public ResponseEntity<Map<String,UUID>> createBeneficiary(
       @PathVariable UUID partnerId,
-      @RequestBody Guest request){
+      @Valid @RequestBody Guest request){
     member(partnerId);
     UUID id=UUID.randomUUID();
     db.update(
@@ -87,7 +100,7 @@ public class PartnerController {
   // endpoint here.
   @GetMapping("/{partnerId}/invoices")
   public List<Map<String,Object>> invoices(@PathVariable UUID partnerId){
-    member(partnerId);
+    memberWithRole(partnerId,FINANCE_ROLES);
     return db.queryForList(
       "select pi.id,pi.period_start,pi.period_end,pi.total_minor,pi.currency,pi.status,pi.due_at,pi.created_at," +
       "(select count(*) from partner_invoice_items pii where pii.invoice_id=pi.id) as items_count " +
@@ -97,7 +110,7 @@ public class PartnerController {
 
   @GetMapping("/{partnerId}/finance")
   public Map<String,Object> finance(@PathVariable UUID partnerId){
-    member(partnerId);
+    memberWithRole(partnerId,FINANCE_ROLES);
     return db.queryForMap(
       "select po.credit_status,po.credit_limit_minor," +
       "coalesce(pia.outstanding_minor,0) outstanding_minor," +
@@ -113,6 +126,18 @@ public class PartnerController {
     Integer count=db.queryForObject(
       "select count(*) from partner_users where partner_id=? and user_id=? and status='ACTIVE'",
       Integer.class,partnerId,CurrentUser.id());
+    if(count==null||count==0){
+      throw new org.springframework.security.access.AccessDeniedException("partner");
+    }
+  }
+
+  private void memberWithRole(UUID partnerId,Set<String> roles){
+    String in=String.join(",",roles.stream().map(r->"?").toList());
+    List<Object> args=new ArrayList<>(List.of(partnerId,CurrentUser.id()));
+    args.addAll(roles.stream().sorted().toList());
+    Integer count=db.queryForObject(
+      "select count(*) from partner_users where partner_id=? and user_id=? and status='ACTIVE' and partner_role in ("+in+")",
+      Integer.class,args.toArray());
     if(count==null||count==0){
       throw new org.springframework.security.access.AccessDeniedException("partner");
     }
