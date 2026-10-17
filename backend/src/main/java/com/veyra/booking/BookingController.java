@@ -80,9 +80,12 @@ import java.util.*;
         UUID id=UUID.randomUUID();
         int passengerCount=r.passengerCount()==null?1:r.passengerCount();
         int baggageCount=r.baggageCount()==null?0:r.baggageCount();
-        List<Integer> capacities=db.queryForList("select capacity from vehicle_categories where id=? and active=true",Integer.class,r.categoryId());
+        List<Map<String,Object>> capacities=db.queryForList("select capacity,baggage_capacity from vehicle_categories where id=? and active=true",r.categoryId());
         if(capacities.isEmpty())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"CATEGORY_UNAVAILABLE");
-        if(passengerCount>capacities.getFirst())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"CATEGORY_CAPACITY_EXCEEDED");
+        if(passengerCount>((Number)capacities.getFirst().get("capacity")).intValue())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"CATEGORY_CAPACITY_EXCEEDED");
+        // NULL baggage capacity = not configured by admin yet, not enforced.
+        Object baggageCapacity=capacities.getFirst().get("baggage_capacity");
+        if(baggageCapacity!=null&&baggageCount>((Number)baggageCapacity).intValue())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"CATEGORY_BAGGAGE_CAPACITY_EXCEEDED");
         String offerVisibilityMode=db.queryForObject("select mode from offer_visibility_policy_versions where status='ACTIVE' order by version_no desc limit 1",String.class);
         if(r.partnerId()!=null&&r.offerVisibilityMode()!=null){
             // Membership on r.partnerId() already validated above by
@@ -127,8 +130,8 @@ import java.util.*;
             default->"scheduled_at asc";
         }
         ;
-        StringBuilder sql=new StringBuilder("select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.category_id,sb.passenger_count,sb.baggage_count,sb.status,sb.offer_window_ends_at,vc.display_name as category_name,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,(select proposed_amount_minor from driver_offers o where o.booking_id=sb.id and o.driver_id=? and o.status='ACTIVE' limit 1) as own_offer_amount_minor from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id where sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now()");
-        List<Object> params=new ArrayList<>();params.add(d);
+        StringBuilder sql=new StringBuilder("select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.category_id,sb.passenger_count,sb.baggage_count,sb.status,sb.offer_window_ends_at,vc.display_name as category_name,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,(select proposed_amount_minor from driver_offers o where o.booking_id=sb.id and o.driver_id=? and o.status='ACTIVE' limit 1) as own_offer_amount_minor,"+CUSTOMER_FAVORITE_SQL+" as customer_favorite from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id where sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now() and "+ELIGIBLE_VEHICLE_SQL);
+        List<Object> params=new ArrayList<>();params.add(d);params.add(d);params.add(d);
         if(categoryId!=null){
             sql.append(" and category_id=?");
             params.add(categoryId);
@@ -166,6 +169,7 @@ import java.util.*;
         "OFFERS_RECEIVED").contains(b.get("status"))||DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         Integer exists=db.queryForObject("select count(*) from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",Integer.class,bookingId,d);
         if(exists>0)throw new ApiException(HttpStatus.CONFLICT,"ACTIVE_OFFER_EXISTS");
+        eligibleVehicle(bookingId,d);
         conflict(d,DbTime.toOffsetDateTime(b.get("scheduled_at")));
         String method=db.queryForObject("select payment_method from scheduled_bookings where id=?",String.class,bookingId);
         if("CASH".equals(method)){
@@ -230,6 +234,10 @@ import java.util.*;
         if(!Set.of("OPEN_FOR_OFFERS","OFFERS_RECEIVED").contains(b.get("status"))||DbTime.toOffsetDateTime(b.get("offer_window_ends_at")).isBefore(OffsetDateTime.now()))throw new ApiException(HttpStatus.GONE,"OFFERS_CLOSED");
         List<UUID> offerIds=db.queryForList("select id from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",UUID.class,bookingId,d);
         if(offerIds.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"NO_ACTIVE_OFFER");
+        // A revision publishes a new price: a driver suspended, de-KYCed or
+        // without an approved vehicle since the first offer cannot revise.
+        eligible(d);
+        eligibleVehicle(bookingId,d);
         db.update("update driver_offers set status='SUPERSEDED' where booking_id=? and driver_id=? and status='ACTIVE'",bookingId,d);
         UUID newOfferId=UUID.randomUUID();
         // A revised price is a new publication: its commission is frozen
@@ -402,6 +410,14 @@ import java.util.*;
         List<UUID>x=db.queryForList("select id from drivers where user_id=?",UUID.class,CurrentUser.id());
         if(x.isEmpty())throw new ApiException(HttpStatus.FORBIDDEN,"DRIVER_PROFILE_REQUIRED");
         return x.getFirst();
+    }
+    /** Driver (first ?) owns an approved vehicle of the booking's category. */
+    public static final String ELIGIBLE_VEHICLE_SQL="exists(select 1 from vehicles ev where ev.driver_id=? and ev.status='APPROVED' and ev.category_id=sb.category_id)";
+    /** Driver (first ?) is a real favorite of the booking's creator (customer_favorite_drivers), not a client-supplied flag. */
+    public static final String CUSTOMER_FAVORITE_SQL="exists(select 1 from customer_favorite_drivers cf where cf.user_id=sb.creator_user_id and cf.driver_id=?)";
+    private void eligibleVehicle(UUID bookingId,UUID d){
+        Integer n=db.queryForObject("select count(*) from scheduled_bookings sb where sb.id=? and "+ELIGIBLE_VEHICLE_SQL,Integer.class,bookingId,d);
+        if(n==null||n==0)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"NO_ELIGIBLE_VEHICLE");
     }
     private void eligible(UUID d){
         Integer n=db.queryForObject("select count(*) from drivers where id=? and status='ACTIVE' and kyc_status='APPROVED' and marketplace_enabled=true",Integer.class,d);

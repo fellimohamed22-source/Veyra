@@ -74,6 +74,11 @@ class BookingControllerUpdateOfferTest {
 
   private final UUID policyId = UUID.randomUUID();
 
+  private void stubEligibleDriverWithVehicle() {
+    when(db.queryForObject(contains("from drivers where id=? and status='ACTIVE'"), eq(Integer.class), eq(driverId))).thenReturn(1);
+    when(db.queryForObject(contains("from scheduled_bookings sb where sb.id=? and exists"), eq(Integer.class), eq(bookingId), eq(driverId))).thenReturn(1);
+  }
+
   private void stubStandardPolicy(int bps) {
     when(db.queryForList(contains("from commission_policy_versions"), (Object) isNull(), (Object) isNull()))
         .thenReturn(List.of(Map.of("id", policyId, "commission_bps", bps)));
@@ -98,6 +103,7 @@ class BookingControllerUpdateOfferTest {
         .thenReturn(List.of(oldOfferId));
     when(db.queryForObject(contains("offer_visibility_mode"), eq(String.class), eq(bookingId))).thenReturn("PRIVATE");
     stubStandardPolicy(1000);
+    stubEligibleDriverWithVehicle();
 
     Map<String, Object> result = controller().updateOffer(bookingId, new BookingDtos.Offer(5500, "EUR"));
 
@@ -113,6 +119,36 @@ class BookingControllerUpdateOfferTest {
     assertNotEquals(oldOfferId, newOfferId);
     assertEquals(newOfferId, result.get("offerId"));
     assertEquals(6050L, result.get("customerTotalMinor"));
+  }
+
+  @Test
+  void suspendedDriverCannotReviseAnExistingOffer() {
+    asDriver();
+    stubDriverLookup();
+    stubBooking("OFFERS_RECEIVED", OffsetDateTime.now().plusHours(2));
+    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(UUID.class), eq(bookingId), eq(driverId)))
+        .thenReturn(List.of(UUID.randomUUID()));
+    when(db.queryForObject(contains("from drivers where id=? and status='ACTIVE'"), eq(Integer.class), eq(driverId))).thenReturn(0);
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().updateOffer(bookingId, new BookingDtos.Offer(5500, "EUR")));
+
+    assertEquals("DRIVER_NOT_ELIGIBLE", ex.code());
+    verify(db, never()).update(contains("SUPERSEDED"), any(), any());
+  }
+
+  @Test
+  void driverWithoutAnApprovedVehicleOfTheCategoryCannotRevise() {
+    asDriver();
+    stubDriverLookup();
+    stubBooking("OFFERS_RECEIVED", OffsetDateTime.now().plusHours(2));
+    when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(UUID.class), eq(bookingId), eq(driverId)))
+        .thenReturn(List.of(UUID.randomUUID()));
+    when(db.queryForObject(contains("from drivers where id=? and status='ACTIVE'"), eq(Integer.class), eq(driverId))).thenReturn(1);
+    when(db.queryForObject(contains("from scheduled_bookings sb where sb.id=? and exists"), eq(Integer.class), eq(bookingId), eq(driverId))).thenReturn(0);
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().updateOffer(bookingId, new BookingDtos.Offer(5500, "EUR")));
+
+    assertEquals("NO_ELIGIBLE_VEHICLE", ex.code());
   }
 
   @Test
@@ -162,6 +198,7 @@ class BookingControllerUpdateOfferTest {
     when(db.queryForObject(contains("offer_visibility_mode"), eq(String.class), eq(bookingId))).thenReturn("BEST_VISIBLE");
     when(db.queryForObject(contains("min(proposed_amount_minor)"), eq(Long.class), eq(bookingId), eq(driverId))).thenReturn(4200L);
     stubStandardPolicy(1000);
+    stubEligibleDriverWithVehicle();
 
     Map<String, Object> result = controller().updateOffer(bookingId, new BookingDtos.Offer(5500, "EUR"));
 

@@ -33,6 +33,9 @@ class AppLocale {
 
   static const Map<String, String> _en = {
     'Veyra Chauffeur': 'Veyra Driver',
+    'Client préféré': 'Preferred customer',
+    'Ce client vous a ajouté à ses chauffeurs préférés.': 'This customer added you to their preferred drivers.',
+    'Aucun véhicule validé de cette catégorie : offre impossible.': 'No approved vehicle in this category: you cannot make an offer.',
     'Espace Chauffeur': 'Driver space',
     'Connectez-vous à votre compte': 'Sign in to your account',
     'Email': 'Email',

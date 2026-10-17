@@ -61,7 +61,7 @@ class DriverOpportunityControllerOwnOfferAmountTest {
     row.put("status", "OFFERS_RECEIVED");
     row.put("offer_window_ends_at", OffsetDateTime.now().plusHours(1));
     row.put("offer_visibility_mode", "PRIVATE");
-    when(db.queryForList(contains("from scheduled_bookings sb join vehicle_categories"), eq(bookingId)))
+    when(db.queryForList(contains("from scheduled_bookings sb join vehicle_categories"), eq(driverId), eq(driverId), eq(bookingId)))
         .thenReturn(List.of(row));
   }
 

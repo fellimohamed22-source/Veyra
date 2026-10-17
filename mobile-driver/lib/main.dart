@@ -31,6 +31,7 @@ import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/driver_documents.dart';
 import 'core/widgets/status_badge.dart';
+import 'core/widgets/customer_favorite_chip.dart';
 import 'core/maps/route_geometry.dart';
 import 'core/maps/veyra_map.dart';
 import 'core/maps/driver_location_tracker.dart';
@@ -1134,6 +1135,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
                   ]),
                   const SizedBox(height:8),
                   Wrap(spacing:8,runSpacing:6,children:[
+                    if(x['customer_favorite']==true)const CustomerFavoriteChip(),
                     if(category!=null&&category.isNotEmpty)Chip(label:Text(category)),
                     if(passengers!=null)Chip(avatar:const Icon(Icons.people_outline,size:16),label:Text('$passengers '+t('passager(s)'))),
                     if(baggage!=null)Chip(avatar:const Icon(Icons.luggage_outlined,size:16),label:Text('$baggage '+t('bagage(s)'))),
@@ -1548,7 +1550,8 @@ class _RequestScreenState extends State<RequestScreen>{
             ?VeyraOfflineBanner(onRetry:retryDetail)
             :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:retryDetail);
           final x=s.data??{};
-          return Column(children:[
+          return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            if(x['customer_favorite']==true)const Padding(padding:EdgeInsets.only(bottom:8),child:CustomerFavoriteChip()),
             Card(child:ListTile(
               leading:const Icon(Icons.route),
               title:Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString()),
@@ -1693,8 +1696,9 @@ class _RequestScreenState extends State<RequestScreen>{
               ),
             ),
             if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
+            if(x['has_eligible_vehicle']==false)Padding(padding:const EdgeInsets.only(top:12),child:Text(t('Aucun véhicule validé de cette catégorie : offre impossible.'),style:TextStyle(color:Theme.of(context).colorScheme.error,fontWeight:FontWeight.w700))),
             const SizedBox(height:20),
-            FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Envoyer mon offre'))),
+            FilledButton(onPressed:sending||x['has_eligible_vehicle']==false?null:submit,child:sending?const CircularProgressIndicator():Text(t('Envoyer mon offre'))),
           ]);
         },
       ),

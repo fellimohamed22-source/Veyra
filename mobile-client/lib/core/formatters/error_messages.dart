@@ -26,6 +26,7 @@ class VeyraErrorMessages {
     'PICKUP_OUTSIDE_SERVICE_ZONE': "Cette adresse de départ est hors de la zone pilote actuelle (Sud de la France, Marseille - Menton).",
     'OFFERS_CLOSED': "Cette demande n'accepte plus de nouvelles offres.",
     'CATEGORY_CAPACITY_EXCEEDED': "Le nombre de passagers dépasse la capacité de cette catégorie.",
+    'CATEGORY_BAGGAGE_CAPACITY_EXCEEDED': "Le nombre de bagages dépasse la capacité de cette catégorie.",
     'CATEGORY_UNAVAILABLE': "Cette catégorie n'est plus disponible. Choisissez une autre catégorie.",
     'IDEMPOTENCY_KEY_CONFLICT': "Cette demande a déjà été envoyée avec d'autres informations. Actualisez vos réservations.",
     'BOOKING_OFFERS_CLOSED': "Cette demande n'accepte plus de nouvelles offres.",

@@ -34,9 +34,24 @@ class BookingCreationReplayTest {
     assertEquals("IDEMPOTENCY_KEY_CONFLICT",assertThrows(ApiException.class,()->controller.createIdempotently(request,"request-1")).code());
   }
   @Test void rejectsPassengersExceedingCategoryCapacityBeforePublication(){
-    when(db.queryForList(contains("select capacity"),eq(Integer.class),eq(request.categoryId()))).thenReturn(List.of(0));
+    when(db.queryForList(contains("select capacity"),eq(request.categoryId()))).thenReturn(List.of(Map.<String,Object>of("capacity",0)));
     assertEquals("CATEGORY_CAPACITY_EXCEEDED",assertThrows(ApiException.class,()->controller.create(request)).code());
     verify(db,never()).update(anyString(),any(Object[].class));
+  }
+  @Test void rejectsBaggageExceedingAConfiguredCategoryCapacity(){
+    Create withBags=new Create(request.pickup(),request.dropoff(),request.scheduledAt(),request.categoryId(),"CASH","CLIENT",null,null,null,1,4,null,null);
+    when(db.queryForList(contains("select capacity"),eq(request.categoryId()))).thenReturn(List.of(Map.<String,Object>of("capacity",4,"baggage_capacity",3)));
+    assertEquals("CATEGORY_BAGGAGE_CAPACITY_EXCEEDED",assertThrows(ApiException.class,()->controller.create(withBags)).code());
+    verify(db,never()).update(anyString(),any(Object[].class));
+  }
+  @Test void unconfiguredBaggageCapacityIsNotEnforced(){
+    // NULL baggage_capacity: the admin has not validated capacities yet,
+    // so the booking proceeds past the capacity checks (and fails later
+    // on the unstubbed visibility policy, which proves it got there).
+    Create withBags=new Create(request.pickup(),request.dropoff(),request.scheduledAt(),request.categoryId(),"CASH","CLIENT",null,null,null,1,12,null,null);
+    Map<String,Object> row=new HashMap<>();row.put("capacity",4);row.put("baggage_capacity",null);
+    when(db.queryForList(contains("select capacity"),eq(request.categoryId()))).thenReturn(List.of(row));
+    assertDoesNotThrow(()->{try{controller.create(withBags);}catch(ApiException e){if(e.code().startsWith("CATEGORY_"))throw e;}});
   }
   @Test void unavailableCategoryIsAValidationError(){
     assertEquals("CATEGORY_UNAVAILABLE",assertThrows(ApiException.class,()->controller.create(request)).code());
