@@ -64,3 +64,11 @@ Génération (exemple) : `openssl rand -base64 48`.
   `https://veyra-web.onrender.com` ; le lien envoyé est `{base}/suivi/{jeton}`.
 - Validité du lien : `guest.link_hours_after_pickup` dans `platform_settings`
   (24 h après la prise en charge par défaut, modifiable via `/admin/settings`).
+
+## Google Maps Platform (V4 L13, DEC-08)
+
+- `GOOGLE_MAPS_API_KEY` (backend) : recherche d'adresses (Places API, Text
+  Search), adresse d'un point (Geocoding API) et itinéraires (Routes API).
+  Sans clé, les fournisseurs actuels (LocationIQ, OSRM) restent utilisés.
+  APIs à activer sur le projet Google Cloud : Places API (New), Geocoding API,
+  Routes API. Restreindre la clé serveur par adresse IP (Render) et par API.
