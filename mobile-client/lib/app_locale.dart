@@ -46,6 +46,12 @@ class AppLocale {
   }
 
   static const Map<String, String> _en = {
+    'Mes moyens de paiement': 'My payment methods',
+    'Supprimer cette carte ?': 'Remove this card?',
+    'Annuler': 'Cancel',
+    'Supprimer': 'Remove',
+    'Expire fin': 'Expires',
+    "Aucune carte enregistrée. Votre carte sera proposée à l'enregistrement lors de votre prochain paiement.": 'No saved card. You will be offered to save your card at your next payment.',
     'Acceptation obligatoire': 'Acceptance required',
     "J'accepte les conditions générales d'utilisation": 'I accept the terms of use',
     "J'accepte la politique de confidentialité": 'I accept the privacy policy',

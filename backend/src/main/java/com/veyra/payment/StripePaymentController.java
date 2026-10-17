@@ -61,13 +61,13 @@ public class StripePaymentController {
       PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
       if("succeeded".equals(pi.getStatus()))throw new ApiException(HttpStatus.CONFLICT,"ALREADY_PAID");
       if("canceled".equals(pi.getStatus()))throw new ApiException(HttpStatus.CONFLICT,"PAYMENT_CANCELED");
-      return Map.of(
+      return withCustomer(Map.of(
           "paymentId", p.get("id"),
           "paymentIntentId", pi.getId(),
           "clientSecret", pi.getClientSecret(),
           "status", p.get("status"),
           "amountMinor", p.get("amount_minor"),
-          "currency", p.get("currency"));
+          "currency", p.get("currency")));
     }
 
     // Real bug fixed here, found during a UX/business audit (no crash,
@@ -109,13 +109,13 @@ public class StripePaymentController {
         PaymentIntent pi = stripe.retrieve((String) p.get("provider_payment_id"));
         if("succeeded".equals(pi.getStatus()))throw new ApiException(HttpStatus.CONFLICT,"ALREADY_PAID");
         if(!"canceled".equals(pi.getStatus())){
-        return Map.of(
+        return withCustomer(Map.of(
             "paymentId", p.get("id"),
             "paymentIntentId", pi.getId(),
             "clientSecret", pi.getClientSecret(),
             "status", priorStatus,
             "amountMinor", p.get("amount_minor"),
-            "currency", p.get("currency"));
+            "currency", p.get("currency")));
         }
       }
       // Only a canceled intent cannot be retried. A declined card leaves
@@ -124,7 +124,7 @@ public class StripePaymentController {
 
     long amount = ((Number) booking.get("customer_total_amount_minor")).longValue();
     String currency = (String) booking.get("currency");
-    PaymentIntent pi = stripe.create(amount, currency, bookingId.toString(), "booking-"+bookingId+"-after-"+(byBooking.isEmpty()?"initial":byBooking.getFirst().get("id")));
+    PaymentIntent pi = stripe.create(amount, currency, bookingId.toString(), "booking-"+bookingId+"-after-"+(byBooking.isEmpty()?"initial":byBooking.getFirst().get("id")), customerId());
     UUID paymentId = UUID.randomUUID();
 
     db.update(
@@ -132,13 +132,61 @@ public class StripePaymentController {
         "values (?,?,?,?,?,'ONLINE','PENDING','STRIPE',?,?)",
         paymentId, bookingId, CurrentUser.id(), amount, currency, pi.getId(), idempotencyKey);
 
-    return Map.of(
+    return withCustomer(Map.of(
         "paymentId", paymentId,
         "paymentIntentId", pi.getId(),
         "clientSecret", pi.getClientSecret(),
         "status", "PENDING",
         "amountMinor", amount,
-        "currency", currency);
+        "currency", currency));
+  }
+
+  /**
+   * DEC-04: Stripe customer of the current user, created on first use.
+   * Returns null when the PSP does not return one (e.g. tests), in which
+   * case the payment still works but the card is not saved.
+   */
+  String customerId() throws Exception {
+    UUID user = CurrentUser.id();
+    List<String> known = db.queryForList(
+        "select provider_customer_id from payment_customers where user_id=? and provider='STRIPE'", String.class, user);
+    if (!known.isEmpty()) return known.getFirst();
+    List<String> email = db.queryForList("select email::text from users where id=?", String.class, user);
+    String created = stripe.createCustomer(user.toString(), email.isEmpty() ? null : email.getFirst());
+    if (created == null) return null;
+    db.update("insert into payment_customers(user_id,provider,provider_customer_id) values (?,'STRIPE',?) on conflict (user_id) do nothing",
+        user, created);
+    return db.queryForObject("select provider_customer_id from payment_customers where user_id=?", String.class, user);
+  }
+
+  /** Adds what the PaymentSheet needs to list and save the user's cards. */
+  private Map<String, Object> withCustomer(Map<String, Object> intent) throws Exception {
+    Map<String, Object> result = new LinkedHashMap<>(intent);
+    String customer = customerId();
+    if (customer != null) {
+      result.put("customerId", customer);
+      String key = stripe.ephemeralKey(customer);
+      if (key != null) result.put("ephemeralKey", key);
+    }
+    return result;
+  }
+
+  /** Saved cards of the current user (brand, last 4, expiry). */
+  @GetMapping("/methods")
+  public List<Map<String, Object>> savedCards() throws Exception {
+    List<String> known = db.queryForList(
+        "select provider_customer_id from payment_customers where user_id=? and provider='STRIPE'", String.class, CurrentUser.id());
+    if (known.isEmpty()) return List.of();
+    return stripe.savedCards(known.getFirst());
+  }
+
+  @DeleteMapping("/methods/{paymentMethodId}")
+  public void removeCard(@PathVariable String paymentMethodId) throws Exception {
+    if (!paymentMethodId.matches("pm_[A-Za-z0-9]{1,100}")) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_METHOD");
+    List<String> known = db.queryForList(
+        "select provider_customer_id from payment_customers where user_id=? and provider='STRIPE'", String.class, CurrentUser.id());
+    if (known.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_METHOD_NOT_FOUND");
+    stripe.detachCard(known.getFirst(), paymentMethodId);
   }
 
   @GetMapping("/bookings/{bookingId}")

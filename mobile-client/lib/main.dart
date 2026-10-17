@@ -32,6 +32,7 @@ import 'core/formatters/money_formatter.dart';
 import 'core/formatters/status_labels.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/signup_consents.dart';
+import 'core/widgets/saved_cards_screen.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/status_badge.dart';
@@ -1017,6 +1018,7 @@ Future<void> logout() async {
                     ListTile(leading: const Icon(Icons.lock), title: Text(t('Modifier mon mot de passe')), onTap: password),
                     ListTile(leading:const Icon(Icons.place),title:Text(t('Mes adresses')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen()))),
                     ListTile(leading:const Icon(Icons.favorite),title:Text(t('Mes chauffeurs favoris')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const FavoriteDriversScreen()))),
+                    ListTile(leading:const Icon(Icons.credit_card),title:Text(t('Mes moyens de paiement')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>SavedCardsScreen(load:api.savedCards,remove:api.removeSavedCard)))),
                   ],
                 ),
               ),
@@ -1870,6 +1872,11 @@ class _PaymentScreenState extends State<PaymentScreen>{
         paymentSheetParameters:SetupPaymentSheetParameters(
           paymentIntentClientSecret:intent['clientSecret'] as String,
           merchantDisplayName:'Veyra',
+          // DEC-04: with the customer and its ephemeral key, the sheet
+          // lists the cards saved at previous bookings and saves the new
+          // one (the backend sets setup_future_usage on the intent).
+          customerId:intent['customerId'] as String?,
+          customerEphemeralKeySecret:intent['ephemeralKey'] as String?,
         ),
       );
       await Stripe.instance.presentPaymentSheet();

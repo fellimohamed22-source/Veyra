@@ -143,7 +143,7 @@ class StripePaymentControllerTest {
 
     assertEquals("pi_existing", result.get("paymentIntentId"));
     // The real point of this test: no new PaymentIntent, no new payment row.
-    verify(stripe, never()).create(anyLong(), anyString(), anyString(), anyString());
+    verify(stripe, never()).create(anyLong(), anyString(), anyString(), anyString(), any());
     verify(db, never()).update(anyString(), any(Object[].class));
   }
 
@@ -162,7 +162,7 @@ class StripePaymentControllerTest {
     // scenario under test, so an empty list is the correct stub.
     when(db.queryForList(eq("select id,provider_payment_id,status,amount_minor,currency from payments where booking_id=? order by created_at desc limit 1"), eq(bookingId)))
         .thenReturn(List.of());
-    when(stripe.create(11000L, "EUR", bookingId.toString(), "booking-"+bookingId+"-after-initial")).thenReturn(paymentIntent);
+    when(stripe.create(eq(11000L), eq("EUR"), eq(bookingId.toString()), eq("booking-"+bookingId+"-after-initial"), any())).thenReturn(paymentIntent);
     when(paymentIntent.getId()).thenReturn("pi_new");
     when(paymentIntent.getClientSecret()).thenReturn("secret_new");
 
@@ -224,7 +224,7 @@ class StripePaymentControllerTest {
 
     assertEquals("pi_still_pending", result.get("paymentIntentId"));
     assertEquals("PENDING", result.get("status"));
-    verify(stripe, never()).create(anyLong(), anyString(), anyString(), anyString());
+    verify(stripe, never()).create(anyLong(), anyString(), anyString(), anyString(), any());
     verify(db, never()).update(anyString(), any(Object[].class));
   }
 
@@ -248,7 +248,7 @@ class StripePaymentControllerTest {
     Map<String, Object> result = controller().createIntent(bookingId, "key-3");
 
     assertEquals("pi_declined", result.get("paymentIntentId"));
-    verify(stripe,never()).create(anyLong(),anyString(),anyString(),anyString());
+    verify(stripe, never()).create(anyLong(), anyString(), anyString(), anyString(), any());
     verify(db,never()).update(anyString(),any(Object[].class));
   }
 
