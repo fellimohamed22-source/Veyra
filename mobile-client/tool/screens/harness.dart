@@ -23,6 +23,8 @@ Future<void> loadAppFonts() async {
 
 /// Answers every API call with [respond] (path, method, data) -> body.
 void fakeApi(Object? Function(String path, String method, Object? data) respond) {
+  // The bench is a test harness run with flutter test, outside test/.
+  // ignore: invalid_use_of_visible_for_testing_member
   FlutterSecureStorage.setMockInitialValues({'accessToken': 'test', 'refreshToken': 'test'});
   api.dio.interceptors.clear();
   api.dio.interceptors.add(InterceptorsWrapper(onRequest: (r, h) {
