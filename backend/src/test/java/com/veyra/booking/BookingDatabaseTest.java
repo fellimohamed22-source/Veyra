@@ -114,8 +114,10 @@ class BookingDatabaseTest {
     db.update("update scheduled_bookings set status='CONFIRMED',payment_method=?,scheduled_at=now()+(? * interval '1 minute') where id=?",
         method,minutes,booking);
     if(method.equals("ONLINE")) {
-      db.update("insert into payments(booking_id,payer_user_id,amount_minor,currency,method,status,idempotency_key) values (?,?,11000,'EUR','ONLINE','CAPTURED',?)",
-          booking,user,booking.toString());
+      // Same shape as StripePaymentController writes: a captured online
+      // payment always carries its PSP, which refunds.provider requires.
+      db.update("insert into payments(booking_id,payer_user_id,amount_minor,currency,method,status,provider,provider_payment_id,idempotency_key) values (?,?,11000,'EUR','ONLINE','CAPTURED','STRIPE',?,?)",
+          booking,user,"pi_test_"+booking,booking.toString());
     }
     var cancellation=context.getBean(BookingExtraController.class);
     var preview=cancellation.cancellationPreview(booking);
