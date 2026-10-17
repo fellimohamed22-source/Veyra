@@ -38,8 +38,8 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: AccountScreen()));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-        find.text('Informations personnelles'), 200);
-    await tester.tap(find.text('Informations personnelles'));
+        find.text('Modifier mon profil'), 200);
+    await tester.tap(find.text('Modifier mon profil'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Chris');
     await tester.tap(find.text('Enregistrer'));

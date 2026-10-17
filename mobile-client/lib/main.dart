@@ -39,7 +39,6 @@ import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/status_badge.dart';
 import 'core/widgets/pin_display.dart';
-import 'core/widgets/pagination_bar.dart';
 part 'favorites.dart';
 
 /// Short alias used throughout this file -- AppLocale.t() everywhere
@@ -394,10 +393,12 @@ final router=GoRouter(
     branches:[
       StatefulShellBranch(routes:[GoRoute(path:'/home',builder:(c,s)=>const AccueilScreen())]),
       StatefulShellBranch(routes:[GoRoute(path:'/bookings',builder:(c,s)=>const HomeScreen())]),
-      StatefulShellBranch(routes:[GoRoute(path:'/notifications',builder:(c,s)=>const NotificationsScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/reservations',builder:(c,s)=>const ReservationsScreen())]),
       StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
     ],
   ),
+  // Notifications open from the home bell (boards 05, 15), above the shell.
+  GoRoute(path:'/notifications',builder:(c,s)=>const NotificationsScreen()),
   GoRoute(path:'/addresses',builder:(c,s)=>AddressScreen(initialBooking:s.extra is Map?Map<String,dynamic>.from(s.extra as Map):null)),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
@@ -592,363 +593,439 @@ class _LoginScreenState extends State<LoginScreen>{
     ])));
 }
 
-class HomeScreen extends StatefulWidget{
-  const HomeScreen({super.key});
-  @override State<HomeScreen> createState()=>_HomeScreenState();
+// ---------------------------------------------------------------------
+// Écrans principaux client (planches 05, 15, 03, 04) : Accueil, Mes
+// demandes, Mes réservations, Profil. Les onglets de la barre suivent les
+// planches 05/09/11/17 (Accueil, Mes demandes, Mes réservations, Profil).
+// ---------------------------------------------------------------------
+
+const _offerPhaseStates={'OPEN_FOR_OFFERS','OFFERS_RECEIVED'};
+const _activeRideStates={'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'};
+const _pastStates={'COMPLETED','CLOSED'};
+const _cancelledStates={'CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER'};
+
+/// "18 oct. 2025 · 08:30" (local time), as on boards 05 and 15.
+String veyraBookingWhen(dynamic raw){
+  final at=DateTime.tryParse(raw?.toString()??'')?.toLocal();
+  if(at==null)return '';
+  final en=AppLocale.code.value=='en';
+  final months=en?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']:['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  return '${at.day} ${months[at.month-1]} ${at.year} · ${at.hour.toString().padLeft(2,'0')}:${at.minute.toString().padLeft(2,'0')}';
 }
-class _HomeScreenState extends State<HomeScreen> with RouteAware{
-  late Future<List<dynamic>> future;
-  String statusFilter='ALL'; String dateSort='desc'; int page=0; bool hasNext=false;
-  int loadRevision=0;
-  Future<List<dynamic>> load()async{
-    final revision=++loadRevision;
-    final rows=await api.bookings(status:statusFilter=='ALL'?null:statusFilter,sort:dateSort,page:page);
-    if(revision==loadRevision)hasNext=rows.length==10;
-    return rows;
-  }
-  void resetFilters(){setState((){statusFilter='ALL';dateSort='desc';page=0;future=load();});}
-  @override void initState(){
-    super.initState();
-    future=load();
-    RefreshBus.tick.addListener(retry);
-  }
-  void retry()=>setState((){future=load();});
 
-  // This screen lives inside a StatefulShellRoute, same as AccueilScreen
-  // (see the identical fix there, 137f30f "prevent blank booking
-  // navigation screen"): subscribing its ModalRoute to the root
-  // RouteObserver is unsafe on a real device, where the shell's nested
-  // navigator can expose a route type/lifecycle that is not the root
-  // PageRoute -- the `as PageRoute` cast throws a synchronous exception
-  // that leaves the branch with a blank body, even though
-  // flutter analyze/tests stay green throughout (mocked navigation in
-  // widget tests never exercises the real shell's nested Navigator).
-  // RefreshBus (already wired above) is the explicit cross-navigator
-  // refresh mechanism used after a booking mutation, so keep this
-  // screen's lifecycle independent from the root observer, same as
-  // AccueilScreen.
-  @override void dispose(){
-    RefreshBus.tick.removeListener(retry);
-    super.dispose();
-  }
+/// First segment of an address ("Paris" from "Paris, France").
+String veyraPlaceTitle(dynamic label){
+  final s=(label??'').toString();
+  final i=s.indexOf(',');
+  return i<0?s:s.substring(0,i).trim();
+}
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(
-      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
-      title:Text(t('Mes trajets planifiés'),style:const TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold)),
-    ),
-    body:RefreshIndicator(
-      onRefresh:()async{retry();try{await future;}catch(_){/* FutureBuilder displays the load error. */}},
-      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
-        DropdownButtonFormField<String>(key:ValueKey(statusFilter),initialValue:statusFilter,isExpanded:true,decoration:InputDecoration(labelText:t('État')),
-          items:[DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),for(final v in ['OPEN_FOR_OFFERS','OFFERS_RECEIVED','CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER'])DropdownMenuItem(value:v,child:Text(VeyraStatusLabels.bookingStatus(v)))],
-          onChanged:(v){if(v!=null)setState((){statusFilter=v;page=0;future=load();});}),
-        DropdownButtonFormField<String>(key:ValueKey(dateSort),initialValue:dateSort,isExpanded:true,decoration:InputDecoration(labelText:t('Date')),
-          items:[DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),DropdownMenuItem(value:'asc',child:Text(t('Plus anciennes')))],
-          onChanged:(v){if(v!=null)setState((){dateSort=v;page=0;future=load();});}),
-        if(statusFilter!='ALL'||dateSort!='desc')ListTile(title:Text(t('Filtres actifs')),trailing:TextButton(onPressed:resetFilters,child:Text(t('Réinitialiser')))),
-        Container(
-          padding:const EdgeInsets.all(14),
-          decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
-          child:Row(children:[
-            const Icon(Icons.schedule_rounded,color:VeyraColors.primary),
-            const SizedBox(width:10),
-            Expanded(child:Text(t('Veyra MVP fonctionne uniquement sur réservation planifiée, au minimum 2 h avant le départ.'),style:const TextStyle(color:VeyraColors.primaryDark,fontWeight:FontWeight.w600,height:1.3))),
-          ]),
-        ),
-        const SizedBox(height:16),
-        FutureBuilder<List<dynamic>>(
-          future:future,
-          builder:(context,s){
-            if(s.connectionState!=ConnectionState.done){
-              return const Padding(padding:EdgeInsets.symmetric(vertical:48),child:VeyraLoadingView());
-            }
-            if(s.hasError){
-              final offline=VeyraErrorMessages.isOffline(s.error!);
-              return offline
-                ? VeyraOfflineBanner(onRetry:retry)
-                : VeyraErrorView(errorCode:null,customMessage:VeyraErrorMessages.forException(s.error!),onRetry:retry);
-            }
-            final items=s.data??[];
-            if(items.isEmpty){
-              if(page>0)return TextButton(onPressed:()=>setState((){page--;future=load();}),child:Text(t('Page précédente')));
-              return Card(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ListTile(
-                leading:const Icon(Icons.event_available,color:Color(0xFF1565C0)),
-                title:Text(statusFilter=='ALL'?t('Aucune réservation'):t('Aucune réservation ne correspond aux filtres.')),
-                onTap:resetFilters,
-                subtitle:Text(t('Votre prochain trajet apparaîtra ici.')),
-              ));
-            }
-            return Column(children:[...items.map((raw){
-              final x=Map<String,dynamic>.from(raw as Map);
-              final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-              final scheduled=VeyraDateFormatter.relativeDay(x['scheduled_at']);
-              final status=(x['status']??'').toString();
-              final offerPhase={'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status);
-              return Card(
-                margin:const EdgeInsets.only(bottom:12),
-                child:InkWell(
-                  borderRadius:BorderRadius.circular(VeyraRadius.card),
-                  onTap:(){
-                    final id=x['id']?.toString();
-                    if(id==null)return;
-                    context.push(offerPhase?'/offers/$id':'/booking/$id');
-                  },
-                  child:Padding(
-                    padding:const EdgeInsets.all(18),
-                    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                      Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                        Container(width:42,height:42,decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(12)),child:const Icon(Icons.route_outlined,color:VeyraColors.primary)),
-                        const SizedBox(width:12),
-                        Expanded(child:Text(title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16,height:1.25,color:VeyraColors.textPrimary))),
-                      ]),
-                      const SizedBox(height:14),
-                      // Même défaut que l'en-tête de OffersScreen (badge non flexible
-                      // dans un Row) sur l'écran le plus fréquenté de l'app.
-                      SizedBox(width:double.infinity,child:Wrap(
-                        alignment:WrapAlignment.spaceBetween,
-                        crossAxisAlignment:WrapCrossAlignment.center,
-                        spacing:8,runSpacing:6,
-                        children:[
-                          Row(mainAxisSize:MainAxisSize.min,children:[
-                            const Icon(Icons.schedule,size:17,color:VeyraColors.textSecondary),
-                            const SizedBox(width:6),
-                            Flexible(child:Text(scheduled,style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
-                          ]),
-                          VeyraStatusBadge(status:status),
-                        ],
-                      )),
-                      if(x['selected_driver_id']!=null)Text((x['driver_name']??'Chauffeur confirmé').toString()),
-                      if(x['customer_total_amount_minor']!=null)Text(t('Total client')+' : '+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
-                      Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
-                      if(offerPhase)Text((x['offer_count']??0).toString()+' '+t('offres reçues')),
-                      const SizedBox(height:14),
-                      Row(mainAxisAlignment:MainAxisAlignment.end,children:[
-                        Text(offerPhase?t('Voir les offres'):t('Voir la réservation'),style:const TextStyle(color:VeyraColors.primary,fontWeight:FontWeight.w800)),
-                        const SizedBox(width:4),const Icon(Icons.arrow_forward_rounded,size:18,color:VeyraColors.primary),
-                      ]),
-                    ]),
-                  ),
-                ),
-              );
-            }),VeyraPaginationBar(page:page,hasNext:hasNext,onPrevious:(){setState((){page--;future=load();});},onNext:(){setState((){page++;future=load();});})]);
-          },
-        ),
-      ]),
-    ),
+String _initials(String name){
+  final parts=name.trim().split(RegExp(r'\s+')).where((p)=>p.isNotEmpty).toList();
+  if(parts.isEmpty)return '?';
+  return parts.take(2).map((p)=>p[0].toUpperCase()).join();
+}
+
+/// Pastille d'état des cartes de demande (planche 05).
+class _StatePill extends StatelessWidget{
+  final String text;
+  final Color fg;
+  final Color bg;
+  final IconData? icon;
+  const _StatePill(this.text,{required this.fg,required this.bg,this.icon});
+  @override Widget build(BuildContext context)=>Container(
+    padding:const EdgeInsets.symmetric(horizontal:10,vertical:5),
+    decoration:BoxDecoration(color:bg,borderRadius:BorderRadius.circular(VeyraRadius.pill)),
+    child:Row(mainAxisSize:MainAxisSize.min,children:[
+      if(icon!=null)...[Icon(icon,size:14,color:fg),const SizedBox(width:4)],
+      Text(text,style:TextStyle(color:fg,fontSize:12,fontWeight:FontWeight.w700)),
+    ]),
   );
 }
 
-/// C02 -- écran d'accueil léger : salutation, raccourci de création de
-/// réservation, et aperçu de la SEULE prochaine réservation (la liste
-/// complète vit dans l'onglet Réservations/HomeScreen). Conforme à la
-/// fiche C02 : "Route entry card" + "Next booking card" (singulier),
-/// la liste complète étant une transition séparée ("Réservations →
-/// liste historique").
+Widget _pillFor(Map<String,dynamic> x){
+  final status=(x['status']??'').toString();
+  final offers=(x['offer_count'] as num?)?.toInt()??0;
+  if(_offerPhaseStates.contains(status)&&offers>0)return _StatePill('$offers '+(offers>1?t('offres reçues'):t('offre reçue')),fg:VeyraColors.accent,bg:VeyraColors.infoBackground);
+  if(_offerPhaseStates.contains(status))return _StatePill(t('En attente d’offres'),fg:VeyraColors.warning,bg:VeyraColors.warningBackground);
+  // Short labels as on the boards (« Confirmée », « Annulée »).
+  const short={'CONFIRMED':'Confirmée','DRIVER_EN_ROUTE':'Chauffeur en route','DRIVER_ARRIVED':'Chauffeur arrivé','IN_PROGRESS':'En cours','COMPLETED':'Terminée','CLOSED':'Terminée'};
+  if(_activeRideStates.contains(status))return _StatePill(t(short[status]!),fg:VeyraColors.success,bg:VeyraColors.successBackground,icon:Icons.verified_outlined);
+  if(_pastStates.contains(status))return _StatePill(t(short[status]!),fg:VeyraColors.neutral,bg:VeyraColors.neutralBackground);
+  return _StatePill(status=='EXPIRED'||status=='NO_OFFER'?t('Expirée'):t('Annulée'),fg:VeyraColors.danger,bg:VeyraColors.dangerBackground);
+}
+
+/// Carte blanche à ombre douce des listes (planches 05, 15).
+class _ShadowCard extends StatelessWidget{
+  final Widget child;
+  final VoidCallback? onTap;
+  const _ShadowCard({required this.child,this.onTap});
+  @override Widget build(BuildContext context)=>Container(
+    margin:const EdgeInsets.only(bottom:14),
+    decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(VeyraRadius.card),boxShadow:VeyraShadows.card,border:Border.all(color:VeyraColors.border.withValues(alpha:.6))),
+    child:Material(color:Colors.transparent,child:InkWell(borderRadius:BorderRadius.circular(VeyraRadius.card),onTap:onTap,child:Padding(padding:const EdgeInsets.all(16),child:child))),
+  );
+}
+
+class _MiniRoute extends StatelessWidget{
+  final Map<String,dynamic> x;
+  const _MiniRoute(this.x);
+  @override Widget build(BuildContext context)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Row(children:[const Icon(Icons.circle,size:10,color:VeyraColors.accent),const SizedBox(width:10),Expanded(child:Text(veyraPlaceTitle(x['pickup_address']),maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600)))]),
+    const SizedBox(height:6),
+    Row(children:[const Icon(Icons.location_on,size:14,color:VeyraColors.pinRed),const SizedBox(width:8),Expanded(child:Text(veyraPlaceTitle(x['dropoff_address']),maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600)))]),
+  ]);
+}
+
+class _PaxBags extends StatelessWidget{
+  final Map<String,dynamic> x;
+  const _PaxBags(this.x);
+  @override Widget build(BuildContext context){
+    final p=(x['passenger_count'] as num?)?.toInt()??1;
+    final b=(x['baggage_count'] as num?)?.toInt()??0;
+    return Row(children:[
+      const Icon(Icons.person_outline,size:18,color:VeyraColors.textSecondary),const SizedBox(width:4),
+      Text('$p '+(p>1?t('passagers'):t('passager')),style:const TextStyle(color:VeyraColors.textSecondary)),
+      const SizedBox(width:18),
+      const Icon(Icons.luggage_outlined,size:18,color:VeyraColors.textSecondary),const SizedBox(width:4),
+      Text('$b '+(b>1?t('bagages'):t('bagage')),style:const TextStyle(color:VeyraColors.textSecondary)),
+    ]);
+  }
+}
+
+/// Bandeau « Meilleur prix disponible » (planche 05) : prix final client,
+/// commission comprise, figé sur l'offre.
+class _BestPriceBanner extends StatelessWidget{
+  final dynamic totalMinor;
+  const _BestPriceBanner(this.totalMinor);
+  @override Widget build(BuildContext context)=>Container(
+    padding:const EdgeInsets.all(14),
+    decoration:BoxDecoration(color:VeyraColors.warningBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+    child:Row(children:[
+      const Icon(Icons.emoji_events_outlined,color:VeyraColors.goldEnd,size:30),
+      const SizedBox(width:12),
+      Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text(t('Meilleur prix disponible'),style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600)),
+        Text(VeyraMoneyFormatter.fromMinor(totalMinor),style:const TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:VeyraColors.textPrimary)),
+        Text(t('(commission VEYRA incluse)'),style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary)),
+      ])),
+    ]),
+  );
+}
+
+class _DriverLine extends StatelessWidget{
+  final Map<String,dynamic> x;
+  const _DriverLine(this.x);
+  @override Widget build(BuildContext context){
+    final name=(x['driver_name']??'').toString().trim();
+    return Row(children:[
+      CircleAvatar(radius:20,backgroundColor:VeyraColors.surfaceMuted,child:Text(_initials(name),style:const TextStyle(color:VeyraColors.primary,fontWeight:FontWeight.w700))),
+      const SizedBox(width:10),
+      Expanded(child:Text(name.isEmpty?t('Chauffeur confirmé'):name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w700))),
+    ]);
+  }
+}
+
+/// Carte d'une demande ou réservation (planche 05 P1, planche 04 P5).
+class _RequestCard extends StatelessWidget{
+  final Map<String,dynamic> x;
+  const _RequestCard(this.x);
+  @override Widget build(BuildContext context){
+    final id=x['id']?.toString();
+    final status=(x['status']??'').toString();
+    final offerPhase=_offerPhaseStates.contains(status);
+    final offers=(x['offer_count'] as num?)?.toInt()??0;
+    void open(){if(id!=null)context.push(offerPhase?'/offers/$id':'/booking/$id');}
+    return _ShadowCard(onTap:open,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Row(children:[
+        const Icon(Icons.calendar_today_outlined,size:18,color:VeyraColors.accent),
+        const SizedBox(width:8),
+        Expanded(child:Text(veyraBookingWhen(x['scheduled_at']),style:const TextStyle(fontWeight:FontWeight.w600))),
+        _pillFor(x),
+      ]),
+      const SizedBox(height:12),
+      Row(children:[Expanded(child:_MiniRoute(x)),const SizedBox(width:10),const VeyraVehicleThumb(width:72)]),
+      const SizedBox(height:10),
+      _PaxBags(x),
+      if(offerPhase&&offers>0&&x['best_offer_total_minor']!=null)...[const SizedBox(height:12),_BestPriceBanner(x['best_offer_total_minor'])],
+      const SizedBox(height:12),
+      if(x['selected_driver_id']!=null&&!offerPhase)Row(children:[
+        Expanded(child:_DriverLine(x)),
+        FilledButton(
+          style:FilledButton.styleFrom(minimumSize:const Size(0,40),backgroundColor:VeyraColors.surfaceMuted,foregroundColor:VeyraColors.textPrimary,padding:const EdgeInsets.symmetric(horizontal:12),textStyle:const TextStyle(fontFamily:veyraFontFamily,fontSize:13,fontWeight:FontWeight.w700)),
+          onPressed:open,child:Text(t('Voir ma réservation')),
+        ),
+      ])
+      else if(offerPhase&&offers>0)FilledButton(onPressed:open,child:Row(mainAxisSize:MainAxisSize.min,children:[Text(t('Voir les offres')),const SizedBox(width:6),const Icon(Icons.chevron_right)]))
+      else FilledButton(
+        style:FilledButton.styleFrom(backgroundColor:VeyraColors.surfaceMuted,foregroundColor:VeyraColors.textPrimary),
+        onPressed:open,child:Row(mainAxisSize:MainAxisSize.min,children:[Text(t('Voir les détails')),const SizedBox(width:6),const Icon(Icons.chevron_right)]),
+      ),
+    ]));
+  }
+}
+
+/// Onglets en pilule avec compteurs (« En attente (2) », planche 05).
+class _PillTabs extends StatelessWidget{
+  final List<String> labels;
+  final int selected;
+  final ValueChanged<int> onSelect;
+  const _PillTabs({required this.labels,required this.selected,required this.onSelect});
+  @override Widget build(BuildContext context)=>SingleChildScrollView(
+    scrollDirection:Axis.horizontal,
+    child:Row(children:[
+      for(var i=0;i<labels.length;i++)Padding(
+        padding:const EdgeInsets.only(right:8),
+        child:Semantics(selected:i==selected,button:true,child:Material(
+          color:i==selected?VeyraColors.primary:VeyraColors.surfaceMuted,
+          borderRadius:BorderRadius.circular(VeyraRadius.pill),
+          child:InkWell(
+            borderRadius:BorderRadius.circular(VeyraRadius.pill),
+            onTap:()=>onSelect(i),
+            child:Padding(padding:const EdgeInsets.symmetric(horizontal:12,vertical:9),child:Text(labels[i],style:TextStyle(color:i==selected?Colors.white:VeyraColors.textPrimary,fontWeight:FontWeight.w600,fontSize:12))),
+          ),
+        )),
+      ),
+    ]),
+  );
+}
+
+/// Liste filtrée par onglet, rafraîchissable, avec états chargement,
+/// hors ligne, erreur et vide.
+class _TabbedBookings extends StatefulWidget{
+  final String title;
+  final String? subtitle;
+  final List<String> tabNames;
+  final List<bool Function(Map<String,dynamic>)> filters;
+  final String emptyMessage;
+  const _TabbedBookings({required this.title,this.subtitle,required this.tabNames,required this.filters,required this.emptyMessage});
+  @override State<_TabbedBookings> createState()=>_TabbedBookingsState();
+}
+class _TabbedBookingsState extends State<_TabbedBookings>{
+  late Future<List<dynamic>> future;
+  int tab=0;
+  @override void initState(){super.initState();future=api.bookings(sort:'asc');RefreshBus.tick.addListener(retry);}
+  @override void dispose(){RefreshBus.tick.removeListener(retry);super.dispose();}
+  void retry()=>setState((){future=api.bookings(sort:'asc');});
+  @override Widget build(BuildContext context)=>Scaffold(
+    body:SafeArea(child:RefreshIndicator(
+      onRefresh:()async{retry();try{await future;}catch(_){/* FutureBuilder shows the error. */}},
+      child:FutureBuilder<List<dynamic>>(
+        future:future,
+        builder:(context,s){
+          final all=(s.data??[]).whereType<Map>().map((m)=>Map<String,dynamic>.from(m)).toList();
+          final counts=[for(final f in widget.filters)all.where(f).length];
+          final visible=all.where(widget.filters[tab]).toList();
+          return ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.fromLTRB(20,16,20,20),children:[
+            Text(widget.title,style:const TextStyle(fontSize:26,fontWeight:FontWeight.w800)),
+            if(widget.subtitle!=null)...[const SizedBox(height:4),Text(widget.subtitle!,style:const TextStyle(color:VeyraColors.textSecondary))],
+            const SizedBox(height:16),
+            _PillTabs(labels:[for(var i=0;i<widget.tabNames.length;i++)s.hasData?'${widget.tabNames[i]} (${counts[i]})':widget.tabNames[i]],selected:tab,onSelect:(i)=>setState(()=>tab=i)),
+            const SizedBox(height:16),
+            if(s.connectionState!=ConnectionState.done)const Padding(padding:EdgeInsets.symmetric(vertical:48),child:VeyraLoadingView())
+            else if(s.hasError)(VeyraErrorMessages.isOffline(s.error!)?VeyraOfflineBanner(onRetry:retry):VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:retry))
+            else if(visible.isEmpty)Padding(padding:const EdgeInsets.only(top:24),child:VeyraEmptyView(icon:Icons.event_available,message:widget.emptyMessage))
+            else ...visible.map((x)=>_RequestCard(x)),
+          ]);
+        },
+      ),
+    )),
+  );
+}
+
+/// Onglet « Mes demandes » (planche 05 P1).
+class HomeScreen extends StatelessWidget{
+  const HomeScreen({super.key});
+  @override Widget build(BuildContext context)=>_TabbedBookings(
+    title:t('Mes demandes'),
+    subtitle:t('Retrouvez et suivez vos prochains trajets.'),
+    tabNames:[t('En attente'),t('Offres reçues'),t('Confirmées')],
+    filters:[
+      (x)=>x['status']=='OPEN_FOR_OFFERS'||(x['status']=='OFFERS_RECEIVED'&&((x['offer_count'] as num?)??0)==0),
+      (x)=>x['status']=='OFFERS_RECEIVED'&&((x['offer_count'] as num?)??0)>0,
+      (x)=>_activeRideStates.contains(x['status']),
+    ],
+    emptyMessage:t('Aucune demande dans cette catégorie.'),
+  );
+}
+
+/// Onglet « Mes réservations » (planches 03 P5, 04 P5).
+class ReservationsScreen extends StatelessWidget{
+  const ReservationsScreen({super.key});
+  @override Widget build(BuildContext context)=>_TabbedBookings(
+    title:t('Mes réservations'),
+    tabNames:[t('À venir'),t('Passées'),t('Annulées')],
+    filters:[
+      (x)=>_activeRideStates.contains(x['status']),
+      (x)=>_pastStates.contains(x['status']),
+      (x)=>_cancelledStates.contains(x['status']),
+    ],
+    emptyMessage:t('Aucune réservation dans cette catégorie.'),
+  );
+}
+
+/// Accueil (planche 15 P1/P2, planche 03 P1).
 class AccueilScreen extends StatefulWidget{
   const AccueilScreen({super.key});
   @override State<AccueilScreen> createState()=>_AccueilScreenState();
 }
-class _AccueilScreenState extends State<AccueilScreen> with RouteAware{
+class _AccueilScreenState extends State<AccueilScreen>{
   late Future<Map<String,dynamic>> me;
   late Future<List<dynamic>> bookings;
+  Uint8List? avatar;
 
   @override void initState(){
     super.initState();
     _load();
     RefreshBus.tick.addListener(_refresh);
+    api.avatarBytes().then((v){if(mounted&&v!=null&&v.isNotEmpty)setState(()=>avatar=v);}).catchError((_){});
   }
-
   void _refresh()=>setState(_load);
+  void _load(){me=api.me();bookings=api.bookings();}
+  // Lives inside the shell's nested navigator: refreshed through
+  // RefreshBus, never through the root RouteObserver (see git history).
+  @override void dispose(){RefreshBus.tick.removeListener(_refresh);super.dispose();}
 
-  void _load(){
-    me=api.me();
-    bookings=api.bookings();
-  }
+  Widget hero(String firstName)=>Container(
+    padding:EdgeInsets.fromLTRB(20,MediaQuery.paddingOf(context).top+12,20,64),
+    decoration:const BoxDecoration(gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[Color(0xFF021C38),Color(0xFF0B3A6B)])),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Row(children:[
+        const VeyraWordmark(color:Colors.white,size:24),
+        const Spacer(),
+        IconButton(tooltip:t('Notifications'),onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_none,color:Colors.white,size:28)),
+        const SizedBox(width:4),
+        GestureDetector(onTap:()=>context.go('/account'),child:CircleAvatar(radius:20,backgroundColor:Colors.white24,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,color:Colors.white):null)),
+      ]),
+      const SizedBox(height:24),
+      Text(firstName.isEmpty?t('Bonjour !'):t('Bonjour')+' '+firstName,style:const TextStyle(color:Colors.white,fontSize:26,fontWeight:FontWeight.w800)),
+      const SizedBox(height:4),
+      Text(t('Planifiez votre prochain trajet'),style:const TextStyle(color:Colors.white70,fontSize:15)),
+    ]),
+  );
 
-  // ATTENTION -- non vérifié sur appareil réel (pas de SDK Flutter dans
-  // cet environnement) : ce mécanisme didPopNext/RouteObserver
-  // fonctionnait correctement avant l'introduction du shell de
-  // navigation (StatefulShellRoute), quand cet écran vivait directement
-  // sur le Navigator racine. Depuis ce lot, cet écran vit dans le
-  // Navigator imbriqué propre à sa branche du shell -- le
-  // ModalRoute.of(context) résolu ici pourrait donc être celui de la
-  // branche, pas celui du Navigator racine sur lequel /addresses,
-  // /booking/:id etc. sont réellement poussés/dépilés, ce qui
-  // empêcherait ce callback de se déclencher au retour de ces écrans.
-  // Le RefreshIndicator (pull-to-refresh) ci-dessous reste disponible en
-  // filet de sécurité manuel dans tous les cas. À vérifier/durcir sur un
-  // vrai appareil avant mise en production.
-  // This screen lives inside a StatefulShellRoute. Subscribing its
-  // ModalRoute to the root RouteObserver is unsafe: on a real device the
-  // shell can expose a route type/lifecycle that is not the root
-  // PageRoute, and a synchronous exception here leaves the branch with a
-  // blank body even though flutter analyze/tests are green. RefreshBus is
-  // already the explicit cross-navigator refresh mechanism used after a
-  // booking mutation, so keep the home lifecycle independent from the
-  // root observer.
-  @override void dispose(){
-    RefreshBus.tick.removeListener(_refresh);
-    super.dispose();
-  }
+  Widget fakeField(IconData icon,Color color,String label,String hint)=>Container(
+    padding:const EdgeInsets.symmetric(horizontal:14,vertical:10),
+    decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.md),border:Border.all(color:VeyraColors.border)),
+    child:Row(children:[
+      Icon(icon,color:color),
+      const SizedBox(width:12),
+      Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text(label,style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary)),
+        Text(hint,style:const TextStyle(fontSize:15,color:VeyraColors.textTertiary)),
+      ])),
+    ]),
+  );
+
+  Widget searchCard()=>Container(
+    padding:const EdgeInsets.all(18),
+    decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(20),boxShadow:VeyraShadows.card),
+    child:Material(color:Colors.transparent,child:InkWell(
+      borderRadius:BorderRadius.circular(20),
+      onTap:()=>context.push('/addresses'),
+      child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Row(children:[
+          const Icon(Icons.event_note_outlined,color:VeyraColors.primary,size:28),
+          const SizedBox(width:12),
+          Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(t('Où souhaitez-vous aller ?'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w800)),
+            Text(t('Réservez un trajet en quelques étapes'),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+          ])),
+        ]),
+        const SizedBox(height:14),
+        fakeField(Icons.circle,VeyraColors.accent,t('Adresse de départ'),t('Ex : 12 rue de Rivoli, Paris')),
+        const SizedBox(height:10),
+        fakeField(Icons.location_on,VeyraColors.pinRed,t('Destination'),t('Ex : Aéroport Charles-de-Gaulle')),
+        const SizedBox(height:14),
+        FilledButton(onPressed:()=>context.push('/addresses'),child:Row(mainAxisSize:MainAxisSize.min,children:[Text(t('Rechercher mon trajet')),const SizedBox(width:6),const Icon(Icons.chevron_right)])),
+      ]),
+    )),
+  );
+
+  Widget quick(IconData icon,String label,VoidCallback onTap,{int badge=0})=>Expanded(child:Padding(
+    padding:const EdgeInsets.symmetric(horizontal:4),
+    child:Material(
+      color:Colors.white,
+      borderRadius:BorderRadius.circular(VeyraRadius.lg),
+      child:InkWell(
+        borderRadius:BorderRadius.circular(VeyraRadius.lg),
+        onTap:onTap,
+        child:Container(
+          height:92,
+          decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.lg),border:Border.all(color:VeyraColors.border)),
+          child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
+            Badge(isLabelVisible:badge>0,label:Text('$badge'),backgroundColor:VeyraColors.danger,child:Icon(icon,color:VeyraColors.primary,size:28)),
+            const SizedBox(height:8),
+            // Two-word labels break between words as on board 15 (« Mes / réservations »).
+            Padding(padding:const EdgeInsets.symmetric(horizontal:4),child:FittedBox(fit:BoxFit.scaleDown,child:Text(label.replaceFirst(' ','\n'),textAlign:TextAlign.center,style:const TextStyle(fontSize:12,fontWeight:FontWeight.w600,height:1.2)))),
+          ]),
+        ),
+      ),
+    ),
+  ));
+
+  Widget sectionHeader(String title,String action,VoidCallback onTap)=>Row(children:[
+    Expanded(child:Text(title,style:const TextStyle(fontSize:19,fontWeight:FontWeight.w800))),
+    TextButton(onPressed:onTap,child:Text(action)),
+  ]);
 
   @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(
-      backgroundColor:const Color(0xFFF2F6FB),elevation:0,
-      title:Row(mainAxisSize:MainAxisSize.min,children:const [Icon(Icons.location_on,color:Color(0xFF1565C0)),SizedBox(width:6),Text('Veyra',style:TextStyle(color:Color(0xFF123A66),fontWeight:FontWeight.bold))]),
-      actions:const [LanguageSwitch()],
-    ),
     body:RefreshIndicator(
-      onRefresh:()async{setState(_load);try{await Future.wait([me,bookings]);}catch(_){/* FutureBuilders display the load error. */}},
-      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
-        FutureBuilder<Map<String,dynamic>>(
-          future:me,
-          builder:(context,s){
-            final firstName=(s.data?['first_name']??'').toString();
-            return Text(
-              firstName.isEmpty?t('Bonjour !'):t('Bonjour')+' '+firstName+' !',
-              style:const TextStyle(fontSize:26,fontWeight:FontWeight.bold,color:Color(0xFF123A66)),
-            );
-          },
-        ),
-        const SizedBox(height:4),
-        Text(t('Vos trajets VTC, réservés à l’avance.'),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:15)),
-        const SizedBox(height:18),
-        Container(
-          decoration:BoxDecoration(
-            gradient:const LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[VeyraColors.primaryDark,VeyraColors.primary]),
-            borderRadius:BorderRadius.circular(VeyraRadius.card),
-          ),
-          child:Material(color:Colors.transparent,child:InkWell(
-            borderRadius:BorderRadius.circular(VeyraRadius.card),
-            onTap:()=>context.push('/addresses'),
-            child:Padding(padding:const EdgeInsets.all(22),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Container(
-                padding:const EdgeInsets.symmetric(horizontal:10,vertical:6),
-                decoration:BoxDecoration(color:Colors.white.withValues(alpha:.14),borderRadius:BorderRadius.circular(VeyraRadius.pill)),
-                child:Row(mainAxisSize:MainAxisSize.min,children:[
-                  const Icon(Icons.event_available_outlined,color:Colors.white,size:16),
-                  const SizedBox(width:6),
-                  Text(t('Réservation planifiée'),style:const TextStyle(color:Colors.white,fontSize:12,fontWeight:FontWeight.w800)),
-                ]),
-              ),
-              const SizedBox(height:18),
-              Text(t('Planifiez votre prochain trajet'),style:const TextStyle(color:Colors.white,fontSize:23,fontWeight:FontWeight.w900,height:1.15,letterSpacing:-.3)),
-              const SizedBox(height:8),
-              Text(t('Choisissez le trajet, la date et l’heure. Départ au minimum 2 h à l’avance.'),style:const TextStyle(color:Colors.white70,height:1.35)),
-              const SizedBox(height:20),
-              Container(
-                padding:const EdgeInsets.symmetric(horizontal:16,vertical:13),
-                decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(VeyraRadius.md)),
-                child:Row(children:[
-                  const Icon(Icons.add_road_rounded,color:VeyraColors.primary),
-                  const SizedBox(width:10),
-                  Expanded(child:Text(t('Planifier une réservation'),style:const TextStyle(color:VeyraColors.primaryDark,fontWeight:FontWeight.w800))),
-                  const Icon(Icons.arrow_forward_rounded,color:VeyraColors.primary),
-                ]),
-              ),
-            ])),
-          )),
-        ),
-        const SizedBox(height:28),
-        Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
-          Text(t('Prochaine réservation'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
-          TextButton(
-            onPressed:()=>context.go('/bookings'),
-            child:Text(t('Voir tout')),
-          ),
-        ]),
-        const SizedBox(height:8),
-        FutureBuilder<List<dynamic>>(
-          future:bookings,
-          builder:(context,s){
-            if(s.connectionState!=ConnectionState.done){
-              return const VeyraLoadingView();
-            }
-            if(s.hasError){
-              return VeyraErrorMessages.isOffline(s.error!)
-                ? VeyraOfflineBanner(onRetry:()=>setState(_load))
-                : VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(_load));
-            }
-            final items=s.data??[];
-            // Bug réel trouvé pendant l'étude UX/navigation : le endpoint
-            // GET /scheduled-bookings trie "order by scheduled_at desc"
-            // (le plus tardif en premier, pensé pour l'onglet
-            // Réservations/historique) -- prendre naïvement items.first
-            // ici affichait donc la réservation la PLUS ÉLOIGNÉE dans le
-            // temps comme "prochaine réservation", pas la plus proche.
-            // Sélectionne explicitement, parmi les statuts actifs
-            // (non terminaux -- mêmes valeurs que le mapping couleur de
-            // VeyraStatusBadge), celle dont scheduled_at est la plus
-            // proche, sans dépendre de l'ordre renvoyé par le serveur.
-            const terminalStatuses={
-              'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT',
-              'CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER',
-            };
-            Map<String,dynamic>? next;
-            DateTime? nextAt;
-            for(final raw in items){
-              final candidate=Map<String,dynamic>.from(raw as Map);
-              if(terminalStatuses.contains(candidate['status']))continue;
-              final at=DateTime.tryParse(candidate['scheduled_at']?.toString()??'');
-              if(at==null)continue;
-              if(nextAt==null||at.isBefore(nextAt)){
-                next=candidate;
-                nextAt=at;
-              }
-            }
-            if(next==null){
-              return VeyraEmptyView(
-                icon:Icons.event_available,
-                message:t('Aucune réservation à venir. Votre prochain trajet apparaîtra ici.'),
-              );
-            }
-            final x=next;
-            final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-            final status=(x['status']??'').toString();
-            final offerPhase={'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status);
-            return Card(child:InkWell(
-              borderRadius:BorderRadius.circular(VeyraRadius.card),
-              onTap:(){
-                final id=x['id']?.toString();
-                if(id==null)return;
-                context.push(offerPhase?'/offers/$id':'/booking/$id');
-              },
-              child:Padding(padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      onRefresh:()async{setState(_load);try{await Future.wait([me,bookings]);}catch(_){/* FutureBuilders show the error. */}},
+      child:FutureBuilder<List<dynamic>>(
+        future:bookings,
+        builder:(context,s){
+          final all=(s.data??[]).whereType<Map>().map((m)=>Map<String,dynamic>.from(m)).toList();
+          // Nearest active booking, whatever order the server returns.
+          Map<String,dynamic>? next;DateTime? nextAt;
+          for(final x in all){
+            if(!_activeRideStates.contains(x['status'])&&!_offerPhaseStates.contains(x['status']))continue;
+            if(_offerPhaseStates.contains(x['status']))continue;
+            final at=DateTime.tryParse(x['scheduled_at']?.toString()??'');
+            if(at!=null&&(nextAt==null||at.isBefore(nextAt))){next=x;nextAt=at;}
+          }
+          final pending=all.where((x)=>_offerPhaseStates.contains(x['status'])).toList();
+          final offersReceived=pending.where((x)=>((x['offer_count'] as num?)??0)>0).length;
+          return ListView(physics:const AlwaysScrollableScrollPhysics(),padding:EdgeInsets.zero,children:[
+            FutureBuilder<Map<String,dynamic>>(future:me,builder:(context,m)=>hero((m.data?['first_name']??'').toString())),
+            Transform.translate(offset:const Offset(0,-44),child:Padding(padding:const EdgeInsets.symmetric(horizontal:20),child:searchCard())),
+            Padding(padding:const EdgeInsets.fromLTRB(20,0,20,24),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              Transform.translate(offset:const Offset(0,-28),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                Text(t('Actions rapides'),style:const TextStyle(fontSize:19,fontWeight:FontWeight.w800)),
+                const SizedBox(height:12),
                 Row(children:[
-                  Container(width:48,height:48,decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.calendar_month_rounded,color:VeyraColors.primary)),
-                  const SizedBox(width:12),
-                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                    Text(VeyraDateFormatter.relativeDay(x['scheduled_at']),style:const TextStyle(color:VeyraColors.primaryDark,fontSize:17,fontWeight:FontWeight.w900)),
-                    const SizedBox(height:4),
-                    VeyraStatusBadge(status:status),
-                  ])),
-                ]),
-                const SizedBox(height:16),
-                Text(title,style:const TextStyle(fontSize:16,fontWeight:FontWeight.w800,height:1.3)),
-                const SizedBox(height:14),
-                Row(children:[
-                  Text(offerPhase?t('Comparer les offres'):t('Voir les détails'),style:const TextStyle(color:VeyraColors.primary,fontWeight:FontWeight.w800)),
-                  const Spacer(),
-                  const Icon(Icons.arrow_forward_rounded,color:VeyraColors.primary),
+                  quick(Icons.event_available_outlined,t('Mes réservations'),()=>context.go('/reservations')),
+                  quick(Icons.description_outlined,t('Mes demandes'),()=>context.go('/bookings'),badge:offersReceived),
+                  quick(Icons.notifications_none,t('Notifications'),()=>context.push('/notifications')),
+                  quick(Icons.person_outline,t('Profil'),()=>context.go('/account')),
                 ]),
               ])),
-            ));
-          },
-        ),
-      ]),
+              if(s.connectionState!=ConnectionState.done)const VeyraLoadingView()
+              else if(s.hasError)(VeyraErrorMessages.isOffline(s.error!)?VeyraOfflineBanner(onRetry:()=>setState(_load)):VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(_load)))
+              else ...[
+                sectionHeader(t('Mon prochain trajet'),t('Voir tous'),()=>context.go('/reservations')),
+                const SizedBox(height:6),
+                if(next==null)VeyraEmptyView(icon:Icons.event_available,message:t('Aucune réservation à venir. Votre prochain trajet apparaîtra ici.'))
+                else _RequestCard(next),
+                if(pending.isNotEmpty)...[
+                  const SizedBox(height:10),
+                  sectionHeader(t('Mes demandes en attente'),t('Voir toutes'),()=>context.go('/bookings')),
+                  const SizedBox(height:6),
+                  ...pending.take(2).map((x)=>_RequestCard(x)),
+                ],
+              ],
+            ])),
+          ]);
+        },
+      ),
     ),
   );
 }
 
-/// Écran Compte minimal : identité, langue, déconnexion. Aucune fiche du
-/// kit ne le détaille finement (composant implicite de navigation dans
-/// les maquettes C02/etc via la bottom nav), volontairement sobre.
+/// Profil (planche 15 P3, planche 03 P8) : seules les entrées dont la
+/// fonction existe sont affichées (aucun bouton inerte).
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
-
   @override
   State<AccountScreen> createState() => _AccountScreenState();
 }
@@ -997,24 +1074,33 @@ class _AccountScreenState extends State<AccountScreen> {
     }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
     finally{if(mounted)setState(()=>busy=false);}
   }
+
   Future<void> password()async{
-  if(busy)return;
-  final change=await showDialog<(String,String)>(context:context,builder:(_)=>const VeyraPasswordDialog());
-  if(change==null||!mounted)return;
-  setState(()=>busy=true);
-  try{await api.changePassword(change.$1,change.$2);await api.logout();if(mounted)context.go('/login');}
-  catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
-  finally{if(mounted)setState(()=>busy=false);}
-}
-Future<void> logout() async {
+    if(busy)return;
+    final change=await showDialog<(String,String)>(context:context,builder:(_)=>const VeyraPasswordDialog());
+    if(change==null||!mounted)return;
+    setState(()=>busy=true);
+    try{await api.changePassword(change.$1,change.$2);await api.logout();if(mounted)context.go('/login');}
+    catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+    finally{if(mounted)setState(()=>busy=false);}
+  }
+
+  Future<void> logout() async {
     await api.logout();
     if (mounted) context.go('/login');
   }
 
+  Widget item(IconData icon,String label,VoidCallback onTap,{Color color=VeyraColors.textPrimary,bool chevron=true})=>ListTile(
+    contentPadding:const EdgeInsets.symmetric(horizontal:4),
+    leading:Icon(icon,color:color),
+    title:Text(label,style:TextStyle(fontWeight:FontWeight.w600,color:color)),
+    trailing:chevron?const Icon(Icons.chevron_right,color:VeyraColors.textSecondary):null,
+    onTap:onTap,
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(t('Mon compte'))),
       body: FutureBuilder<Map<String, dynamic>>(
         future: future,
         builder: (context, snapshot) {
@@ -1026,91 +1112,78 @@ Future<void> logout() async {
           }
           final profile = snapshot.data ?? <String, dynamic>{};
           final name = ('${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}').trim();
-          final rating = double.tryParse((profile['rating_average'] ?? 0).toString()) ?? 0;
-          final count = profile['rating_count'] ?? 0;
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Center(
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 48,
-                      backgroundImage: avatar == null ? null : MemoryImage(avatar!),
-                      child: avatar == null ? const Icon(Icons.person, size: 42) : null,
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: IconButton.filled(
-                        onPressed: busy ? null : photo,
-                        icon: const Icon(Icons.camera_alt_outlined),
-                      ),
-                    ),
-                  ],
+          return ListView(padding:EdgeInsets.zero,children:[
+            Container(
+              color:VeyraColors.primary,
+              padding:EdgeInsets.fromLTRB(20,MediaQuery.paddingOf(context).top+16,20,40),
+              child:Text(t('Mon profil'),style:const TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800)),
+            ),
+            Transform.translate(offset:const Offset(0,-24),child:Container(
+              margin:const EdgeInsets.symmetric(horizontal:16),
+              padding:const EdgeInsets.fromLTRB(16,18,16,8),
+              decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(20),boxShadow:VeyraShadows.card),
+              child:Column(children:[
+                Row(children:[
+                  Stack(children:[
+                    CircleAvatar(radius:36,backgroundColor:VeyraColors.surfaceMuted,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:36,color:VeyraColors.primary):null),
+                    Positioned(right:-6,bottom:-6,child:IconButton(tooltip:t('Changer la photo'),onPressed:busy?null:photo,icon:const CircleAvatar(radius:14,backgroundColor:VeyraColors.accent,child:Icon(Icons.camera_alt_outlined,size:15,color:Colors.white)))),
+                  ]),
+                  const SizedBox(width:14),
+                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Text(name.isEmpty?t('Client Veyra'):name,style:const TextStyle(fontSize:18,fontWeight:FontWeight.w800)),
+                    if((profile['phone']??'').toString().isNotEmpty)Text(profile['phone'].toString(),style:const TextStyle(color:VeyraColors.textSecondary)),
+                    Text((profile['email']??'').toString(),style:const TextStyle(color:VeyraColors.textSecondary)),
+                  ])),
+                ]),
+                const SizedBox(height:12),
+                FilledButton(
+                  style:FilledButton.styleFrom(minimumSize:const Size.fromHeight(44),backgroundColor:const Color(0xFFF3EBDD),foregroundColor:VeyraColors.textPrimary),
+                  onPressed:()=>edit(profile),child:Text(t('Modifier mon profil')),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Center(child: Text(name.isEmpty ? t('Client Veyra') : name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
-              Center(child: Text((profile['email'] ?? '').toString())),
-              Center(child: Text((profile['phone'] ?? '').toString())),
-              const SizedBox(height: 8),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.star, color: Colors.amber),
-                    Text(' ${rating.toStringAsFixed(1)} ($count ${t('avis')})'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  children: [
-                    ListTile(leading: const Icon(Icons.edit), title: Text(t('Informations personnelles')), onTap: () => edit(profile)),
-                    ListTile(leading: const Icon(Icons.lock), title: Text(t('Modifier mon mot de passe')), onTap: password),
-                    ListTile(leading:const Icon(Icons.place),title:Text(t('Mes adresses')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen()))),
-                    ListTile(leading:const Icon(Icons.favorite),title:Text(t('Mes chauffeurs favoris')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const FavoriteDriversScreen()))),
-                    ListTile(leading:const Icon(Icons.credit_card),title:Text(t('Mes moyens de paiement')),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>SavedCardsScreen(load:api.savedCards,remove:api.removeSavedCard)))),
-                  ],
-                ),
-              ),
-              const LanguageSwitch(),
-              const SizedBox(height: 20),
-              VeyraSecondaryButton(label: t('Se déconnecter'), icon: Icons.logout, onPressed: logout),
-            ],
-          );
+                const SizedBox(height:8),
+              ]),
+            )),
+            Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Column(children:[
+              item(Icons.event_available_outlined,t('Mes réservations'),()=>context.go('/reservations')),
+              item(Icons.description_outlined,t('Mes demandes d’offres'),()=>context.go('/bookings')),
+              item(Icons.credit_card,t('Mes moyens de paiement'),()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>SavedCardsScreen(load:api.savedCards,remove:api.removeSavedCard)))),
+              item(Icons.notifications_none,t('Notifications'),()=>context.push('/notifications')),
+              const Divider(),
+              item(Icons.favorite_border,t('Favoris'),()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const FavoriteDriversScreen()))),
+              item(Icons.place_outlined,t('Adresses enregistrées'),()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen()))),
+              const Divider(),
+              item(Icons.lock_outline,t('Modifier mon mot de passe'),password),
+              const Padding(padding:EdgeInsets.symmetric(vertical:4),child:LanguageSwitch()),
+              const Divider(),
+              item(Icons.logout,t('Déconnexion'),logout,color:VeyraColors.danger,chevron:false),
+              const SizedBox(height:16),
+            ])),
+          ]);
         },
       ),
     );
   }
 }
 
-/// Coquille de navigation persistante (bottom nav 4 onglets), conforme
-/// aux maquettes C02 et suivantes ("BottomNavigation" listé comme
-/// composant UI). Utilise StatefulShellRoute.indexedStack : chaque
-/// onglet garde sa propre pile de navigation indépendante (évite les
-/// "routes orphelines"/"double page après push" mentionnés dans le
-/// protocole anti-erreurs), et les écrans de flux (adresses, offres,
-/// détail réservation, chat, tracking) restent des routes de niveau
-/// racine poussées PAR-DESSUS la coquille entière, masquant
-/// naturellement la bottom nav pendant ces parcours.
+/// Barre de navigation (planches 05, 09, 11, 17).
 class AppShell extends StatelessWidget{
   final StatefulNavigationShell navigationShell;
   const AppShell({required this.navigationShell,super.key});
 
   @override Widget build(BuildContext context)=>Scaffold(
     body:navigationShell,
-    bottomNavigationBar:NavigationBar(
-      selectedIndex:navigationShell.currentIndex,
-      onDestinationSelected:(i)=>navigationShell.goBranch(i,initialLocation:i==navigationShell.currentIndex),
-      destinations:[
-        NavigationDestination(icon:const Icon(Icons.home_outlined),selectedIcon:const Icon(Icons.home),label:t('Accueil')),
-        NavigationDestination(icon:const Icon(Icons.event_note_outlined),selectedIcon:const Icon(Icons.event_note),label:t('Réservations')),
-        NavigationDestination(icon:const Icon(Icons.notifications_outlined),selectedIcon:const Icon(Icons.notifications),label:t('Notifications')),
-        NavigationDestination(icon:const Icon(Icons.person_outline),selectedIcon:const Icon(Icons.person),label:t('Compte')),
-      ],
+    bottomNavigationBar:DecoratedBox(
+      decoration:const BoxDecoration(border:Border(top:BorderSide(color:VeyraColors.border))),
+      child:NavigationBar(
+        selectedIndex:navigationShell.currentIndex,
+        onDestinationSelected:(i)=>navigationShell.goBranch(i,initialLocation:i==navigationShell.currentIndex),
+        destinations:[
+          NavigationDestination(icon:const Icon(Icons.home_outlined),selectedIcon:const Icon(Icons.home),label:t('Accueil')),
+          NavigationDestination(icon:const Icon(Icons.description_outlined),selectedIcon:const Icon(Icons.description),label:t('Mes demandes')),
+          NavigationDestination(icon:const Icon(Icons.calendar_month_outlined),selectedIcon:const Icon(Icons.calendar_month),label:t('Mes réservations')),
+          NavigationDestination(icon:const Icon(Icons.person_outline),selectedIcon:const Icon(Icons.person),label:t('Profil')),
+        ],
+      ),
     ),
   );
 }

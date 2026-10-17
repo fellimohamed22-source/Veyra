@@ -46,8 +46,9 @@ void main() {
                 'Aucune réservation à venir. Votre prochain trajet apparaîtra ici.'),
             findsOneWidget);
       } else {
-        expect(
-            find.text('Nouveau départ → Nouvelle destination'), findsOneWidget);
+        // Board 15 shows the route as two lines: pickup, then destination.
+        expect(find.text('Nouveau départ'), findsOneWidget);
+        expect(find.text('Nouvelle destination'), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
