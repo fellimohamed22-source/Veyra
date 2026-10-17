@@ -3,6 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_client/main.dart';
 
+Finder _next() => find.widgetWithText(FilledButton, 'Suivant');
+
+Future<void> _tapNext(WidgetTester tester) async {
+  await tester.tap(_next());
+  await tester.pumpAndSettle();
+}
+
 void main() {
   for (final retired in [false, true]) {
     testWidgets(
@@ -38,17 +45,19 @@ void main() {
         'dropoff_lng': 7.0
       })));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Publier la demande'), 400,
-          scrollable: find.byType(Scrollable).first);
+      await _tapNext(tester); // départ -> destination
+      await _tapNext(tester); // destination -> véhicule
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Publier la demande'));
-      await tester.pumpAndSettle();
+      if (retired) {
+        // The retired category is no longer selected: a new choice is required.
+        expect(tester.widget<FilledButton>(_next()).onPressed, isNull);
+      } else {
+        await _tapNext(tester); // véhicule -> détails
+        expect(find.text('Le nombre de passagers dépasse la capacité du véhicule sélectionné.'), findsOneWidget);
+        expect(find.text('4'), findsOneWidget, reason: 'passengers must not be silently reduced');
+        expect(tester.widget<FilledButton>(_next()).onPressed, isNull);
+      }
       expect(posted, isFalse);
-      expect(
-          find.text(retired
-              ? 'Complétez le trajet, la date et la catégorie.'
-              : 'Le nombre de passagers dépasse la capacité de cette catégorie.'),
-          findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }

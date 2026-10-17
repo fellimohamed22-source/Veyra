@@ -24,18 +24,19 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: AddressScreen()));
     await tester.pumpAndSettle();
     final pickup = find.byWidgetPredicate((widget) =>
-        widget is TextField && widget.decoration?.labelText == 'Adresse de départ');
+        widget is TextField && widget.decoration?.hintText == 'Adresse de départ');
     await tester.enterText(pickup, 'Nice');
     await tester.pump(const Duration(milliseconds: 450));
     await tester.enterText(pickup, 'Cannes');
     await tester.pump(const Duration(milliseconds: 450));
     expect(pending.keys, containsAll(['Nice', 'Cannes']));
-    pending['Cannes']!('Cannes, France');
+    pending['Cannes']!('Cannes Centre, France');
     await tester.pumpAndSettle();
-    pending['Nice']!('Nice, France');
+    pending['Nice']!('Nice Ville, France');
     await tester.pumpAndSettle();
-    expect(find.text('Cannes, France'), findsOneWidget);
-    expect(find.text('Nice, France'), findsNothing);
+    // Suggestions show the street as title and the rest as subtitle.
+    expect(find.text('Cannes Centre'), findsOneWidget);
+    expect(find.text('Nice Ville'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

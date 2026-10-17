@@ -51,22 +51,29 @@ void main() {
         builder: (context, child) => MediaQuery(data: MediaQuery.of(context)
             .copyWith(textScaler: const TextScaler.linear(1.5)), child: child!)));
     await tester.pumpAndSettle();
-    final pageScroll = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
-    await tester.scrollUntilVisible(find.text('Passagers'), 250, scrollable: pageScroll);
+    Future<void> next() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Suivant'));
+      await tester.pumpAndSettle();
+    }
+    await next(); // départ -> destination
+    await next(); // destination -> véhicule
+    await next(); // véhicule -> détails
     await tester.ensureVisible(find.byTooltip('Augmenter').first);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Augmenter').first);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Récapitulatif'), 250, scrollable: pageScroll);
-    final recap = find.ancestor(of: find.text('Récapitulatif'), matching: find.byType(Card)).first;
-    expect(find.descendant(of: recap, matching: find.text('Nice')), findsOneWidget);
-    expect(find.descendant(of: recap, matching: find.text('Cannes')), findsOneWidget);
-    expect(find.descendant(of: recap, matching: find.text('Berline')), findsOneWidget);
-    expect(find.descendant(of: recap, matching: find.text('3 passager(s) • 1 bagage(s)')), findsOneWidget);
-    expect(find.descendant(of: recap, matching: find.text('Siège enfant')), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Publier la demande'), 250,
-        scrollable: pageScroll);
-    await tester.tap(find.text('Publier la demande'));
+    await next(); // détails -> commentaire
+    await next(); // commentaire -> récapitulatif
+    expect(find.text('Récapitulatif de votre demande'), findsOneWidget);
+    expect(find.text('Nice'), findsOneWidget);
+    expect(find.text('Cannes'), findsOneWidget);
+    expect(find.text('Berline'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    // At 150 % text on a 320 pt screen the comment is below the fold.
+    await tester.scrollUntilVisible(find.text('Siège enfant'), 200,
+        scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first);
+    expect(find.text('Siège enfant'), findsOneWidget);
+    await tester.tap(find.text('Rechercher des offres'));
     await tester.pumpAndSettle();
     expect(posts, hasLength(1));
     final body = Map<String, dynamic>.from(posts.single.data as Map);
@@ -78,7 +85,7 @@ void main() {
     expect(body['customerNotes'], 'Siège enfant');
     expect(DateTime.parse(body['scheduledAt']).isUtc, isTrue);
     expect(posts.single.headers['Idempotency-Key'], isNotEmpty);
-    expect(find.text('Demande publiée'), findsOneWidget);
+    expect(find.text('Votre demande a été envoyée !'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.text('Voir ma demande'));
     await tester.tap(find.text('Voir ma demande'));

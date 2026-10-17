@@ -16,3 +16,7 @@ VEYRA_V4_PACK_*.zip
 # Jamais suivis jusqu'ici : la CI résout les dépendances à chaque build.
 mobile-client/pubspec.lock
 mobile-driver/pubspec.lock
+
+# Banc de captures UI local (rendus dépendants de la plateforme)
+mobile-client/tool/screens/out/
+mobile-driver/tool/screens/out/

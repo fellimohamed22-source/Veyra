@@ -34,6 +34,7 @@ import 'core/widgets/veyra_button.dart';
 import 'core/widgets/signup_consents.dart';
 import 'core/widgets/saved_cards_screen.dart';
 import 'core/widgets/phone_verification_screen.dart';
+import 'core/widgets/veyra_ui.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/status_badge.dart';
@@ -1114,100 +1115,20 @@ class AppShell extends StatelessWidget{
   );
 }
 
-/// Repère visuel non interactif pour AddressScreen (le formulaire de
-/// réservation reste un seul écran à défilement, pas 3 écrans distincts
-/// comme la maquette C03→C05) -- une simple carte mentale des sections
-/// du formulaire, pas un traceur de progression (rien ne distingue une
-/// section "en cours" d'une autre puisque l'utilisateur peut revenir
-/// modifier n'importe quel champ à tout moment dans ce même écran).
-class _WizardStep extends StatelessWidget{
-  final String label;
-  const _WizardStep({required this.label});
-  @override Widget build(BuildContext context)=>Container(
-    padding:const EdgeInsets.symmetric(vertical:8),
-    decoration:BoxDecoration(
-      color:const Color(0xFFEAF1FD),
-      borderRadius:BorderRadius.circular(VeyraRadius.pill),
-    ),
-    alignment:Alignment.center,
-    child:Text(label,style:const TextStyle(fontSize:12,fontWeight:FontWeight.w600,color:Color(0xFF123A66))),
-  );
-}
-
-class _RecapLine extends StatelessWidget{
-  final IconData icon;
-  final String text;
-  const _RecapLine({required this.icon,required this.text});
-  @override Widget build(BuildContext context)=>Padding(
-    padding:const EdgeInsets.symmetric(vertical:4),
-    child:Row(children:[
-      Icon(icon,size:18,color:Colors.black54),
-      const SizedBox(width:10),
-      Expanded(child:Text(text,style:const TextStyle(fontSize:14))),
-    ]),
-  );
-}
-
-/// Stepper mobile pour un compteur borné (passagers/bagages) -- remplace
-/// les DropdownButtonFormField précédents, explicitement demandé par la
-/// mission UX (section 5 : "prefer mobile steppers rather than awkward
-/// dropdowns"). Boutons +/- de 48dp (section 20 : cible tactile
-/// minimale confortable), désactivés proprement aux bornes plutôt que
-/// de permettre un dépassement silencieux.
-class _CountStepper extends StatelessWidget{
-  final String label;
-  final int value;
-  final int min;
-  final int max;
-  final ValueChanged<int> onChanged;
-  const _CountStepper({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-  });
-
-  @override Widget build(BuildContext context)=>Container(
-    decoration:BoxDecoration(
-      border:Border.all(color:const Color(0xFFE5E7EB)),
-      borderRadius:BorderRadius.circular(VeyraRadius.md),
-    ),
-    padding:const EdgeInsets.symmetric(horizontal:8,vertical:4),
-    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Padding(
-        padding:const EdgeInsets.only(left:8,top:6),
-        child:Text(label,style:const TextStyle(fontSize:12,color:Colors.black54)),
-      ),
-      Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
-        SizedBox(
-          width:48,height:48,
-          child:IconButton(
-            onPressed:value>min?()=>onChanged(value-1):null,
-            icon:const Icon(Icons.remove_circle_outline),
-            tooltip:t('Diminuer'),
-          ),
-        ),
-        Text('$value',style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
-        SizedBox(
-          width:48,height:48,
-          child:IconButton(
-            onPressed:value<max?()=>onChanged(value+1):null,
-            icon:const Icon(Icons.add_circle_outline),
-            tooltip:t('Augmenter'),
-          ),
-        ),
-      ]),
-    ]),
-  );
-}
-
+/// Parcours de réservation client en 7 étapes, conforme à la planche 09
+/// (et à ses variantes 01, 11, 17) : départ, destination, type de
+/// véhicule, détails, commentaire, récapitulatif, demande envoyée.
+/// Toute la logique métier précédente est conservée (recherche anti-course
+/// et anti-rafale, position, adresses enregistrées, contrôle capacité et
+/// délai, publication idempotente, réservation à refaire).
 class AddressScreen extends StatefulWidget{
   final Map<String,dynamic>? initialBooking;
   const AddressScreen({this.initialBooking,super.key});
   @override State<AddressScreen> createState()=>_AddressScreenState();
 }
 class _AddressScreenState extends State<AddressScreen>{
+  static const _steps=7;
+  int step=0;
   final pickup=TextEditingController();
   final notes=TextEditingController();
   int categoryCapacity=9;
@@ -1224,6 +1145,11 @@ class _AddressScreenState extends State<AddressScreen>{
   String? categoryId;
   String? categoryName;
   late Future<List<dynamic>> categories;
+  late Future<List<dynamic>> saved;
+  List<Map<String,dynamic>> recents=[];
+  Map<String,dynamic>? route;
+  String? newBookingId;
+  bool pickOnMap=false;
 
   bool loadingPickup=false;
   bool loadingDropoff=false;
@@ -1232,10 +1158,13 @@ class _AddressScreenState extends State<AddressScreen>{
   String? error;
   Timer? _searchDebounce;
   int pickupSearchRevision=0,dropoffSearchRevision=0;
+  static const _recentKey='recentPlaces';
 
   @override void initState(){
     super.initState();
     categories=loadCategories();
+    saved=api.savedAddresses().catchError((_)=><dynamic>[]);
+    loadRecents();
     final initial=widget.initialBooking;
     if(initial!=null){
       final pickupLabel=initial['pickup_address']?.toString()??'';
@@ -1255,11 +1184,6 @@ class _AddressScreenState extends State<AddressScreen>{
       baggageCount=(initial['baggage_count'] as num?)?.toInt()??0;
       scheduledAt=DateTime.now().add(const Duration(hours:3));
     }
-    // Real gap fixed here: the client had no way to know whether their
-    // booking would show competing prices to drivers or not -- this is
-    // a platform-wide policy set by an admin (not a per-booking choice),
-    // but there was previously no way for anyone but an admin to even
-    // see which mode is currently active.
   }
 
   Future<List<dynamic>> loadCategories()async{
@@ -1273,6 +1197,23 @@ class _AddressScreenState extends State<AddressScreen>{
       }
     });
     return items;
+  }
+
+  Future<void> loadRecents()async{
+    try{
+      final raw=await api.storage.read(key:_recentKey);
+      if(raw==null)return;
+      final list=(jsonDecode(raw) as List).whereType<Map>().map((m)=>Map<String,dynamic>.from(m)).toList();
+      if(mounted)setState(()=>recents=list);
+    }catch(_){}
+  }
+
+  /// Keeps the last 5 chosen places on the device only (never sent).
+  Future<void> rememberPlace(Map<String,dynamic> place)async{
+    if(place['lat']==null||place['lng']==null)return;
+    final next=[{'label':place['label'],'lat':place['lat'],'lng':place['lng']},...recents.where((p)=>p['label']!=place['label'])].take(5).toList();
+    recents=next;
+    try{await api.storage.write(key:_recentKey,value:jsonEncode(next));}catch(_){}
   }
 
   @override void dispose(){
@@ -1314,19 +1255,13 @@ class _AddressScreenState extends State<AddressScreen>{
     }
     setState(()=>locating=true);
     try{
-      final p=await Geolocator.getCurrentPosition(
-        locationSettings:const LocationSettings(accuracy:LocationAccuracy.high),
-      );
+      final p=await Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high));
       final place=await api.reverseGeocode(p.latitude,p.longitude);
       if(place==null){
         if(mounted)setState(()=>error=t('Aucune adresse trouvée pour votre position actuelle.'));
         return;
       }
-      if(mounted)setState((){
-        pickup.text=place['label']?.toString()??'';
-        pickupPlace=place;
-        pickupResults=[];
-      });
+      if(mounted)selectPlace(true,place);
     }catch(_){
       if(mounted)setState(()=>error=t('Impossible d’obtenir votre position actuelle.'));
     }finally{
@@ -1334,157 +1269,111 @@ class _AddressScreenState extends State<AddressScreen>{
     }
   }
 
+  Future<void> pickDestinationOnMap(LatLng point)async{
+    try{
+      final place=await api.reverseGeocode(point.latitude,point.longitude);
+      if(!mounted)return;
+      if(place==null){setState(()=>error=t('Aucune adresse trouvée à cet endroit.'));return;}
+      selectPlace(false,place);
+      setState(()=>pickOnMap=false);
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }
+  }
+
+  void selectPlace(bool isPickup,Map<String,dynamic> place){
+    final selected=Map<String,dynamic>.from(place);
+    setState((){
+      error=null;
+      if(isPickup){pickupPlace=selected;pickup.text=selected['label']?.toString()??'';pickupResults=[];}
+      else{dropoffPlace=selected;dropoff.text=selected['label']?.toString()??'';dropoffResults=[];}
+      route=null;
+    });
+    rememberPlace(selected);
+  }
+
   Future<void> selectSavedAddress(bool isPickup)async{
     final value=await Navigator.push<Map<String,dynamic>>(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen(select:true)));
-    if(value!=null&&mounted)setState((){if(isPickup){pickupPlace=value;pickup.text=value['label'].toString();}else{dropoffPlace=value;dropoff.text=value['label'].toString();}});
-  }
-  Future<void> saveCurrentAddress(bool isPickup)async{
-    final place=isPickup?pickupPlace:dropoffPlace;if(place==null)return;
-    final label=TextEditingController();
-    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Enregistrer cette adresse')),content:TextField(controller:label,maxLength:80,decoration:InputDecoration(labelText:t('Maison, Travail ou autre nom'))),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Annuler'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Enregistrer')))]));
-    if(yes!=true||label.text.trim().isEmpty)return;
-    try{await api.saveAddress({'label':label.text.trim(),'address':place['label'],'lat':place['lat'],'lng':place['lng']});if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Adresse enregistrée.'))));}
-    catch(e){if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));}
-  }
-  Widget addressField(bool isPickup){
-    final controller=isPickup?pickup:dropoff;
-    final results=isPickup?pickupResults:dropoffResults;
-    final loading=isPickup?loadingPickup:loadingDropoff;
-    return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      TextField(
-        controller:controller,
-        onChanged:(q){
-          // Real bug fixed here: setting controller.text programmatically
-          // (in the suggestion onTap below) also fires this onChanged --
-          // resetting the place unconditionally meant the just-selected
-          // address was wiped out the instant it was chosen, even though
-          // the field still visibly showed the selected text. Only treat
-          // this as the user genuinely editing/clearing their selection
-          // when the new text actually differs from the selected place's
-          // own label.
-          final current=isPickup?pickupPlace:dropoffPlace;
-          if(current!=null&&current['label']==q)return;
-          setState((){
-            if(isPickup){pickupPlace=null;pickupResults=[];loadingPickup=false;pickupSearchRevision++;}
-            else{dropoffPlace=null;dropoffResults=[];loadingDropoff=false;dropoffSearchRevision++;}
-          });
-          // Real bug found from an actual production log: every single
-          // keystroke called search() immediately, each one hitting
-          // LocationIQ's geocoding API directly -- typing a normal
-          // address (e.g. "Marseille") fired up to 9+ requests within
-          // a couple of seconds, comfortably exceeding LocationIQ's
-          // per-second rate limit and surfacing as repeated 429 "Rate
-          // Limited Second" errors server-side (AddressController ->
-          // LocationIqGeocodingProvider). Standard debounce: cancel any
-          // pending search and wait 400ms of no further typing before
-          // actually calling the API, same UX pattern virtually every
-          // autocomplete field uses.
-          _searchDebounce?.cancel();
-          _searchDebounce=Timer(const Duration(milliseconds:400),()=>search(isPickup,q));
-        },
-        decoration:InputDecoration(
-          labelText:isPickup?t('Adresse de départ'):t('Destination'),
-          prefixIcon:Icon(isPickup?Icons.trip_origin:Icons.location_on),
-          suffixIcon:loading?const Padding(
-            padding:EdgeInsets.all(14),
-            child:SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)),
-          ):isPickup?(locating?const Padding(
-            padding:EdgeInsets.all(14),
-            child:SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)),
-          ):IconButton(icon:const Icon(Icons.my_location),tooltip:t('Utiliser ma position actuelle'),onPressed:useMyLocation)):null,
-        ),
-      ),
-      Wrap(children:[TextButton.icon(onPressed:()=>selectSavedAddress(isPickup),icon:const Icon(Icons.bookmark_outline),label:Text(t('Mes adresses'))),if((isPickup?pickupPlace:dropoffPlace)!=null)TextButton(onPressed:()=>saveCurrentAddress(isPickup),child:Text(t('Enregistrer cette adresse')))]),
-      if((isPickup?pickupPlace:dropoffPlace)!=null)
-        Padding(
-          padding:const EdgeInsets.only(top:6,bottom:6),
-          child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            const Icon(Icons.check_circle_outline,color:Color(0xFF16A34A),size:20),
-            const SizedBox(width:8),
-            Expanded(child:Text(
-              isPickup
-                ?t('Point de départ sélectionné. Vérifiez que cette adresse correspond exactement au lieu où le chauffeur doit vous retrouver.')
-                :t('Destination sélectionnée. Vérifiez que cette adresse correspond au lieu souhaité.'),
-              style:const TextStyle(fontSize:13,color:Colors.black87),
-            )),
-          ]),
-        ),
-
-      for(final item in results.take(5))
-        ListTile(
-          dense:true,
-          leading:const Icon(Icons.place_outlined),
-          title:Text((item as Map)['label']?.toString()??''),
-          onTap:(){
-            final selected=Map<String,dynamic>.from(item);
-            setState((){
-              controller.text=selected['label']?.toString()??'';
-              if(isPickup){
-                pickupPlace=selected;
-                pickupResults=[];
-              }else{
-                dropoffPlace=selected;
-                dropoffResults=[];
-              }
-            });
-          },
-        ),
-    ]);
+    if(value!=null&&mounted)selectPlace(isPickup,value);
   }
 
-  Future<void> chooseDateTime()async{
+  Future<void> chooseDate()async{
     final now=DateTime.now();
-    final earliest=now.add(const Duration(hours:2));
     final latest=now.add(const Duration(days:365));
-    final proposed=scheduledAt??now.add(const Duration(hours:3));
-    // The date picker requires its initial date to remain inside the
-    // selectable interval, including when an old booking is reused.
-    final initial=proposed.isBefore(now)?earliest:(proposed.isAfter(latest)?latest:proposed);
-    final date=await showDatePicker(
-      context:context,
-      firstDate:now,
-      lastDate:latest,
-      initialDate:initial,
-    );
+    final base=scheduledAt??now.add(const Duration(hours:3));
+    final initial=base.isBefore(now)?now:(base.isAfter(latest)?latest:base);
+    final date=await showDatePicker(context:context,firstDate:now,lastDate:latest,initialDate:initial);
     if(date==null||!mounted)return;
-    final time=await showTimePicker(
-      context:context,
-      initialTime:TimeOfDay.fromDateTime(initial),
-    );
+    final time=TimeOfDay.fromDateTime(scheduledAt??now.add(const Duration(hours:3)));
+    setDateTime(DateTime(date.year,date.month,date.day,time.hour,time.minute));
+  }
+
+  Future<void> chooseTime()async{
+    final base=scheduledAt??DateTime.now().add(const Duration(hours:3));
+    final time=await showTimePicker(context:context,initialTime:TimeOfDay.fromDateTime(base));
     if(time==null||!mounted)return;
-    final selected=DateTime(date.year,date.month,date.day,time.hour,time.minute);
-    if(selected.difference(DateTime.now())<const Duration(hours:2)){
-      setState(()=>error=t('Le départ doit être planifié au moins 2 heures à l’avance.'));
+    setDateTime(DateTime(base.year,base.month,base.day,time.hour,time.minute));
+  }
+
+  void setDateTime(DateTime selected){
+    setState((){
+      scheduledAt=selected;
+      error=selected.difference(DateTime.now())<const Duration(hours:2)?t('Le départ doit être planifié au moins 2 heures à l’avance.'):null;
+    });
+  }
+
+  bool get leadTimeOk=>scheduledAt!=null&&scheduledAt!.difference(DateTime.now())>=const Duration(hours:2);
+  bool get capacityOk=>passengerCount<=categoryCapacity;
+
+  bool canContinue(){
+    switch(step){
+      case 0:return pickupPlace!=null;
+      case 1:return dropoffPlace!=null;
+      case 2:return categoryId!=null&&categoriesReady;
+      case 3:return leadTimeOk&&capacityOk;
+      default:return true;
+    }
+  }
+
+  void goTo(int target){
+    setState((){step=target;error=null;pickOnMap=false;});
+    if(target==5)loadRoute();
+  }
+
+  void back(){
+    if(step==0){
+      if(Navigator.canPop(context))Navigator.pop(context);else context.go('/home');
       return;
     }
-    setState((){scheduledAt=selected;error=null;});
+    goTo(step-1);
+  }
+
+  Future<void> loadRoute()async{
+    final a=pickupPlace,b=dropoffPlace;
+    if(a==null||b==null||route!=null)return;
+    try{
+      final r=await api.routeEstimate(fromLat:(a['lat'] as num).toDouble(),fromLng:(a['lng'] as num).toDouble(),toLat:(b['lat'] as num).toDouble(),toLng:(b['lng'] as num).toDouble());
+      if(mounted)setState(()=>route=r);
+    }catch(_){}
   }
 
   Future<void> publish()async{
     if(submitting)return;
     if(!categoriesReady){setState(()=>error=t('Rechargez les catégories avant de publier.'));return;}
-    if(passengerCount>categoryCapacity){setState(()=>error=t('Le nombre de passagers dépasse la capacité de cette catégorie.'));return;}
+    if(!capacityOk){setState(()=>error=t('Le nombre de passagers dépasse la capacité de cette catégorie.'));return;}
     if(pickupPlace==null||dropoffPlace==null||scheduledAt==null||categoryId==null){
       setState(()=>error=t('Complétez le trajet, la date et la catégorie.'));
       return;
     }
-    if(scheduledAt!.difference(DateTime.now())<const Duration(hours:2)){
+    if(!leadTimeOk){
       setState(()=>error=t('Le départ doit être planifié au moins 2 heures à l’avance.'));
       return;
     }
     setState((){submitting=true;error=null;});
     try{
       final created=await api.createBooking({
-        'pickup':{
-          'lat':pickupPlace!['lat'],
-          'lng':pickupPlace!['lng'],
-          'address':pickupPlace!['label'],
-        },
-        'dropoff':{
-          'lat':dropoffPlace!['lat'],
-          'lng':dropoffPlace!['lng'],
-          'address':dropoffPlace!['label'],
-        },
+        'pickup':{'lat':pickupPlace!['lat'],'lng':pickupPlace!['lng'],'address':pickupPlace!['label']},
+        'dropoff':{'lat':dropoffPlace!['lat'],'lng':dropoffPlace!['lng'],'address':dropoffPlace!['label']},
         'scheduledAt':scheduledAt!.toUtc().toIso8601String(),
         'categoryId':categoryId,
         'paymentMethod':paymentMethod,
@@ -1495,42 +1384,10 @@ class _AddressScreenState extends State<AddressScreen>{
         'preferredDriverId':widget.initialBooking?['preferred_driver_id'],
       });
       if(!mounted)return;
-      final newBookingId=created['id']?.toString();
-      // Section 19 : déclenche le mécanisme de rafraîchissement
-      // explicite plutôt que de dépendre uniquement de
-      // RouteObserver/didPopNext (fiabilité incertaine avec le
-      // Navigator imbriqué du shell) pour que Accueil/Réservations
-      // affichent la nouvelle demande dès le retour.
       RefreshBus.bump();
-      // Spec section 6, explicit: "Current behavior returning immediately
-      // to Home is insufficient UX." Never implies a driver is already
-      // booked -- publishing a request is not a confirmed driver, so this
-      // deliberately stays about the request being sent, not about a
-      // ride being arranged.
-      await showModalBottomSheet(context:context,isScrollControlled:true,isDismissible:false,enableDrag:false,builder:(sheetContext)=>SafeArea(child:SingleChildScrollView(child:Padding(
-        padding:const EdgeInsets.all(24),
-        child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-          const Icon(Icons.check_circle,color:Color(0xFF16A34A),size:48),
-          const SizedBox(height:12),
-          Text(t('Demande publiée'),textAlign:TextAlign.center,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-          const SizedBox(height:8),
-          Text(t('Votre demande a été envoyée aux chauffeurs Veyra disponibles. Vous recevrez une notification lorsqu’une nouvelle offre sera reçue.'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.black54)),
-          const SizedBox(height:20),
-          if(newBookingId!=null)FilledButton(
-            onPressed:(){
-              Navigator.pop(sheetContext);
-              context.go('/home');
-              context.push('/booking/'+newBookingId);
-            },
-            child:Text(t('Voir ma demande')),
-          ),
-          const SizedBox(height:8),
-          OutlinedButton(
-            onPressed:(){Navigator.pop(sheetContext);context.go('/home');},
-            child:Text(t('Retour à l’accueil')),
-          ),
-        ]),
-      ))));
+      // A published request is not a confirmed driver: the success step
+      // speaks about the request being sent, never about a ride booked.
+      setState((){newBookingId=created['id']?.toString();step=6;});
     }on DioException catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
     }catch(_){
@@ -1540,181 +1397,382 @@ class _AddressScreenState extends State<AddressScreen>{
     }
   }
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Planifier une réservation'))),
-    body:SafeArea(child:ListView(padding:const EdgeInsets.all(20),children:[
-      // Repère visuel ajouté suite à l'étude UX/navigation : le
-      // formulaire reste un seul écran (pas le wizard C03→C04→C05 en 3
-      // écrans distincts de la maquette -- changement jugé trop risqué
-      // à restructurer sans pouvoir tester visuellement), mais rien
-      // n'indiquait auparavant à l'utilisateur où il en est dans un
-      // long formulaire à défilement. Purement informatif, non
-      // interactif -- ne remplace pas un vrai wizard, réduit seulement
-      // la charge cognitive de "où en suis-je ?".
-      Row(children:[
-        Expanded(child:_WizardStep(label:t('Trajet'))),
-        const SizedBox(width:6),
-        Expanded(child:_WizardStep(label:t('Options'))),
-        const SizedBox(width:6),
-        Expanded(child:_WizardStep(label:t('Confirmation'))),
-      ]),
-      const SizedBox(height:20),
-      addressField(true),
-      const SizedBox(height:16),
-      addressField(false),
-      const SizedBox(height:18),
-      ListTile(
-        contentPadding:EdgeInsets.zero,
-        leading:const Icon(Icons.event),
-        title:Text(t('Date et heure de départ')),
-        subtitle:Text(scheduledAt==null?t('Minimum 2 h à l’avance'):VeyraDateFormatter.dateTime(scheduledAt!.toIso8601String())),
-        trailing:OutlinedButton(
-          // Vrai bug trouvé via un vrai adb logcat (UNCAUGHT_FLUTTER_ERROR:
-          // "Trailing widget consumes the entire tile width"), confirmé
-          // par la trace de pile menant à sliver_multi_box_adaptor.dart
-          // (ce ListTile vit dans le ListView de cet écran). Cause
-          // racine : le thème global OutlinedButton
-          // (app/theme.dart) fixe minimumSize:Size.fromHeight(50), ce qui
-          // signifie une largeur minimale INFINIE par construction --
-          // pensé pour des CTA pleine largeur ailleurs dans l'app, pas
-          // pour un petit bouton "Choisir" utilisé comme trailing d'un
-          // ListTile, qui exige justement une largeur bornée pour se
-          // layouter. Ce déraillement de layout cascadait ensuite en une
-          // série de "RenderBox was not laid out" puis en de multiples
-          // "Null check operator used on a null value" en aval, ce qui
-          // laissait l'écran entièrement blanc.
-          style:OutlinedButton.styleFrom(minimumSize:Size.zero,padding:const EdgeInsets.symmetric(horizontal:16,vertical:10)),
-          onPressed:chooseDateTime,child:Text(t('Choisir')),
-        ),
+  // ---------- présentation ----------
+
+  static String shortDate(DateTime d){
+    final en=AppLocale.code.value=='en';
+    final days=en?['Mon','Tue','Wed','Thu','Fri','Sat','Sun']:['Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.','Dim.'];
+    final months=en?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']:['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+    return '${days[d.weekday-1]} ${d.day} ${months[d.month-1]} ${d.year}';
+  }
+
+  static String hhmm(DateTime d)=>'${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}';
+
+  /// "Rue de la Paix, 75008 Paris" -> ("Rue de la Paix", "75008 Paris").
+  static (String,String?) splitLabel(String label){
+    final i=label.indexOf(',');
+    if(i<0)return (label,null);
+    return (label.substring(0,i).trim(),label.substring(i+1).trim());
+  }
+
+  LatLng? point(Map<String,dynamic>? p)=>p==null||p['lat']==null||p['lng']==null?null:LatLng((p['lat'] as num).toDouble(),(p['lng'] as num).toDouble());
+
+  IconData savedIcon(String name){
+    final n=name.toLowerCase();
+    if(n.contains('maison')||n.contains('domicile')||n.contains('home'))return Icons.home;
+    if(n.contains('travail')||n.contains('bureau')||n.contains('work'))return Icons.work_outline;
+    return Icons.bookmark_outline;
+  }
+
+  Widget searchField(bool isPickup){
+    final controller=isPickup?pickup:dropoff;
+    final loading=isPickup?loadingPickup:loadingDropoff;
+    return TextField(
+      controller:controller,
+      onChanged:(q){
+        // Setting the text programmatically also fires onChanged: only a
+        // real edit (text differs from the chosen place) clears the choice.
+        final current=isPickup?pickupPlace:dropoffPlace;
+        if(current!=null&&current['label']==q)return;
+        setState((){
+          if(isPickup){pickupPlace=null;pickupResults=[];loadingPickup=false;pickupSearchRevision++;}
+          else{dropoffPlace=null;dropoffResults=[];loadingDropoff=false;dropoffSearchRevision++;}
+          route=null;
+        });
+        // 400 ms debounce: one geocoding call per pause, not per keystroke.
+        _searchDebounce?.cancel();
+        _searchDebounce=Timer(const Duration(milliseconds:400),()=>search(isPickup,q));
+      },
+      style:const TextStyle(fontSize:15,fontWeight:FontWeight.w500),
+      decoration:InputDecoration(
+        hintText:isPickup?t('Adresse de départ'):t('Destination'),
+        prefixIcon:Icon(Icons.location_on,color:isPickup?VeyraColors.accent:VeyraColors.pinRed),
+        suffixIcon:loading
+          ?const Padding(padding:EdgeInsets.all(14),child:SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)))
+          :controller.text.isEmpty?null:IconButton(
+            tooltip:t('Effacer'),
+            icon:const Icon(Icons.cancel,color:VeyraColors.textTertiary,size:20),
+            onPressed:(){setState((){controller.clear();if(isPickup){pickupPlace=null;pickupResults=[];}else{dropoffPlace=null;dropoffResults=[];}route=null;});},
+          ),
       ),
-      const SizedBox(height:12),
-      FutureBuilder<List<dynamic>>(
-        future:categories,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
-          if(s.hasError)return TextButton(onPressed:()=>setState((){categories=loadCategories();}),child:Text(t('Réessayer le chargement des catégories')));
-          final items=s.data??[];
-          return DropdownButtonFormField<String>(
-            initialValue:items.any((raw)=>(raw as Map)['id'].toString()==categoryId)?categoryId:null,
-            isExpanded:true,
-            decoration:InputDecoration(labelText:t('Catégorie de véhicule')),
-            items:items.map((raw){
-              final x=Map<String,dynamic>.from(raw as Map);
-              return DropdownMenuItem<String>(
-                value:x['id'].toString(),
-                child:Text((x['display_name']??x['code']).toString()+' • '+x['capacity'].toString()+' passagers',overflow:TextOverflow.ellipsis),
-              );
-            }).toList(),
-            onChanged:(v){
-              if(v==null)return;
-              final match=items.firstWhere(
-                (raw)=>(raw as Map)['id'].toString()==v,
-                orElse:()=>null,
-              );
-              setState((){
-                categoryId=v;
-                categoryCapacity=match==null?9:((match as Map)['capacity'] as num).toInt();
-                passengerCount=passengerCount.clamp(1,categoryCapacity);
-                categoryName=match==null?null:((match as Map)['display_name']??match['code'])?.toString();
-              });
-            },
-          );
-        },
-      ),
-      const SizedBox(height:18),
-      LayoutBuilder(builder:(context,constraints){
-        final passengers=_CountStepper(
-          label:t('Passagers'),
-          value:passengerCount,
-          min:1,
-          max:categoryCapacity,
-          onChanged:(v)=>setState(()=>passengerCount=v),
-        );
-        final baggage=_CountStepper(
-          label:t('Bagages'),
-          value:baggageCount,
-          min:0,
-          max:6,
-          onChanged:(v)=>setState(()=>baggageCount=v),
-        );
-        final minimumWidth=112+MediaQuery.textScalerOf(context).scale(18);
-        if(constraints.maxWidth<minimumWidth*2+12){
-          return Column(children:[passengers,const SizedBox(height:12),baggage]);
-        }
-        return Row(children:[Expanded(child:passengers),const SizedBox(width:12),Expanded(child:baggage)]);
+    );
+  }
+
+  List<Widget> suggestions(bool isPickup){
+    final results=isPickup?pickupResults:dropoffResults;
+    final selected=isPickup?pickupPlace:dropoffPlace;
+    if(results.isNotEmpty){
+      return [
+        VeyraSectionLabel(t('Suggestions')),
+        const SizedBox(height:6),
+        for(final raw in results.take(6))Builder(builder:(_){
+          final item=Map<String,dynamic>.from(raw as Map);
+          final (title,sub)=splitLabel(item['label']?.toString()??'');
+          return VeyraPlaceTile(icon:Icons.location_on_outlined,title:title,subtitle:sub,onTap:()=>selectPlace(isPickup,item));
+        }),
+      ];
+    }
+    return [
+      VeyraSectionLabel(isPickup?t('Adresses récentes'):t('Suggestions')),
+      const SizedBox(height:6),
+      if(selected!=null)Builder(builder:(_){
+        final (title,sub)=splitLabel(selected['label']?.toString()??'');
+        return VeyraPlaceTile(icon:Icons.location_on,title:title,subtitle:sub,highlighted:true,onTap:(){});
       }),
-      const SizedBox(height:18),
-      if(widget.initialBooking?['preferred_driver_id']!=null)Text(t('Votre chauffeur favori sera indiqué comme préférence. Son attribution dépend de sa disponibilité et de votre choix parmi les offres.')),
-      const Text('Paiement',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
-      DropdownButtonFormField<String>(
-        initialValue:paymentMethod,
-        isExpanded:true,
-        decoration:InputDecoration(labelText:t('Mode de paiement')),
-        items:[
-          DropdownMenuItem(value:'CASH',child:Text(t('Cash — le total inclut la commission Veyra'),overflow:TextOverflow.ellipsis,maxLines:1)),
-          DropdownMenuItem(value:'ONLINE',child:Text(t('En ligne — paiement sécurisé'),overflow:TextOverflow.ellipsis,maxLines:1)),
-        ],
-        onChanged:(v){if(v!=null)setState(()=>paymentMethod=v);},
-      ),
+      for(final p in recents.where((p)=>p['label']!=selected?['label']))Builder(builder:(_){
+        final (title,sub)=splitLabel(p['label']?.toString()??'');
+        return VeyraPlaceTile(icon:Icons.history,title:title,subtitle:sub,onTap:()=>selectPlace(isPickup,p));
+      }),
+      FutureBuilder<List<dynamic>>(future:saved,builder:(context,s){
+        final items=(s.data??[]).whereType<Map>().toList();
+        return Column(children:[
+          for(final a in items)VeyraPlaceTile(
+            icon:savedIcon(a['label']?.toString()??''),
+            title:a['label']?.toString()??'',
+            subtitle:a['address']?.toString(),
+            onTap:()=>selectPlace(isPickup,{'label':a['address'],'lat':a['lat'],'lng':a['lng']}),
+          ),
+          VeyraPlaceTile(icon:Icons.bookmark_add_outlined,title:t('Mes adresses enregistrées'),onTap:()=>selectSavedAddress(isPickup)),
+        ]);
+      }),
+    ];
+  }
+
+  Widget stepPickup()=>ListView(padding:const EdgeInsets.fromLTRB(20,8,20,20),children:[
+    VeyraStepTitle(t('Où partez-vous ?')),
+    const SizedBox(height:16),
+    searchField(true),
+    const SizedBox(height:10),
+    VeyraTapRow(
+      icon:Icons.my_location,
+      label:t('Utiliser ma position actuelle'),
+      muted:true,
+      onTap:locating?null:useMyLocation,
+      trailing:locating?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):null,
+    ),
+    const SizedBox(height:14),
+    VeyraRouteMap(pickup:point(pickupPlace),height:190),
+    const SizedBox(height:18),
+    ...suggestions(true),
+  ]);
+
+  Widget stepDropoff()=>ListView(padding:const EdgeInsets.fromLTRB(20,8,20,20),children:[
+    VeyraStepTitle(t('Où allez-vous ?')),
+    const SizedBox(height:16),
+    searchField(false),
+    const SizedBox(height:10),
+    VeyraTapRow(icon:Icons.map_outlined,label:pickOnMap?t('Touchez la carte pour placer la destination'):t('Choisir sur la carte'),muted:true,onTap:()=>setState(()=>pickOnMap=!pickOnMap)),
+    const SizedBox(height:14),
+    // Board 09 step 2 shows the destination pin only.
+    VeyraRouteMap(
+      dropoff:point(dropoffPlace),
+      height:pickOnMap?320:190,
+      interactive:pickOnMap,
+      onTap:pickOnMap?pickDestinationOnMap:null,
+    ),
+    const SizedBox(height:18),
+    ...suggestions(false),
+  ]);
+
+  Widget stepCategory()=>FutureBuilder<List<dynamic>>(
+    future:categories,
+    builder:(context,s){
+      final header=[VeyraStepTitle(t('Quel type de véhicule ?'),subtitle:t('Choisissez la catégorie qui correspond à vos besoins.')),const SizedBox(height:16)];
+      if(s.connectionState!=ConnectionState.done)return ListView(padding:const EdgeInsets.all(20),children:[...header,const LinearProgressIndicator()]);
+      if(s.hasError)return ListView(padding:const EdgeInsets.all(20),children:[...header,VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){categories=loadCategories();}))]);
+      final items=(s.data??[]).whereType<Map>().toList();
+      return ListView(padding:const EdgeInsets.fromLTRB(20,8,20,20),children:[
+        ...header,
+        for(final x in items)Padding(
+          padding:const EdgeInsets.only(bottom:12),
+          child:VeyraSelectableCard(
+            selected:x['id'].toString()==categoryId,
+            onTap:()=>setState((){
+              categoryId=x['id'].toString();
+              categoryCapacity=(x['capacity'] as num).toInt();
+              categoryName=(x['display_name']??x['code']).toString();
+              error=null;
+            }),
+            child:Row(children:[
+              VeyraVehicleThumb(van:(x['capacity'] as num)>4),
+              const SizedBox(width:14),
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text((x['display_name']??x['code']).toString(),style:const TextStyle(fontSize:16,fontWeight:FontWeight.w700)),
+                const SizedBox(height:4),
+                Row(children:[
+                  const Icon(Icons.person_outline,size:18,color:VeyraColors.textSecondary),
+                  const SizedBox(width:4),
+                  Text('${x['capacity']}',style:const TextStyle(fontWeight:FontWeight.w600)),
+                ]),
+              ])),
+            ]),
+          ),
+        ),
+      ]);
+    },
+  );
+
+  Widget stepDetails()=>ListView(padding:const EdgeInsets.fromLTRB(20,8,20,20),children:[
+    VeyraStepTitle(t('Détails du trajet')),
+    const SizedBox(height:18),
+    VeyraSectionLabel(t('Date et heure')),
+    const SizedBox(height:10),
+    VeyraTapRow(icon:Icons.calendar_today_outlined,label:t('Date'),value:scheduledAt==null?t('Choisir'):shortDate(scheduledAt!),chevron:true,onTap:chooseDate),
+    const SizedBox(height:10),
+    VeyraTapRow(icon:Icons.schedule,label:t('Heure de départ'),value:scheduledAt==null?t('Choisir'):hhmm(scheduledAt!),chevron:true,onTap:chooseTime),
+    if(scheduledAt!=null&&!leadTimeOk)...[const SizedBox(height:10),VeyraBanner(tone:VeyraTone.danger,text:t('Le départ doit être planifié au moins 2 heures à l’avance.'))],
+    const SizedBox(height:22),
+    VeyraSectionLabel(t('Nombre de passagers')),
+    const SizedBox(height:10),
+    VeyraCounterRow(icon:Icons.person_outline,value:passengerCount,min:1,max:9,semanticLabel:t('Passagers'),onChanged:(v)=>setState(()=>passengerCount=v)),
+    if(!capacityOk)...[
+      const SizedBox(height:10),
+      VeyraBanner(tone:VeyraTone.danger,title:t('Le nombre de passagers dépasse la capacité du véhicule sélectionné.'),text:t('Le véhicule')+' ${categoryName??''} '+t('peut accueillir jusqu’à')+' $categoryCapacity '+t('passagers.')),
+    ],
+    const SizedBox(height:22),
+    VeyraSectionLabel(t('Nombre de bagages')),
+    const SizedBox(height:10),
+    VeyraCounterRow(icon:Icons.luggage_outlined,value:baggageCount,min:0,max:12,semanticLabel:t('Bagages'),onChanged:(v)=>setState(()=>baggageCount=v)),
+    const SizedBox(height:12),
+    VeyraBanner(text:t('1 bagage = 1 valise standard. Veuillez indiquer le nombre total de bagages.')),
+  ]);
+
+  Widget stepComment()=>ListView(padding:const EdgeInsets.fromLTRB(20,8,20,20),children:[
+    VeyraStepTitle(t('Un commentaire ?'),suffix:t('(facultatif)')),
+    const SizedBox(height:18),
+    Container(
+      decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.md),border:Border.all(color:VeyraColors.border)),
+      padding:const EdgeInsets.fromLTRB(14,12,14,8),
+      child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        const Icon(Icons.chat_outlined,color:VeyraColors.textPrimary),
+        TextField(
+          controller:notes,
+          maxLength:500,
+          minLines:5,
+          maxLines:8,
+          onChanged:(_)=>setState((){}),
+          decoration:InputDecoration(
+            hintText:t('Indications pour le chauffeur (lieu exact, bagages, siège enfant…)'),
+            border:InputBorder.none,enabledBorder:InputBorder.none,focusedBorder:InputBorder.none,filled:false,
+            contentPadding:const EdgeInsets.only(top:10),
+          ),
+        ),
+      ]),
+    ),
+    const SizedBox(height:14),
+    VeyraBanner(text:t('Ce commentaire sera visible par les chauffeurs afin de mieux comprendre votre demande.')),
+  ]);
+
+  Widget recapCard({required Widget child})=>Container(
+    padding:const EdgeInsets.symmetric(vertical:12),
+    decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:VeyraColors.border))),
+    child:child,
+  );
+
+  Widget recapLine(IconData icon,String label,String value)=>Padding(
+    padding:const EdgeInsets.symmetric(vertical:6),
+    child:Row(children:[
+      Icon(icon,size:24,color:VeyraColors.textPrimary),
+      const SizedBox(width:14),
+      Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text(label,style:const TextStyle(fontSize:13,color:VeyraColors.textSecondary)),
+        Text(value,style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600)),
+      ])),
+    ]),
+  );
+
+  Widget paymentOption(String value,IconData icon,String title,String subtitle)=>Padding(
+    padding:const EdgeInsets.only(bottom:10),
+    child:VeyraSelectableCard(
+      selected:paymentMethod==value,
+      onTap:()=>setState(()=>paymentMethod=value),
+      child:Row(children:[
+        Icon(icon,color:VeyraColors.primary),
+        const SizedBox(width:12),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(title,style:const TextStyle(fontWeight:FontWeight.w700)),
+          Text(subtitle,style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary)),
+        ])),
+      ]),
+    ),
+  );
+
+  Widget stepRecap(){
+    final (pTitle,pSub)=splitLabel(pickupPlace?['label']?.toString()??'');
+    final (dTitle,dSub)=splitLabel(dropoffPlace?['label']?.toString()??'');
+    final points=((route?['points'] as List?)??[]).whereType<Map>().map((m)=>LatLng((m['lat'] as num).toDouble(),(m['lng'] as num).toDouble())).toList();
+    final km=route?['distanceMeters'] is num?((route!['distanceMeters'] as num)/1000).round():null;
+    final min=route?['durationSeconds'] is num?((route!['durationSeconds'] as num)/60).round():null;
+    return ListView(padding:const EdgeInsets.fromLTRB(20,8,20,20),children:[
+      VeyraStepTitle(t('Récapitulatif de votre demande')),
+      const SizedBox(height:8),
+      recapCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        VeyraSectionLabel(t('Trajet'),action:VeyraEditLink(onTap:()=>goTo(0))),
+        const SizedBox(height:8),
+        VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+      ])),
+      recapCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        VeyraSectionLabel(t('Type de véhicule'),action:VeyraEditLink(onTap:()=>goTo(2))),
+        const SizedBox(height:8),
+        Row(children:[
+          VeyraVehicleThumb(width:84,van:categoryCapacity>4),
+          const SizedBox(width:14),
+          Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(categoryName??'',style:const TextStyle(fontSize:16,fontWeight:FontWeight.w700)),
+            Row(children:[const Icon(Icons.person_outline,size:18,color:VeyraColors.textSecondary),const SizedBox(width:4),Text('$categoryCapacity')]),
+          ])),
+        ]),
+      ])),
+      recapCard(child:Column(children:[
+        Row(children:[const Spacer(),VeyraEditLink(onTap:()=>goTo(3))]),
+        recapLine(Icons.calendar_today_outlined,t('Date et heure'),scheduledAt==null?'':'${shortDate(scheduledAt!)} · ${hhmm(scheduledAt!)}'),
+        recapLine(Icons.person_outline,t('Passagers'),'$passengerCount'),
+        recapLine(Icons.luggage_outlined,t('Bagages'),'$baggageCount'),
+      ])),
+      recapCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Row(children:[
+          Expanded(child:Text.rich(TextSpan(children:[
+            TextSpan(text:t('Commentaire'),style:const TextStyle(fontSize:16,fontWeight:FontWeight.w700)),
+            TextSpan(text:' '+t('(facultatif)'),style:const TextStyle(fontSize:13,color:VeyraColors.textSecondary)),
+          ]))),
+          VeyraEditLink(onTap:()=>goTo(4)),
+        ]),
+        const SizedBox(height:4),
+        Text(notes.text.trim().isEmpty?t('Aucun commentaire'):notes.text.trim(),style:const TextStyle(color:VeyraColors.textSecondary)),
+      ])),
+      const SizedBox(height:14),
+      VeyraSectionLabel(t('Mode de paiement')),
+      const SizedBox(height:10),
+      paymentOption('ONLINE',Icons.credit_card,t('Payer en ligne par carte'),t('Paiement sécurisé à la confirmation du chauffeur')),
+      paymentOption('CASH',Icons.payments_outlined,t('Payer en cash au chauffeur'),t('Vous payez directement le chauffeur')),
+      if(widget.initialBooking?['preferred_driver_id']!=null)...[
+        const SizedBox(height:4),
+        VeyraBanner(tone:VeyraTone.warning,text:t('Votre chauffeur favori sera indiqué comme préférence. Son attribution dépend de sa disponibilité et de votre choix parmi les offres.')),
+      ],
       const SizedBox(height:12),
-      Card(
-        child:Padding(
-          padding:const EdgeInsets.all(14),
-          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text(t('Comment fonctionne Veyra ?'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
-            const SizedBox(height:8),
-            Text(t('1. Vous publiez une demande de trajet programmé.')),
-            const SizedBox(height:4),
-            Text(t('2. Les chauffeurs disponibles proposent librement leur prix.')),
-            const SizedBox(height:4),
-            Text(t('3. Vous comparez les offres et choisissez votre chauffeur.')),
-            const SizedBox(height:4),
-            Text(t('4. Le prix total vous est présenté avant de confirmer le paiement.')),
-            const SizedBox(height:8),
-            Text(t('Publier une demande ne confirme pas encore un chauffeur et ne déclenche pas de paiement.'),style:const TextStyle(color:Colors.black54,fontSize:13)),
+      VeyraRouteMap(pickup:point(pickupPlace),dropoff:point(dropoffPlace),route:points,height:150),
+      if(km!=null&&min!=null)...[
+        const SizedBox(height:10),
+        Row(children:[
+          const Icon(Icons.directions_car_outlined,color:VeyraColors.textPrimary),
+          const SizedBox(width:10),
+          Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(t('Estimation du trajet'),style:const TextStyle(fontWeight:FontWeight.w700)),
+            Text('$km km · $min min',style:const TextStyle(color:VeyraColors.textSecondary)),
           ]),
+        ]),
+      ],
+    ]);
+  }
+
+  Widget stepSent()=>ListView(padding:const EdgeInsets.fromLTRB(24,24,24,24),children:[
+    const SizedBox(height:20),
+    Center(child:Container(
+      width:120,height:120,
+      decoration:const BoxDecoration(shape:BoxShape.circle,color:VeyraColors.successBackground),
+      child:const Icon(Icons.send_rounded,size:56,color:VeyraColors.success),
+    )),
+    const SizedBox(height:28),
+    Text(t('Votre demande a été envoyée !'),textAlign:TextAlign.center,style:const TextStyle(fontSize:22,fontWeight:FontWeight.w800)),
+    const SizedBox(height:12),
+    Text(t('Nous recherchons des chauffeurs disponibles pour votre trajet. Vous recevrez leurs offres dans quelques instants.'),textAlign:TextAlign.center,style:const TextStyle(color:VeyraColors.textSecondary,height:1.45)),
+    const SizedBox(height:28),
+    FilledButton.icon(onPressed:()=>context.go('/home'),icon:const Icon(Icons.home_outlined),label:Text(t('Retour à l’accueil'))),
+    const SizedBox(height:12),
+    if(newBookingId!=null)FilledButton.icon(
+      style:FilledButton.styleFrom(backgroundColor:VeyraColors.surfaceMuted,foregroundColor:VeyraColors.textPrimary),
+      onPressed:(){context.go('/home');context.push('/booking/'+newBookingId!);},
+      icon:const Icon(Icons.list),
+      label:Text(t('Voir ma demande')),
+    ),
+    const SizedBox(height:20),
+    VeyraBanner(text:t('Vous serez notifié dès qu’une nouvelle offre est disponible.')),
+  ]);
+
+  @override Widget build(BuildContext context){
+    final pages=[stepPickup,stepDropoff,stepCategory,stepDetails,stepComment,stepRecap,stepSent];
+    final sent=step==6;
+    return PopScope(
+      canPop:step==0||sent,
+      onPopInvokedWithResult:(didPop,_){if(!didPop)back();},
+      child:Scaffold(
+        appBar:VeyraFlowHeader(onBack:sent?()=>context.go('/home'):back),
+        body:Column(children:[
+          // No visible progress bar on the boards; the step stays announced.
+          Semantics(liveRegion:true,label:t('Étape')+' ${step+1}/$_steps',child:const SizedBox(height:12,width:double.infinity)),
+          Expanded(child:pages[step]()),
+          if(error!=null)Padding(padding:const EdgeInsets.fromLTRB(20,0,20,4),child:VeyraBanner(tone:VeyraTone.danger,text:error!)),
+        ]),
+        bottomNavigationBar:sent?null:VeyraFlowFooter(
+          onBack:step==0?null:back,
+          onNext:step==5?publish:(canContinue()?()=>goTo(step+1):null),
+          nextLabel:step==5?t('Rechercher des offres'):t('Suivant'),
+          trailingArrow:step!=5,
+          loading:submitting,
         ),
       ),
-      TextField(controller:notes,maxLength:1000,maxLines:3,onChanged:(_)=>setState((){}),decoration:InputDecoration(labelText:t('Remarques pour le chauffeur (facultatif)'))),
-      const SizedBox(height:18),
-      // Ajouté suite à l'étude UX/navigation : rien ne permettait
-      // auparavant de revoir d'un coup d'œil les choix faits dans ce
-      // long formulaire avant de s'engager -- l'utilisateur devait
-      // remonter manuellement pour vérifier chaque champ. Cette carte
-      // se met à jour en direct avec les valeurs déjà saisies, sans
-      // dupliquer aucun calcul serveur (aucun prix n'est estimé ici).
-      Card(
-        color:const Color(0xFFF7FAFD),
-        shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(VeyraRadius.md)),
-        child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Text(t('Récapitulatif'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
-          const SizedBox(height:10),
-          _RecapLine(icon:Icons.trip_origin,text:pickup.text.trim().isEmpty?t('Départ non renseigné'):pickup.text.trim()),
-          _RecapLine(icon:Icons.flag_outlined,text:dropoff.text.trim().isEmpty?t('Destination non renseignée'):dropoff.text.trim()),
-          _RecapLine(icon:Icons.event,text:scheduledAt==null?t('Date non choisie'):VeyraDateFormatter.dateTime(scheduledAt!.toIso8601String())),
-          _RecapLine(icon:Icons.directions_car_outlined,text:categoryName??t('Catégorie non choisie')),
-          _RecapLine(icon:Icons.people_outline,text:'$passengerCount '+t('passager(s)')+' • $baggageCount '+t('bagage(s)')),
-          _RecapLine(icon:Icons.payments_outlined,text:VeyraStatusLabels.paymentMethod(paymentMethod)),
-          if(notes.text.trim().isNotEmpty)_RecapLine(icon:Icons.notes,text:notes.text.trim()),
-        ])),
-      ),
-      const SizedBox(height:18),
-      if(error!=null)Padding(
-        padding:const EdgeInsets.symmetric(vertical:12),
-        child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
-      ),
-      FilledButton.icon(
-        onPressed:submitting?null:publish,
-        icon:const Icon(Icons.campaign),
-        label:submitting?Text(t('Publication…')):Text(t('Publier la demande')),
-      ),
-      const SizedBox(height:12),
-      Text(
-        t('Les chauffeurs VTC éligibles recevront la demande et pourront proposer leur prix. Vous verrez toutes les offres reçues.'),
-        textAlign:TextAlign.center,
-      ),
-    ])),
-  );
+    );
+  }
 }
 
 class OffersScreen extends StatefulWidget{
