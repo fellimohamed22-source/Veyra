@@ -26,3 +26,10 @@ Ne jamais réutiliser les valeurs dev en production.
 - `VEYRA_TEST_ACCOUNTS_ENABLED` (défaut `true`) : mettre `false` en production
   pour suspendre les comptes de test des migrations V029/V030/V034 (mots de
   passe publics) et révoquer leurs sessions au démarrage.
+
+## Consentements (V4 L4)
+
+- `VEYRA_TERMS_VERSION`, `VEYRA_PRIVACY_VERSION`, `VEYRA_MARKETING_VERSION`
+  (défaut `PENDING_LEGAL_REVIEW`) : version des textes enregistrée avec chaque
+  consentement (`user_consents`). À renseigner avec la version validée
+  juridiquement (DEC-14).

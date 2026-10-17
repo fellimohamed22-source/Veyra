@@ -35,6 +35,34 @@ class AuthControllerTest {
   @Mock PasswordEncoder encoder;
   @Mock JwtService jwt;
   @Mock JdbcTemplate db;
+  @Mock ConsentService consents;
+
+  @Test
+  void registrationWithoutExplicitTermsAndPrivacyAcceptanceIsRefusedBeforeCreatingAnything() {
+    for (Boolean[] c : new Boolean[][]{{null, true}, {true, null}, {false, true}, {true, false}}) {
+      ApiException ex = assertThrows(ApiException.class, () -> controller().register(
+          new AuthController.Register("new@example.com", "aStrongPassword1", "Jean", "Dupont", null, c[0], c[1], false)));
+      assertEquals("CONSENT_REQUIRED", ex.code());
+    }
+    verify(users, never()).save(any());
+    verify(consents, never()).recordSignup(any(), anyBoolean(), any());
+  }
+
+  @Test
+  void marketingConsentIsRecordedOnlyWhenExplicitlyGranted() {
+    when(users.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+    UUID userId = UUID.randomUUID();
+    User saved = new User("Jean", "Dupont", "client@example.com", "hashed");
+    setId(saved, userId);
+    when(users.save(any(User.class))).thenReturn(saved);
+    when(db.queryForList(anyString(), eq(String.class), any(Object[].class))).thenReturn(List.of("CLIENT"));
+    when(jwt.issue(any(), any(), any())).thenReturn("access-token");
+
+    // marketingOptIn omitted (null) must never be stored as granted.
+    controller().register(new AuthController.Register("client@example.com", "aStrongPassword1", "Jean", "Dupont", null, true, true, null));
+
+    verify(consents).recordSignup(userId, false, "SIGNUP_CLIENT");
+  }
 
   private static void setId(User user, UUID id) {
     try {
@@ -47,7 +75,7 @@ class AuthControllerTest {
   }
 
   private AuthController controller() {
-    return new AuthController(users, encoder, jwt, db, "veyra-4806a");
+    return new AuthController(users, encoder, jwt, db, "veyra-4806a", consents);
   }
 
   @Test
@@ -55,7 +83,7 @@ class AuthControllerTest {
     when(users.existsByEmailIgnoreCase("taken@example.com")).thenReturn(true);
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().register(
-        new AuthController.Register("taken@example.com", "aStrongPassword1", "Jean", "Dupont", null)));
+        new AuthController.Register("taken@example.com", "aStrongPassword1", "Jean", "Dupont", null, true, true, false)));
 
     assertEquals("EMAIL_ALREADY_USED", ex.code());
     assertEquals(HttpStatus.CONFLICT, ex.status());
@@ -75,7 +103,7 @@ class AuthControllerTest {
     when(db.queryForList(anyString(), eq(String.class), any(Object[].class))).thenReturn(List.of("CLIENT"));
     when(jwt.issue(any(), any(), any())).thenReturn("access-token");
 
-    controller().register(new AuthController.Register("Driver@Example.com", "aStrongPassword1", "Jean", "Dupont", null));
+    controller().register(new AuthController.Register("Driver@Example.com", "aStrongPassword1", "Jean", "Dupont", null, true, true, false));
 
     verify(users).existsByEmailIgnoreCase("driver@example.com");
     org.mockito.ArgumentCaptor<User> captor = org.mockito.ArgumentCaptor.forClass(User.class);
@@ -94,7 +122,7 @@ class AuthControllerTest {
     when(jwt.issue(eq(userId), eq("client@example.com"), eq(List.of("CLIENT")))).thenReturn("access-token");
 
     ResponseEntity<AuthController.Tokens> response = controller().register(
-        new AuthController.Register("client@example.com", "aStrongPassword1", "Jean", "Dupont", null));
+        new AuthController.Register("client@example.com", "aStrongPassword1", "Jean", "Dupont", null, true, true, false));
 
     assertEquals(HttpStatus.CREATED, response.getStatusCode());
     assertEquals("access-token", response.getBody().accessToken());
@@ -114,7 +142,7 @@ class AuthControllerTest {
     when(db.queryForList(anyString(), eq(String.class), any(Object[].class))).thenReturn(List.of("CLIENT"));
     when(jwt.issue(any(), any(), any())).thenReturn("access-token");
 
-    controller().register(new AuthController.Register("client@example.com", "aStrongPassword1", "Jean", "Dupont", "+33612345678"));
+    controller().register(new AuthController.Register("client@example.com", "aStrongPassword1", "Jean", "Dupont", "+33612345678", true, true, false));
 
     verify(db).update(eq("update users set phone=? where id=?"), eq("+33612345678"), eq(userId));
   }

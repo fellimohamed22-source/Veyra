@@ -82,6 +82,9 @@ class Api {
     required String firstName,
     String? lastName,
     String? phone,
+    required bool acceptTerms,
+    required bool acceptPrivacy,
+    bool marketingOptIn=false,
   }) async {
     final r=await dio.post('/api/v1/auth/register',data:{
       'email':email.trim(),
@@ -89,6 +92,9 @@ class Api {
       'firstName':firstName.trim(),
       'lastName':lastName?.trim(),
       'phone':phone?.trim(),
+      'acceptTerms':acceptTerms,
+      'acceptPrivacy':acceptPrivacy,
+      'marketingOptIn':marketingOptIn,
     });
     await storage.write(key:'accessToken',value:r.data['accessToken']);
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);

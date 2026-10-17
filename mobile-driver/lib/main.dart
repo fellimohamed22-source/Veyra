@@ -27,6 +27,7 @@ import 'core/formatters/status_labels.dart';
 import 'core/formatters/date_formatter.dart';
 import 'core/formatters/money_formatter.dart';
 import 'core/widgets/veyra_button.dart';
+import 'core/widgets/signup_consents.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/driver_documents.dart';
@@ -2739,6 +2740,10 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
   final formKey=GlobalKey<FormState>();
   bool loading=false;
   String? error;
+  bool acceptTerms=false;
+  bool acceptPrivacy=false;
+  bool marketingOptIn=false;
+  bool consentErrors=false;
 
   @override void dispose(){firstName.dispose();lastName.dispose();phone.dispose();email.dispose();password.dispose();super.dispose();}
 
@@ -2746,6 +2751,10 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
     if(loading||!formKey.currentState!.validate())return;
     if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
       setState(()=>error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.'));
+      return;
+    }
+    if(!SignupConsents.mandatoryAccepted(acceptTerms,acceptPrivacy)){
+      setState((){consentErrors=true;error=t('Acceptez les CGU et la politique de confidentialité pour continuer.');});
       return;
     }
     setState((){loading=true;error=null;});
@@ -2756,6 +2765,9 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
         firstName:firstName.text,
         lastName:lastName.text,
         phone:phone.text,
+        acceptTerms:acceptTerms,
+        acceptPrivacy:acceptPrivacy,
+        marketingOptIn:marketingOptIn,
       );
       if(!mounted)return;
       context.go('/kyc');
@@ -2779,6 +2791,16 @@ class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
       TextFormField(controller:email,validator:(v)=>RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v??'').trim())?null:t('E-mail invalide'),keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
       const SizedBox(height:12),
       TextFormField(controller:password,validator:(v)=>(v??'').length<10?t('10 caractères minimum'):null,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),helperText:'10 caractères minimum')),
+      const SizedBox(height:12),
+      SignupConsents(
+        acceptTerms:acceptTerms,
+        acceptPrivacy:acceptPrivacy,
+        marketingOptIn:marketingOptIn,
+        showErrors:consentErrors,
+        onTerms:(v)=>setState(()=>acceptTerms=v),
+        onPrivacy:(v)=>setState(()=>acceptPrivacy=v),
+        onMarketing:(v)=>setState(()=>marketingOptIn=v),
+      ),
       if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:16),
       FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Continuer vers mon dossier VTC'))),

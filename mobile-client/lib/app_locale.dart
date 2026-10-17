@@ -46,6 +46,11 @@ class AppLocale {
   }
 
   static const Map<String, String> _en = {
+    'Acceptation obligatoire': 'Acceptance required',
+    "J'accepte les conditions générales d'utilisation": 'I accept the terms of use',
+    "J'accepte la politique de confidentialité": 'I accept the privacy policy',
+    'Je souhaite recevoir les communications de VEYRA (facultatif)': 'I would like to receive VEYRA communications (optional)',
+    'Acceptez les CGU et la politique de confidentialité pour continuer.': 'Accept the terms of use and the privacy policy to continue.',
     'Bienvenue': 'Welcome',
     'Connexion Veyra': 'Veyra sign in',
     'Email': 'Email',

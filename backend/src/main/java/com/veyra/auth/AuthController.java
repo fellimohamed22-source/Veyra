@@ -22,6 +22,7 @@ public class AuthController {
   private final JwtService jwt;
   private final JdbcTemplate db;
   private final String firebaseProjectId;
+  private final ConsentService consents;
   private final SecureRandom random=new SecureRandom();
 
   public AuthController(
@@ -29,12 +30,14 @@ public class AuthController {
       PasswordEncoder encoder,
       JwtService jwt,
       JdbcTemplate db,
-      @org.springframework.beans.factory.annotation.Value("${veyra.firebase.project-id}") String firebaseProjectId){
+      @org.springframework.beans.factory.annotation.Value("${veyra.firebase.project-id}") String firebaseProjectId,
+      ConsentService consents){
     this.users=users;
     this.encoder=encoder;
     this.jwt=jwt;
     this.db=db;
     this.firebaseProjectId=firebaseProjectId==null?"":firebaseProjectId.trim();
+    this.consents=consents;
   }
 
   public record Register(
@@ -42,7 +45,10 @@ public class AuthController {
       @Size(min=10,max=128) String password,
       @NotBlank @Size(max=100) String firstName,
       @Size(max=100) String lastName,
-      @Size(max=32) String phone){}
+      @Size(max=32) String phone,
+      Boolean acceptTerms,
+      Boolean acceptPrivacy,
+      Boolean marketingOptIn){}
 
   public record Login(
       @Email @NotBlank String email,
@@ -62,6 +68,7 @@ public class AuthController {
   @PostMapping("/register")
   @Transactional
   public ResponseEntity<Tokens> register(@Valid @RequestBody Register request){
+    ConsentService.requireMandatory(request.acceptTerms(),request.acceptPrivacy());
     String email=request.email().trim().toLowerCase(Locale.ROOT);
     if(users.existsByEmailIgnoreCase(email)){
       throw new ApiException(HttpStatus.CONFLICT,"EMAIL_ALREADY_USED");
@@ -81,12 +88,14 @@ public class AuthController {
         "insert into user_roles(user_id,role_id) select ?,id from roles where code='CLIENT' on conflict do nothing",
         user.id());
 
+    consents.recordSignup(user.id(),Boolean.TRUE.equals(request.marketingOptIn()),"SIGNUP_CLIENT");
     return ResponseEntity.status(HttpStatus.CREATED).body(tokens(user,"registration"));
   }
 
   @PostMapping("/register-driver")
   @Transactional
   public ResponseEntity<Tokens> registerDriver(@Valid @RequestBody Register request){
+    ConsentService.requireMandatory(request.acceptTerms(),request.acceptPrivacy());
     String email=request.email().trim().toLowerCase(Locale.ROOT);
     if(users.existsByEmailIgnoreCase(email))throw new ApiException(HttpStatus.CONFLICT,"EMAIL_ALREADY_USED");
     if(request.phone()==null||request.phone().trim().length()<6)throw new ApiException(HttpStatus.BAD_REQUEST,"PHONE_REQUIRED");
@@ -94,6 +103,7 @@ public class AuthController {
     db.update("update users set phone=? where id=?",request.phone().trim(),user.id());
     db.update("insert into user_roles(user_id,role_id) select ?,id from roles where code='DRIVER' on conflict do nothing",user.id());
     db.update("insert into drivers(id,user_id) values (?,?)",UUID.randomUUID(),user.id());
+    consents.recordSignup(user.id(),Boolean.TRUE.equals(request.marketingOptIn()),"SIGNUP_DRIVER");
     return ResponseEntity.status(HttpStatus.CREATED).body(tokens(user,"driver-registration"));
   }
 

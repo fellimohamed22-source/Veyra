@@ -54,7 +54,7 @@ class FirebaseLoginSecurityTest {
   }
 
   AuthController controllerReturning(Map<String,Object> verifiedClaims){
-    return new AuthController(users,encoder,jwt,db,PROJECT){
+    return new AuthController(users,encoder,jwt,db,PROJECT,null){
       @Override Map<String,Object> verifyFirebaseIdToken(String idToken){return verifiedClaims;}
     };
   }

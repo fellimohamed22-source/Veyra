@@ -31,6 +31,7 @@ import 'core/formatters/date_formatter.dart';
 import 'core/formatters/money_formatter.dart';
 import 'core/formatters/status_labels.dart';
 import 'core/widgets/veyra_button.dart';
+import 'core/widgets/signup_consents.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/status_badge.dart';
@@ -2583,6 +2584,10 @@ class _RegisterScreenState extends State<RegisterScreen>{
   bool loading=false;
   String? error;
   bool offline=false;
+  bool acceptTerms=false;
+  bool acceptPrivacy=false;
+  bool marketingOptIn=false;
+  bool consentErrors=false;
 
   @override void dispose(){firstName.dispose();lastName.dispose();phone.dispose();email.dispose();password.dispose();super.dispose();}
 
@@ -2590,6 +2595,10 @@ class _RegisterScreenState extends State<RegisterScreen>{
     if(loading||!formKey.currentState!.validate())return;
     if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
       setState((){error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.');offline=false;});
+      return;
+    }
+    if(!SignupConsents.mandatoryAccepted(acceptTerms,acceptPrivacy)){
+      setState((){consentErrors=true;error=t('Acceptez les CGU et la politique de confidentialité pour continuer.');offline=false;});
       return;
     }
     setState((){loading=true;error=null;offline=false;});
@@ -2600,6 +2609,9 @@ class _RegisterScreenState extends State<RegisterScreen>{
         firstName:firstName.text,
         lastName:lastName.text,
         phone:phone.text,
+        acceptTerms:acceptTerms,
+        acceptPrivacy:acceptPrivacy,
+        marketingOptIn:marketingOptIn,
       );
       if(!mounted)return;
       context.go('/home');
@@ -2633,6 +2645,16 @@ class _RegisterScreenState extends State<RegisterScreen>{
       TextFormField(controller:email,validator:(v)=>RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v??'').trim())?null:t('E-mail invalide'),keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
       const SizedBox(height:12),
       TextFormField(controller:password,validator:(v)=>(v??'').length<10?t('10 caractères minimum'):null,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline,helperText:t('10 caractères minimum'))),
+      const SizedBox(height:12),
+      SignupConsents(
+        acceptTerms:acceptTerms,
+        acceptPrivacy:acceptPrivacy,
+        marketingOptIn:marketingOptIn,
+        showErrors:consentErrors,
+        onTerms:(v)=>setState(()=>acceptTerms=v),
+        onPrivacy:(v)=>setState(()=>acceptPrivacy=v),
+        onMarketing:(v)=>setState(()=>marketingOptIn=v),
+      ),
       if(offline)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:VeyraOfflineBanner(onRetry:submit)),
       if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
       const SizedBox(height:16),

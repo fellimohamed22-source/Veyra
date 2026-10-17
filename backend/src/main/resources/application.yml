@@ -47,6 +47,14 @@ veyra:
     # Identifiant public (présent dans google-services.json), pas un secret.
     project-id: ${FIREBASE_PROJECT_ID:veyra-4806a}
 
+  legal:
+    # Version des textes acceptés, enregistrée avec chaque consentement
+    # (user_consents). À remplacer par la version validée juridiquement
+    # (DEC-14) ; changer la version permet d'exiger une nouvelle acceptation.
+    terms-version: ${VEYRA_TERMS_VERSION:PENDING_LEGAL_REVIEW}
+    privacy-version: ${VEYRA_PRIVACY_VERSION:PENDING_LEGAL_REVIEW}
+    marketing-version: ${VEYRA_MARKETING_VERSION:PENDING_LEGAL_REVIEW}
+
   security:
     # true uniquement en développement local : autorise les valeurs par
     # défaut publiques de JWT_SECRET / PIN_ENCRYPTION_KEY ci-dessus.
