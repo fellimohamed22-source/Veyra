@@ -53,3 +53,14 @@ par défaut publiques d'`application.yml`) :
    `PIN_ENCRYPTION_KEY_PREVIOUS`.
 
 Génération (exemple) : `openssl rand -base64 48`.
+
+## SMS passager et lien de suivi (V4 L12)
+
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` : envoi du lien de
+  suivi au passager par SMS (DEC-07). `TWILIO_FROM` = numéro expéditeur,
+  identifiant alphanumérique ou Messaging Service (`MG…`). Sans ces valeurs,
+  aucun SMS n'est envoyé (erreur `SMS_NOT_CONFIGURED`).
+- `VEYRA_GUEST_BASE_URL` : adresse publique du site web, par exemple
+  `https://veyra-web.onrender.com` ; le lien envoyé est `{base}/suivi/{jeton}`.
+- Validité du lien : `guest.link_hours_after_pickup` dans `platform_settings`
+  (24 h après la prise en charge par défaut, modifiable via `/admin/settings`).

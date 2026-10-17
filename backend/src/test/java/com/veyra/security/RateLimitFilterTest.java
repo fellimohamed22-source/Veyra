@@ -20,6 +20,16 @@ class RateLimitFilterTest {
   }
 
   @Test
+  void publicGuestLinksShareOneBudgetPerIpAcrossAllTokens() throws Exception {
+    RateLimitFilter f = filter();
+    assertFalse(invokeShouldNotFilter(f,new MockHttpServletRequest("GET","/api/v1/guest/bookings/"+"A".repeat(43))),
+        "guest links must be rate-limited (token guessing)");
+    assertEquals(RateLimitFilter.bucket("/api/v1/guest/bookings/"+"A".repeat(43)),
+        RateLimitFilter.bucket("/api/v1/guest/bookings/"+"B".repeat(43)),
+        "every token must fall in the same per-IP bucket");
+  }
+
+  @Test
   void onlyAppliesToTheFourSensitiveUnauthenticatedPostEndpoints() throws Exception {
     RateLimitFilter f = filter();
     MockHttpServletRequest getReq = new MockHttpServletRequest("GET","/api/v1/bookings");

@@ -54,6 +54,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request){
     String path = request.getRequestURI();
+    if ("GET".equalsIgnoreCase(request.getMethod()) && path.startsWith(GUEST_PREFIX)) return false;
     return !("POST".equalsIgnoreCase(request.getMethod()) && (
         path.equals("/api/v1/auth/login") ||
         path.equals("/api/v1/auth/register") ||
@@ -61,10 +62,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
         path.equals("/api/v1/auth/reset-password")));
   }
 
+  /**
+   * Public passenger links (PART-03): limited per IP across ALL tokens, so
+   * guessing tokens is throttled instead of getting a fresh budget per URL.
+   */
+  static final String GUEST_PREFIX = "/api/v1/guest/";
+
+  static String bucket(String path){
+    return path.startsWith(GUEST_PREFIX) ? GUEST_PREFIX : path;
+  }
+
   @Override
   protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)
       throws ServletException, IOException {
-    String key = clientIp(request) + "|" + request.getRequestURI();
+    String key = clientIp(request) + "|" + bucket(request.getRequestURI());
     long now = System.currentTimeMillis();
     Counter c = counters.computeIfAbsent(key, k -> new Counter(now));
 

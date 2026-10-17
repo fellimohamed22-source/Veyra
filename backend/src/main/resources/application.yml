@@ -50,6 +50,18 @@ veyra:
     # Identifiant public (présent dans google-services.json), pas un secret.
     project-id: ${FIREBASE_PROJECT_ID:veyra-4806a}
 
+  twilio:
+    # DEC-06/07 : SMS passager (et, plus tard, appels masqués). Inactif tant
+    # que ces trois valeurs ne sont pas définies. TWILIO_FROM : numéro
+    # expéditeur, identifiant alphanumérique, ou Messaging Service (MG...).
+    account-sid: ${TWILIO_ACCOUNT_SID:}
+    auth-token: ${TWILIO_AUTH_TOKEN:}
+    from: ${TWILIO_FROM:}
+
+  guest:
+    # Adresse publique du site web qui affiche /suivi/{jeton} (PART-13).
+    base-url: ${VEYRA_GUEST_BASE_URL:}
+
   legal:
     # Version des textes acceptés, enregistrée avec chaque consentement
     # (user_consents). À remplacer par la version validée juridiquement

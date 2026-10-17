@@ -98,6 +98,8 @@ public class SecurityConfig {
             .requestMatchers(
                 "/api/v1/auth/**",
                 "/api/v1/payments/stripe/webhook",
+                // PART-03: passenger tracking link, authorised by its own token.
+                "/api/v1/guest/**",
                 "/actuator/health")
             .permitAll()
             .anyRequest()
