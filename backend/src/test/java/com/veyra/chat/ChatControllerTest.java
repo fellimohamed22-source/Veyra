@@ -102,9 +102,47 @@ class ChatControllerTest {
     assertEquals("INVALID_MESSAGE", ex.code());
   }
 
+  private void stubWindow(boolean open) {
+    when(db.queryForObject(contains("interval '30 minutes'"), eq(Boolean.class), eq(bookingId))).thenReturn(open);
+  }
+
+  @Test
+  void chat01_sendingOutsideTheH30ToH1WindowIsRefused() {
+    stubParticipant(1);
+    stubWindow(false);
+
+    ApiException ex = assertThrows(ApiException.class,
+        () -> controller().send(bookingId, new ChatController.Msg("too early")));
+
+    assertEquals("CHAT_WINDOW_CLOSED", ex.code());
+    assertEquals(HttpStatus.FORBIDDEN, ex.status());
+    verify(db, never()).update(contains("insert into chat_messages"), any(), any(), any(), any());
+    verifyNoInteractions(ws);
+  }
+
+  @Test
+  void windowSqlOpensThirtyMinutesBeforePickupAndClosesOneHourAfterTheRide() {
+    assertTrue(ChatController.WINDOW_OPEN_SQL.contains("now()>=sb.scheduled_at-interval '30 minutes'"));
+    assertTrue(ChatController.WINDOW_OPEN_SQL.contains("+interval '1 hour'"));
+    assertTrue(ChatController.RIDE_END_SQL.contains("to_status='COMPLETED'"));
+  }
+
+  @Test
+  void supportCanSendOutsideTheWindowForIncidentHandling() {
+    SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(userId, null, "ROLE_SUPPORT"));
+    when(db.queryForList(eq("select id from chat_conversations where booking_id=?"), eq(UUID.class), any(Object[].class)))
+        .thenReturn(List.of(UUID.randomUUID()));
+
+    controller().send(bookingId, new ChatController.Msg("support here"));
+
+    verify(db, never()).queryForObject(contains("interval '30 minutes'"), eq(Boolean.class), any(Object[].class));
+    verify(ws).convertAndSend(eq("/topic/bookings/" + bookingId + "/chat"), any(Map.class));
+  }
+
   @Test
   void aParticipantSendingToAnExistingConversationReusesItAndBroadcasts() {
     stubParticipant(1);
+    stubWindow(true);
     UUID existingConversationId = UUID.randomUUID();
     when(db.queryForList(eq("select id from chat_conversations where booking_id=?"), eq(UUID.class), any(Object[].class)))
         .thenReturn(List.of(existingConversationId));
@@ -124,6 +162,7 @@ class ChatControllerTest {
   @Test
   void firstMessageOnABookingCreatesTheConversation() {
     stubParticipant(1);
+    stubWindow(true);
     when(db.queryForList(eq("select id from chat_conversations where booking_id=?"), eq(UUID.class), any(Object[].class)))
         .thenReturn(List.of());
 

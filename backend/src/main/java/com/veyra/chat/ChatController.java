@@ -18,6 +18,8 @@ import java.util.*;
     @PostMapping("/messages")ResponseEntity<Map<String,Object>>send(@PathVariable UUID bookingId,@RequestBody Msg m){
         participant(bookingId);
         if(m.body()==null||m.body().isBlank()||m.body().length()>2000)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_MESSAGE");
+        if(!staff()&&!Boolean.TRUE.equals(db.queryForObject("select "+WINDOW_OPEN_SQL+" from scheduled_bookings sb where sb.id=?",Boolean.class,bookingId)))
+            throw new ApiException(HttpStatus.FORBIDDEN,"CHAT_WINDOW_CLOSED");
         UUID c=conversation(bookingId),id=UUID.randomUUID(),u=CurrentUser.id();
         db.update("insert into chat_messages(id,conversation_id,sender_user_id,body) values (?,?,?,?)",id,c,u,m.body());
         Map<String,Object>x=Map.of("id",id,"senderUserId",u,"body",m.body());
@@ -27,6 +29,28 @@ import java.util.*;
     @GetMapping("/messages")List<Map<String,Object>>list(@PathVariable UUID bookingId){
         participant(bookingId);
         return db.queryForList("select cm.id,cm.sender_user_id,cm.body,cm.status,cm.sent_at,cm.read_at from chat_messages cm join chat_conversations c on c.id=cm.conversation_id where c.booking_id=? order by cm.sent_at",bookingId);
+    }
+    /**
+     * CL-15: customer and driver may exchange messages from 30 minutes
+     * before pickup until 1 hour after the ride ends. History stays
+     * readable; only sending is gated. Admin/support are not subject to
+     * the window (incident handling). Ride end = COMPLETED transition in
+     * booking_status_history, falling back to updated_at for rows that
+     * predate history recording.
+     */
+    static final String RIDE_END_SQL="coalesce((select max(h.created_at) from booking_status_history h where h.booking_id=sb.id and h.to_status='COMPLETED'),sb.updated_at)";
+    static final String WINDOW_OPEN_SQL="(now()>=sb.scheduled_at-interval '30 minutes' and (sb.status not in ('COMPLETED','CLOSED') or now()<="+RIDE_END_SQL+"+interval '1 hour'))";
+    @GetMapping("/availability")Map<String,Object>availability(@PathVariable UUID bookingId){
+        participant(bookingId);
+        Map<String,Object>w=db.queryForMap("select "+WINDOW_OPEN_SQL+" as open,sb.scheduled_at-interval '30 minutes' as opens_at,case when sb.status in ('COMPLETED','CLOSED') then "+RIDE_END_SQL+"+interval '1 hour' end as closes_at from scheduled_bookings sb where sb.id=?",bookingId);
+        Map<String,Object>x=new LinkedHashMap<>();
+        x.put("open",staff()||Boolean.TRUE.equals(w.get("open")));
+        x.put("opensAt",w.get("opens_at"));
+        x.put("closesAt",w.get("closes_at"));
+        return x;
+    }
+    private static boolean staff(){
+        return CurrentUser.hasRole("ADMIN")||CurrentUser.hasRole("SUPPORT");
     }
     private UUID conversation(UUID b){
         List<UUID>x=db.queryForList("select id from chat_conversations where booking_id=?",UUID.class,b);
