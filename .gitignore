@@ -9,3 +9,6 @@
 runtime/
 web/dist/
 web/.angular/
+
+# Pack de spécifications livré hors dépôt (volumineux, contient les maquettes)
+VEYRA_V4_PACK_*.zip

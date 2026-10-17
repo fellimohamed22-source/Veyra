@@ -8,6 +8,9 @@
 | L2 | Commission **figée sur chaque offre** à la soumission ; le client confirme le prix affiché, même si le taux a changé entre-temps (COM-03). Formule V3 inchangée | V038 (+ rattrapage des offres existantes) | COM-03, repli pour les anciennes offres |
 | L3 | Une offre exige un véhicule APPROUVÉ de la bonne catégorie (soumission et révision) ; un chauffeur suspendu ne peut plus réviser ; la liste ne montre que les demandes compatibles ; badge « Client préféré » basé sur la relation réelle ; capacité bagages par catégorie (non contrôlée tant qu'elle n'est pas renseignée) | V039 `vehicle_categories.baggage_capacity` | BOOK-03, DR-02, bagages |
 | L5 | Validation des données à la création d'organisation et de bénéficiaire ; factures et finance partenaire réservées aux rôles propriétaire et comptabilité | — | Accès réceptionniste refusé |
+| L7 | Messagerie ouverte de H-30 min avant la prise en charge à H+1 h après la fin (CL-15), contrôlée côté serveur ; historique toujours lisible ; support et admin non limités ; `GET /bookings/{id}/chat/availability` | — | CHAT-01, dérogation support |
+| L4 | Consentements à l'inscription : CGU et confidentialité obligatoires, marketing facultatif et non coché, journal append-only avec version des textes ; `GET/POST /me/consents` | V040 `user_consents` | CONSENT_REQUIRED, widget Flutter |
+| — | Test sur vraie base : le paiement capturé du jeu de données porte maintenant son PSP (`backend-ci` était déjà rouge sur `b1e3c95`) | — | 41 tests sur PostgreSQL et PostGIS |
 
 Rollback : chaque migration documente son `DROP` dans son en-tête.
 
