@@ -12,3 +12,7 @@ web/.angular/
 
 # Pack de spécifications livré hors dépôt (volumineux, contient les maquettes)
 VEYRA_V4_PACK_*.zip
+
+# Jamais suivis jusqu'ici : la CI résout les dépendances à chaque build.
+mobile-client/pubspec.lock
+mobile-driver/pubspec.lock
