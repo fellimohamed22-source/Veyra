@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../app_locale.dart';
+import 'dart:async';
+import '../../app/theme.dart';
 import '../formatters/error_messages.dart';
+import 'auth_ui.dart';
 
 /// « Vérifiez votre numéro » (CL-AUTH-05, maquette 08-A panneau 5 ; DEC-07).
 /// Le code est envoyé et vérifié par Firebase Phone Auth ; le serveur ne
@@ -48,12 +51,35 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
   bool codeSent = false;
   bool busy = false;
   String? error;
+  int resendIn = 0;
+  Timer? resendTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Board 08 A5: the code is sent as soon as the screen opens when the
+    // number given at signup is valid.
+    if (PhoneVerificationScreen.toE164(widget.initialPhone) != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) send(); });
+    }
+  }
 
   @override
   void dispose() {
+    resendTimer?.cancel();
     phone.dispose();
     code.dispose();
     super.dispose();
+  }
+
+  void startResendCountdown() {
+    resendTimer?.cancel();
+    setState(() => resendIn = 60);
+    resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return timer.cancel();
+      setState(() => resendIn--);
+      if (resendIn <= 0) timer.cancel();
+    });
   }
 
   Future<void> send() async {
@@ -71,7 +97,10 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
         if (mounted) widget.onDone();
         return;
       }
-      if (mounted) setState(() => codeSent = true);
+      if (mounted) {
+        setState(() => codeSent = true);
+        startResendCountdown();
+      }
     } catch (e) {
       if (mounted) setState(() => error = AppLocale.t('Envoi du code impossible. Vérifiez le numéro puis réessayez.'));
     } finally {
@@ -96,49 +125,62 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     }
   }
 
+  /// "+33612345678" -> "+33 6 12 34 56 78" as on the board.
+  static String display(String e164) {
+    final m = RegExp(r'^\+33(\d)(\d{2})(\d{2})(\d{2})(\d{2})$').firstMatch(e164);
+    return m == null ? e164 : '+33 ${m[1]} ${m[2]} ${m[3]} ${m[4]} ${m[5]}';
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(AppLocale.t('Vérifiez votre numéro'))),
-        body: SafeArea(
-          child: ListView(padding: const EdgeInsets.all(24), children: [
-            const Icon(Icons.sms_outlined, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              codeSent
-                  ? AppLocale.t('Nous avons envoyé un code à 6 chiffres par SMS.')
-                  : AppLocale.t('Nous allons vous envoyer un code par SMS pour confirmer votre numéro.'),
-              textAlign: TextAlign.center,
-            ),
+  Widget build(BuildContext context) {
+    final e164 = PhoneVerificationScreen.toE164(phone.text) ?? phone.text;
+    return Scaffold(
+      appBar: AppBar(),
+      body: SafeArea(
+        child: ListView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 24), children: [
+          const Icon(Icons.mobile_friendly_outlined, size: 56, color: VeyraColors.accent),
+          const SizedBox(height: 16),
+          Text(AppLocale.t('Vérifiez votre numéro de téléphone'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          if (codeSent) ...[
+            Text(AppLocale.t('Nous avons envoyé un code à'), textAlign: TextAlign.center, style: const TextStyle(color: VeyraColors.textSecondary)),
+            const SizedBox(height: 4),
+            Text(display(e164), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 24),
+            VeyraCodeBoxes(controller: code, enabled: !busy),
             const SizedBox(height: 20),
+            Center(
+              child: TextButton(
+                onPressed: busy || resendIn > 0 ? null : send,
+                child: Text(resendIn > 0 ? '${AppLocale.t('Renvoyer le code')} (${resendIn}s)' : AppLocale.t('Renvoyer le code')),
+              ),
+            ),
+          ] else ...[
+            Text(AppLocale.t('Nous allons vous envoyer un code par SMS pour confirmer votre numéro.'), textAlign: TextAlign.center, style: const TextStyle(color: VeyraColors.textSecondary)),
+            const SizedBox(height: 20),
+            VeyraFieldLabel(AppLocale.t('Téléphone'), required: true),
             TextField(
               key: const ValueKey('phone-field'),
               controller: phone,
-              enabled: !codeSent && !busy,
+              enabled: !busy,
               keyboardType: TextInputType.phone,
-              decoration: InputDecoration(labelText: AppLocale.t('Téléphone')),
             ),
-            if (codeSent) ...[
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('code-field'),
-                controller: code,
-                enabled: !busy,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: InputDecoration(labelText: AppLocale.t('Code reçu')),
-              ),
-            ],
-            if (error != null)
-              Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: busy ? null : (codeSent ? verify : send),
-              child: Text(codeSent ? AppLocale.t('Valider') : AppLocale.t('Envoyer le code')),
-            ),
-            if (codeSent)
-              TextButton(onPressed: busy ? null : send, child: Text(AppLocale.t('Renvoyer le code'))),
-            TextButton(onPressed: busy ? null : widget.onLater, child: Text(AppLocale.t('Vérifier plus tard'))),
-          ]),
+          ],
+          if (error != null)
+            Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: VeyraColors.danger))),
+          const SizedBox(height: 8),
+          Center(child: TextButton(onPressed: busy ? null : widget.onLater, child: Text(AppLocale.t('Vérifier plus tard')))),
+        ]),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+          child: FilledButton(
+            onPressed: busy ? null : (codeSent ? verify : send),
+            child: Text(codeSent ? AppLocale.t('Valider') : AppLocale.t('Envoyer le code')),
+          ),
         ),
-      );
+      ),
+    );
+  }
 }

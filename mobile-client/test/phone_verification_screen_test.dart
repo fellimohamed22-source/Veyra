@@ -21,7 +21,6 @@ void main(){
       onDone:()=>done=true,
       onLater:(){},
     )));
-    await tester.tap(find.text('Envoyer le code'));
     await tester.pumpAndSettle();
     expect(sentTo,'+33612345678');
     await tester.enterText(find.byKey(const ValueKey('code-field')),'123456');
@@ -41,7 +40,6 @@ void main(){
       onDone:()=>done=true,
       onLater:(){},
     )));
-    await tester.tap(find.text('Envoyer le code'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('code-field')),'000000');
     await tester.tap(find.text('Valider'));

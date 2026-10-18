@@ -30,6 +30,7 @@ import 'core/formatters/money_formatter.dart';
 import 'core/formatters/status_labels.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/signup_consents.dart';
+import 'core/widgets/auth_ui.dart';
 import 'core/widgets/saved_cards_screen.dart';
 import 'core/widgets/phone_verification_screen.dart';
 import 'core/widgets/veyra_ui.dart';
@@ -374,9 +375,16 @@ final router=GoRouter(
     sendCode:firebaseSendSmsCode,
     confirm:firebaseConfirmSmsCode,
     submit:api.verifyPhone,
-    onDone:()=>c.go('/home'),
-    onLater:()=>c.go('/home'),
+    onDone:()=>c.go('/account-created'),
+    onLater:()=>c.go('/account-created'),
   )),
+  // Board 08 A6.
+  GoRoute(path:'/account-created',builder:(c,s)=>Scaffold(body:VeyraSuccessView(
+    title:t('Bienvenue sur VEYRA !'),
+    text:t('Votre compte client a été créé avec succès.'),
+    actionLabel:t('Commencer'),
+    onAction:()=>c.go('/home'),
+  ))),
   GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
   GoRoute(path:'/reset-password',builder:(c,s)=>const ResetPasswordScreen()),
   // Coquille de navigation persistante (bottom nav), conforme aux
@@ -538,57 +546,105 @@ class _LoginScreenState extends State<LoginScreen>{
     }
   }
 
+  /// Board 08 A1 shows the welcome actions; « Se connecter » opens the
+  /// e-mail form on the same screen.
+  bool showForm=false;
+
+  Widget languagePill(String code,String flag,String label)=>ValueListenableBuilder<String>(
+    valueListenable:AppLocale.code,
+    builder:(context,current,_){
+      final on=current==code;
+      return Material(
+        color:on?Colors.white:Colors.white.withValues(alpha:.14),
+        borderRadius:BorderRadius.circular(VeyraRadius.pill),
+        child:InkWell(
+          borderRadius:BorderRadius.circular(VeyraRadius.pill),
+          onTap:()=>AppLocale.set(code),
+          child:Padding(
+            padding:const EdgeInsets.symmetric(horizontal:14,vertical:8),
+            child:Row(mainAxisSize:MainAxisSize.min,children:[
+              Text(flag,style:const TextStyle(fontSize:16)),
+              const SizedBox(width:6),
+              Text(label,style:TextStyle(fontWeight:FontWeight.w700,color:on?VeyraColors.primary:Colors.white)),
+            ]),
+          ),
+        ),
+      );
+    },
+  );
+
+  Widget socialButton(String label,Widget icon,VoidCallback? onPressed)=>OutlinedButton(
+    onPressed:onPressed,
+    style:OutlinedButton.styleFrom(foregroundColor:VeyraColors.textPrimary,minimumSize:const Size.fromHeight(52)),
+    child:Row(children:[icon,const SizedBox(width:12),Expanded(child:Text(label,textAlign:TextAlign.center)),const SizedBox(width:28)]),
+  );
+
+  List<Widget> welcomeActions()=>[
+    FilledButton(onPressed:loading?null:()=>context.push('/register'),child:Text(t('Créer un compte'))),
+    const SizedBox(height:12),
+    FilledButton(
+      style:FilledButton.styleFrom(backgroundColor:VeyraColors.infoBackground,foregroundColor:VeyraColors.primary),
+      onPressed:loading?null:()=>setState(()=>showForm=true),
+      child:Text(t('Se connecter')),
+    ),
+    const SizedBox(height:16),
+    Row(children:[
+      const Expanded(child:Divider()),
+      Padding(padding:const EdgeInsets.symmetric(horizontal:12),child:Text(t('OU'),style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
+      const Expanded(child:Divider()),
+    ]),
+    const SizedBox(height:16),
+    socialButton(t('Continuer avec Google'),const Text('G',style:TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:Color(0xFF4285F4))),loading?null:_googleLogin),
+  ];
+
+  List<Widget> loginForm()=>[
+    Row(children:[
+      IconButton(tooltip:t('Retour'),onPressed:()=>setState((){showForm=false;error=null;offline=false;}),icon:const Icon(Icons.chevron_left,size:30)),
+      Text(t('Se connecter'),style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
+    ]),
+    const SizedBox(height:8),
+    VeyraFieldLabel(t('E-mail')),
+    TextField(controller:email,keyboardType:TextInputType.emailAddress,autofillHints:const [AutofillHints.email],decoration:const InputDecoration(hintText:'nom@exemple.fr')),
+    const SizedBox(height:14),
+    VeyraFieldLabel(t('Mot de passe')),
+    TextField(controller:password,obscureText:true,autofillHints:const [AutofillHints.password]),
+    Align(alignment:Alignment.centerRight,child:TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?')))),
+    if(offline)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraOfflineBanner(onRetry:submit)),
+    if(error!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.danger,text:error!)),
+    VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
+  ];
+
   @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    body:SafeArea(child:Column(children:[
+    backgroundColor:VeyraColors.primary,
+    body:Column(children:[
+      // Navy hero (board 08 A1): wordmark, tagline, language choice.
+      Expanded(child:Container(
+        width:double.infinity,
+        decoration:const BoxDecoration(gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[Color(0xFF0A2E57),VeyraColors.primary])),
+        child:SafeArea(bottom:false,child:Padding(
+          padding:const EdgeInsets.symmetric(horizontal:24),
+          child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
+            const VeyraWordmark(size:44,color:Colors.white),
+            const SizedBox(height:14),
+            Text(t('Voyagez en toute confiance'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w600)),
+            const SizedBox(height:22),
+            Wrap(spacing:10,runSpacing:10,alignment:WrapAlignment.center,children:[
+              languagePill('fr','🇫🇷','Français'),
+              languagePill('en','🇬🇧','English'),
+            ]),
+          ]),
+        )),
+      )),
       Container(
         width:double.infinity,
-        padding:const EdgeInsets.fromLTRB(24,32,24,40),
-        decoration:const BoxDecoration(
-          gradient:LinearGradient(
-            begin:Alignment.topCenter,end:Alignment.bottomCenter,
-            colors:[Color(0xFF123A66),Color(0xFF1565C0)],
-          ),
-        ),
-        child:Column(children:[
-          Align(alignment:Alignment.topRight,child:LanguageSwitch(style:TextButton.styleFrom(foregroundColor:Colors.white))),
-          const Icon(Icons.location_on,color:Colors.white,size:40),
-          const SizedBox(height:8),
-          const Text('Veyra',style:TextStyle(color:Colors.white,fontSize:32,fontWeight:FontWeight.bold)),
-          const SizedBox(height:4),
-          Text(t('Plus qu\'un trajet, votre confiance'),style:const TextStyle(color:Colors.white70,fontSize:14)),
-        ]),
+        decoration:const BoxDecoration(color:Colors.white,borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        child:SafeArea(top:false,child:SingleChildScrollView(
+          padding:const EdgeInsets.fromLTRB(24,24,24,16),
+          child:AutofillGroup(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:showForm?loginForm():welcomeActions())),
+        )),
       ),
-      Expanded(child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-        Text(t('Bienvenue'),style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold)),
-        const SizedBox(height:20),
-        TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
-        const SizedBox(height:12),
-        TextField(controller:password,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline)),
-        if(offline)Padding(padding:const EdgeInsets.only(top:12),child:VeyraOfflineBanner(onRetry:submit)),
-        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-        const SizedBox(height:20),
-        VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
-        const SizedBox(height:20),
-        Row(children:[
-          const Expanded(child:Divider()),
-          Padding(
-            padding:const EdgeInsets.symmetric(horizontal:12),
-            child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
-          ),
-          const Expanded(child:Divider()),
-        ]),
-        const SizedBox(height:14),
-        OutlinedButton.icon(
-          onPressed:loading?null:_googleLogin,
-          icon:const Icon(Icons.g_mobiledata_rounded,size:28),
-          label:Text(t('Continuer avec Google')),
-          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
-        ),
-      TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
-      TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte'))),
-      ]))),
-    ])));
+    ]),
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -3150,6 +3206,8 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
 }
 
 
+/// Inscription client en 3 étapes (planche 08 A2-A4) : informations,
+/// mot de passe, conditions ; puis vérification SMS (A5) et compte créé (A6).
 class RegisterScreen extends StatefulWidget{
   const RegisterScreen({super.key});
   @override State<RegisterScreen> createState()=>_RegisterScreenState();
@@ -3160,7 +3218,9 @@ class _RegisterScreenState extends State<RegisterScreen>{
   final phone=TextEditingController();
   final email=TextEditingController();
   final password=TextEditingController();
+  final confirmPassword=TextEditingController();
   final formKey=GlobalKey<FormState>();
+  int step=1;
   bool loading=false;
   String? error;
   bool offline=false;
@@ -3168,15 +3228,52 @@ class _RegisterScreenState extends State<RegisterScreen>{
   bool acceptPrivacy=false;
   bool marketingOptIn=false;
   bool consentErrors=false;
+  bool showPassword=false;
+  bool showConfirm=false;
 
-  @override void dispose(){firstName.dispose();lastName.dispose();phone.dispose();email.dispose();password.dispose();super.dispose();}
+  @override void initState(){
+    super.initState();
+    password.addListener(()=>setState((){}));
+    confirmPassword.addListener(()=>setState((){}));
+  }
+  @override void dispose(){firstName.dispose();lastName.dispose();phone.dispose();email.dispose();password.dispose();confirmPassword.dispose();super.dispose();}
+
+  /// The field shows a +33 prefix: "6 12 34 56 78" and "06 12 34 56 78"
+  /// both become +33612345678; an international number is kept as typed.
+  String get e164{
+    final raw=phone.text.replaceAll(RegExp(r'[\s.\-()]'),'');
+    if(raw.startsWith('+'))return raw;
+    return '+33'+(raw.startsWith('0')?raw.substring(1):raw);
+  }
+
+  // Backend rule (AuthController: 10 characters minimum) is stricter than
+  // the board's 8, so the checklist shows the real requirement.
+  bool get pwLength=>password.text.length>=10;
+  bool get pwLetterDigit=>RegExp(r'[A-Za-z]').hasMatch(password.text)&&RegExp(r'\d').hasMatch(password.text);
+  bool get pwSpecial=>RegExp(r'[^A-Za-z0-9]').hasMatch(password.text);
+  bool get pwMatch=>confirmPassword.text.isNotEmpty&&confirmPassword.text==password.text;
+
+  void next(){
+    setState(()=>error=null);
+    if(step==1){
+      if(!formKey.currentState!.validate())return;
+      setState(()=>step=2);
+    }else if(step==2){
+      if(!(pwLength&&pwLetterDigit&&pwSpecial)){setState(()=>error=t('Le mot de passe ne respecte pas encore toutes les règles.'));return;}
+      if(!pwMatch){setState(()=>error=t('Les mots de passe ne correspondent pas.'));return;}
+      setState(()=>step=3);
+    }else{
+      submit();
+    }
+  }
+
+  void back(){
+    if(step>1){setState((){step--;error=null;});}
+    else{Navigator.maybePop(context);}
+  }
 
   Future<void> submit()async{
-    if(loading||!formKey.currentState!.validate())return;
-    if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
-      setState((){error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.');offline=false;});
-      return;
-    }
+    if(loading)return;
     if(!SignupConsents.mandatoryAccepted(acceptTerms,acceptPrivacy)){
       setState((){consentErrors=true;error=t('Acceptez les CGU et la politique de confidentialité pour continuer.');offline=false;});
       return;
@@ -3184,63 +3281,108 @@ class _RegisterScreenState extends State<RegisterScreen>{
     setState((){loading=true;error=null;offline=false;});
     try{
       await api.register(
-        email:email.text,
+        email:email.text.trim(),
         password:password.text,
-        firstName:firstName.text,
-        lastName:lastName.text,
-        phone:phone.text,
+        firstName:firstName.text.trim(),
+        lastName:lastName.text.trim(),
+        phone:e164,
         acceptTerms:acceptTerms,
         acceptPrivacy:acceptPrivacy,
         marketingOptIn:marketingOptIn,
       );
       if(!mounted)return;
       // CL-AUTH-05: confirm the phone number by SMS before entering the app.
-      context.go('/verify-phone',extra:phone.text);
+      context.go('/verify-phone',extra:e164);
       await configurePush();
     }catch(e){
       if(!mounted)return;
-      final isOffline=e is DioException&&(
-        e.type==DioExceptionType.connectionError||
-        e.type==DioExceptionType.connectionTimeout||
-        e.type==DioExceptionType.receiveTimeout||
-        e.type==DioExceptionType.sendTimeout);
       setState((){
-        offline=isOffline;
-        error=isOffline?null:VeyraErrorMessages.forException(e);
+        offline=VeyraErrorMessages.isOffline(e);
+        error=offline?null:VeyraErrorMessages.forException(e);
       });
     }finally{
       if(mounted)setState(()=>loading=false);
     }
   }
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(title:Text(t('Créer un compte')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
-    body:SafeArea(child:Form(key:formKey,autovalidateMode:AutovalidateMode.onUserInteraction,child:ListView(padding:const EdgeInsets.all(24),children:[
-      TextFormField(controller:firstName,validator:(v)=>(v??'').trim().isEmpty?t('Prénom requis'):null,decoration:appFieldDecoration(t('Prénom'),icon:Icons.person_outline)),
+  Widget field(String label,TextEditingController c,{String? hint,String? Function(String?)? validator,TextInputType? keyboard,Widget? prefix,Key? key,bool required=true})=>Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+    VeyraFieldLabel(label,required:required),
+    TextFormField(key:key,controller:c,validator:validator,keyboardType:keyboard,decoration:InputDecoration(hintText:hint,prefixIcon:prefix,prefixIconConstraints:const BoxConstraints())),
+    const SizedBox(height:16),
+  ]);
+
+  Widget passwordField(String label,TextEditingController c,bool visible,VoidCallback toggle,Key key)=>Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+    VeyraFieldLabel(label,required:true),
+    TextField(key:key,controller:c,obscureText:!visible,decoration:InputDecoration(
+      suffixIcon:IconButton(tooltip:visible?t('Masquer'):t('Afficher'),icon:Icon(visible?Icons.visibility_off_outlined:Icons.visibility_outlined),onPressed:toggle),
+    )),
+  ]);
+
+  Widget consent(bool value,String label,ValueChanged<bool> onChanged,{bool required=false}){
+    final missing=required&&consentErrors&&!value;
+    return CheckboxListTile(
+      value:value,
+      onChanged:(v)=>setState(()=>onChanged(v??false)),
+      controlAffinity:ListTileControlAffinity.leading,
+      contentPadding:EdgeInsets.zero,
+      title:Text(label,style:const TextStyle(fontWeight:FontWeight.w600)),
+      subtitle:missing?Text(t('Acceptation obligatoire'),style:const TextStyle(color:VeyraColors.danger)):null,
+    );
+  }
+
+  List<Widget> stepBody()=>switch(step){
+    1=>[
+      VeyraStepTitle(t('Vos informations')),
+      const SizedBox(height:20),
+      Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Expanded(child:field(t('Prénom'),firstName,key:const ValueKey('first-name'),validator:(v)=>(v??'').trim().isEmpty?t('Prénom requis'):null)),
+        const SizedBox(width:12),
+        Expanded(child:field(t('Nom'),lastName,key:const ValueKey('last-name'),validator:(v)=>(v??'').trim().isEmpty?t('Nom requis'):null)),
+      ]),
+      field(t('Téléphone'),phone,key:const ValueKey('phone'),hint:'6 12 34 56 78',keyboard:TextInputType.phone,prefix:const VeyraPhonePrefix(),
+        validator:(v)=>PhoneVerificationScreen.toE164(e164)==null?t('Téléphone incomplet'):null),
+      field(t('E-mail'),email,key:const ValueKey('email'),hint:'nom@exemple.fr',keyboard:TextInputType.emailAddress,
+        validator:(v)=>RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v??'').trim())?null:t('E-mail invalide')),
+    ],
+    2=>[
+      VeyraStepTitle(t('Créez votre mot de passe')),
+      const SizedBox(height:20),
+      passwordField(t('Mot de passe'),password,showPassword,()=>setState(()=>showPassword=!showPassword),const ValueKey('password')),
       const SizedBox(height:12),
-      TextFormField(controller:lastName,decoration:appFieldDecoration(t('Nom'),icon:Icons.person_outline)),
+      VeyraCheckLine(ok:pwLength,text:t('Au moins 10 caractères')),
+      VeyraCheckLine(ok:pwLetterDigit,text:t('Une lettre et un chiffre')),
+      VeyraCheckLine(ok:pwSpecial,text:t('Un caractère spécial (ex : !@#)')),
+      const SizedBox(height:20),
+      passwordField(t('Confirmez votre mot de passe'),confirmPassword,showConfirm,()=>setState(()=>showConfirm=!showConfirm),const ValueKey('password-confirm')),
+    ],
+    _=>[
+      VeyraStepTitle(t('Conditions d’utilisation')),
       const SizedBox(height:12),
-      TextFormField(controller:phone,validator:(v)=>(v??'').trim().length<6?t('Téléphone incomplet'):null,keyboardType:TextInputType.phone,decoration:appFieldDecoration(t('Téléphone'),icon:Icons.phone_outlined)),
-      const SizedBox(height:12),
-      TextFormField(controller:email,validator:(v)=>RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v??'').trim())?null:t('E-mail invalide'),keyboardType:TextInputType.emailAddress,decoration:appFieldDecoration(t('Email'),icon:Icons.mail_outline)),
-      const SizedBox(height:12),
-      TextFormField(controller:password,validator:(v)=>(v??'').length<10?t('10 caractères minimum'):null,obscureText:true,decoration:appFieldDecoration(t('Mot de passe'),icon:Icons.lock_outline,helperText:t('10 caractères minimum'))),
-      const SizedBox(height:12),
-      SignupConsents(
-        acceptTerms:acceptTerms,
-        acceptPrivacy:acceptPrivacy,
-        marketingOptIn:marketingOptIn,
-        showErrors:consentErrors,
-        onTerms:(v)=>setState(()=>acceptTerms=v),
-        onPrivacy:(v)=>setState(()=>acceptPrivacy=v),
-        onMarketing:(v)=>setState(()=>marketingOptIn=v),
+      consent(acceptTerms,t('J’accepte les conditions d’utilisation.'),(v)=>acceptTerms=v,required:true),
+      consent(acceptPrivacy,t('J’accepte la politique de confidentialité.'),(v)=>acceptPrivacy=v,required:true),
+      consent(marketingOptIn,t('J’accepte de recevoir des communications de VEYRA (facultatif).'),(v)=>marketingOptIn=v),
+      // « Lire les documents » (board 08 A4) comes back once the legal
+      // texts are published; no placeholder text is shown meanwhile.
+    ],
+  };
+
+  @override Widget build(BuildContext context)=>PopScope(
+    canPop:step==1,
+    onPopInvokedWithResult:(didPop,_){if(!didPop)back();},
+    child:Scaffold(
+      appBar:VeyraStepProgress(step:step,total:3,onBack:back),
+      body:Form(key:formKey,autovalidateMode:AutovalidateMode.onUserInteraction,child:ListView(padding:const EdgeInsets.fromLTRB(24,16,24,24),children:[
+        ...stepBody(),
+        if(offline)Padding(padding:const EdgeInsets.only(top:12),child:VeyraOfflineBanner(onRetry:submit)),
+        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:VeyraBanner(tone:VeyraTone.danger,text:error!)),
+      ])),
+      bottomNavigationBar:VeyraFlowFooter(
+        onNext:next,
+        loading:loading,
+        trailingArrow:false,
+        nextLabel:step==3?t('Créer mon compte'):t('Continuer'),
       ),
-      if(offline)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:VeyraOfflineBanner(onRetry:submit)),
-      if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-      const SizedBox(height:16),
-      VeyraPrimaryButton(label:t('Créer mon compte'),loading:loading,onPressed:submit),
-    ]))),
+    ),
   );
 }
 

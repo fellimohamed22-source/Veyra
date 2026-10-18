@@ -5,7 +5,7 @@ import 'package:veyra_client/main.dart';
 void main(){
   testWidgets('registration validates email while typing and preserves the input',(tester)async{
     await tester.pumpWidget(const MaterialApp(home:RegisterScreen()));
-    final email=find.widgetWithText(TextFormField,'Email');
+    final email=find.byKey(const ValueKey('email'));
     await tester.enterText(email,'adresse-invalide');
     await tester.pumpAndSettle();
     expect(find.text('E-mail invalide'),findsOneWidget);
