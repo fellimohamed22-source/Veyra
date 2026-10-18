@@ -943,7 +943,7 @@ class _KycScreenState extends State<KycScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Dossier Chauffeur VTC'))),
+    appBar:AppBar(title:Text(t('Statut du compte'))),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
@@ -959,13 +959,41 @@ class _KycScreenState extends State<KycScreen>{
         final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true&&
           (status['vehicles'] as List? ??[]).whereType<Map>().any((v)=>v['status']=='APPROVED');
 
+        final kycStatus=status['kyc_status']?.toString();
+        final rejected=kycStatus=='REJECTED';
+        // Board 08 C8 « Statut du compte »: icon, state, explanation.
+        final (statusIcon,statusFg,statusBg)=approved
+          ?(Icons.verified_rounded,VeyraColors.success,VeyraColors.successBackground)
+          :rejected
+            ?(Icons.error_outline,VeyraColors.danger,VeyraColors.dangerBackground)
+            :(Icons.hourglass_top_rounded,VeyraColors.accent,VeyraColors.infoBackground);
         return ListView(padding:const EdgeInsets.all(20),children:[
-          Card(child:ListTile(
-            leading:Icon(approved?Icons.verified:Icons.pending_actions),
-            title:Text(VeyraStatusLabels.kycStatus(status['kyc_status']?.toString())),
-            subtitle:Text(t('Statut du dossier')+' : '+VeyraStatusLabels.kycStatus(status['kyc_status']?.toString())),
-          )),
-          if(!approved)Text(t('L’accès aux demandes nécessite un dossier et un véhicule approuvés. Complétez les informations et remplacez les documents refusés.')),
+          Container(
+            padding:const EdgeInsets.all(20),
+            decoration:BoxDecoration(color:statusBg,borderRadius:BorderRadius.circular(VeyraRadius.card)),
+            child:Column(children:[
+              Icon(statusIcon,size:52,color:statusFg),
+              const SizedBox(height:10),
+              Text(
+                approved?t('Dossier validé'):rejected?t('Corrections demandées'):t('Dossier en cours de vérification'),
+                textAlign:TextAlign.center,
+                style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800),
+              ),
+              const SizedBox(height:6),
+              Text(t('Statut du dossier')+' : '+VeyraStatusLabels.kycStatus(kycStatus),textAlign:TextAlign.center,style:const TextStyle(color:VeyraColors.textSecondary)),
+              const SizedBox(height:6),
+              Text(
+                approved
+                  ?t('Vous pouvez recevoir des demandes et proposer vos offres.')
+                  :rejected
+                    ?t('Remplacez les documents refusés ci-dessous, votre dossier repartira en vérification.')
+                    :t('Nous vous informerons par e-mail et par notification dès que votre dossier sera validé.'),
+                textAlign:TextAlign.center,
+              ),
+            ]),
+          ),
+          const SizedBox(height:12),
+          if(!approved)Text(t('L’accès aux demandes nécessite un dossier et un véhicule approuvés. Complétez les informations et remplacez les documents refusés.'),style:const TextStyle(color:VeyraColors.textSecondary)),
           for(final v in (status['vehicles'] as List? ??[]).whereType<Map>())Card(child:ListTile(title:Text([v['brand'],v['model'],v['plate_number']].join(' • ')),subtitle:Text([v['color'],v['category_name'],v['status']=='APPROVED'?t('Véhicule validé'):t('Véhicule en attente de validation')].where((x)=>x!=null).join(' • ')))),
           if(hasVehicle)Text(t('Véhicule enregistré. Contactez le support pour modifier un véhicule soumis à validation.')),
           const SizedBox(height:16),

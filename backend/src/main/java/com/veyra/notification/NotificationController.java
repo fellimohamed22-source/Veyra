@@ -22,7 +22,7 @@ public class NotificationController {
   public List<Map<String, Object>> mine() {
     return db.queryForList(
         "select n.id,n.event_type,n.channel,n.template_code,n.status,n.data::text as data,n.sent_at,n.created_at,n.read_at,(n.read_at is null) as unread," +
-        "sb.id booking_id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status booking_status " +
+        "sb.id booking_id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status booking_status,sb.passenger_count,sb.baggage_count " +
         "from notifications n left join scheduled_bookings sb on sb.id::text=n.data->>'bookingId' " +
         "where n.user_id=? order by n.created_at desc limit 100",
         CurrentUser.id());

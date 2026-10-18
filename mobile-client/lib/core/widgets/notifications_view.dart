@@ -102,7 +102,9 @@ class _VeyraNotificationsScreenState extends State<VeyraNotificationsScreen> {
       setState(() => read.add(n.id));
       try { veyraUnreadNotifications.value = await widget.markRead(n.id); } catch (_) {}
     }
-    widget.open(n);
+    if (!mounted) return;
+    // Board 16 P3: full information first, then « Voir la demande ».
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => VeyraNotificationDetailScreen(notification: n, open: widget.open)));
   }
 
   Future<void> markAll() async {
@@ -200,4 +202,86 @@ class _VeyraNotificationsScreenState extends State<VeyraNotificationsScreen> {
           ),
         ),
       );
+}
+
+/// Détail d'une notification (planche 16 P3) : information complète et
+/// lien vers l'écran concerné.
+class VeyraNotificationDetailScreen extends StatelessWidget {
+  final VeyraNotification notification;
+  final void Function(VeyraNotification n) open;
+  const VeyraNotificationDetailScreen({required this.notification, required this.open, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final n = notification;
+    final (icon, fg, bg) = n.look;
+    final raw = n.raw;
+    final pickup = (raw['pickup_address'] ?? '').toString(), dropoff = (raw['dropoff_address'] ?? '').toString();
+    final when = n.createdAt;
+    final pax = (raw['passenger_count'] as num?)?.toInt();
+    final bags = (raw['baggage_count'] as num?)?.toInt();
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(title: Text(_t('Notification'))),
+      body: ListView(children: [
+        Container(
+          color: VeyraColors.warningBackground.withValues(alpha: .6),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              CircleAvatar(radius: 24, backgroundColor: bg, child: Icon(icon, color: fg)),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(n.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                if (when != null) Text(VeyraDateFormatter.dateTime(when.toUtc().toIso8601String()), style: const TextStyle(color: VeyraColors.textSecondary)),
+              ])),
+            ]),
+            if (n.body.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(n.body, style: const TextStyle(fontSize: 15, height: 1.4)),
+            ],
+          ]),
+        ),
+        if (pickup.isNotEmpty || dropoff.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_t('Détail de la demande'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(VeyraRadius.card), border: Border.all(color: VeyraColors.border)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (raw['scheduled_at'] != null) Row(children: [
+                    const Icon(Icons.calendar_today_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(VeyraDateFormatter.dateTime(raw['scheduled_at']))),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [const Icon(Icons.location_on, size: 18, color: VeyraColors.accent), const SizedBox(width: 8), Expanded(child: Text(pickup))]),
+                  const SizedBox(height: 6),
+                  Row(children: [const Icon(Icons.location_on, size: 18, color: VeyraColors.pinRed), const SizedBox(width: 8), Expanded(child: Text(dropoff))]),
+                  if (pax != null || bags != null) ...[
+                    const SizedBox(height: 10),
+                    Wrap(spacing: 18, children: [
+                      if (pax != null) Text('$pax ${pax > 1 ? _t('passagers') : _t('passager')}', style: const TextStyle(color: VeyraColors.textSecondary)),
+                      if (bags != null) Text('$bags ${bags > 1 ? _t('bagages') : _t('bagage')}', style: const TextStyle(color: VeyraColors.textSecondary)),
+                    ]),
+                  ],
+                ]),
+              ),
+            ]),
+          ),
+      ]),
+      bottomNavigationBar: n.bookingId == null
+          ? null
+          : SafeArea(child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: FilledButton(
+                onPressed: () => open(n),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [Text(_t('Voir la demande')), const SizedBox(width: 8), const Icon(Icons.arrow_forward)]),
+              ),
+            )),
+    );
+  }
 }
