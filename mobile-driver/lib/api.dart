@@ -335,6 +335,17 @@ class Api {
     });
   }
 
+  /// DR-01 home: « Disponible » switch, counters and next ride.
+  Future<Map<String,dynamic>> dashboard() async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/driver/dashboard')).data);
+
+  Future<bool> availability() async =>
+      _acceptingFrom((await dio.get('/api/v1/driver/availability')).data);
+  static bool _acceptingFrom(dynamic data)=>!(data is Map&&data['acceptingRequests']==false);
+
+  Future<bool> setAvailability(bool accepting) async =>
+      (await dio.put('/api/v1/driver/availability',data:{'acceptingRequests':accepting})).data['acceptingRequests']==true;
+
   Future<Map<String,dynamic>> onboardingStatus() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/onboarding/status')).data);
 

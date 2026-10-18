@@ -79,7 +79,7 @@ public class OutboxPublisher {
           "'event-'||cast(? as text)||'-driver-'||cast(u.id as text)," +
           "jsonb_build_object('bookingId',cast(? as text)) " +
           "from drivers d join users u on u.id=d.user_id " +
-          "where d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true " +
+          "where d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true and d.accepting_requests " +
           "on conflict(dedupe_key) do nothing",
           type,eventId,bookingId);
     }

@@ -230,17 +230,3 @@ class VeyraPhonePrefix extends StatelessWidget {
       );
 }
 
-/// Titre d'étape (même rendu que VeyraStepTitle de l'app client).
-class VeyraStepTitle extends StatelessWidget {
-  final String text;
-  final String? subtitle;
-  const VeyraStepTitle(this.text, {this.subtitle, super.key});
-  @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(text, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: VeyraColors.textPrimary, letterSpacing: -0.3)),
-        if (subtitle != null) ...[
-          const SizedBox(height: 6),
-          Text(subtitle!, style: const TextStyle(fontSize: 14, color: VeyraColors.textSecondary, height: 1.4)),
-        ],
-      ]);
-}

@@ -127,6 +127,9 @@ import java.util.*;
     @GetMapping("/driver/opportunities") List<Map<String,Object>> opportunities(    @RequestParam(defaultValue="date")String sort,    @RequestParam(required=false)UUID categoryId,    @RequestParam(required=false)OffsetDateTime from,    @RequestParam(required=false)OffsetDateTime to,    @RequestParam(required=false)Integer minPassengers,    @RequestParam(required=false)String pickupQuery,    @RequestParam(required=false)String destinationQuery, @RequestParam(required=false)Integer page){
         UUID d=driver();
         eligible(d);
+        // DR-01: offline drivers receive no new requests (their confirmed
+        // rides stay available elsewhere).
+        if(Boolean.FALSE.equals(db.queryForObject("select accepting_requests from drivers where id=?",Boolean.class,d)))return List.of();
         String order=switch(sort){
             case "date"->"scheduled_at asc";
             case "newest"->"created_at desc";
@@ -137,8 +140,8 @@ import java.util.*;
             default->"scheduled_at asc";
         }
         ;
-        StringBuilder sql=new StringBuilder("select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.category_id,sb.passenger_count,sb.baggage_count,sb.status,sb.offer_window_ends_at,vc.display_name as category_name,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,(select proposed_amount_minor from driver_offers o where o.booking_id=sb.id and o.driver_id=? and o.status='ACTIVE' limit 1) as own_offer_amount_minor,"+CUSTOMER_FAVORITE_SQL+" as customer_favorite from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id where sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now() and "+ELIGIBLE_VEHICLE_SQL);
-        List<Object> params=new ArrayList<>();params.add(d);params.add(d);params.add(d);
+        StringBuilder sql=new StringBuilder("select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.category_id,sb.passenger_count,sb.baggage_count,sb.status,sb.offer_window_ends_at,vc.display_name as category_name,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,(select proposed_amount_minor from driver_offers o where o.booking_id=sb.id and o.driver_id=? and o.status='ACTIVE' limit 1) as own_offer_amount_minor,"+BEST_OTHER_OFFER_SQL+" as best_other_offer_minor,"+CUSTOMER_FAVORITE_SQL+" as customer_favorite from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id where sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now() and "+ELIGIBLE_VEHICLE_SQL);
+        List<Object> params=new ArrayList<>();params.add(d);params.add(d);params.add(d);params.add(d);
         if(categoryId!=null){
             sql.append(" and category_id=?");
             params.add(categoryId);
@@ -458,6 +461,11 @@ import java.util.*;
     /** Driver (first ?) owns an approved vehicle of the booking's category. */
     public static final String ELIGIBLE_VEHICLE_SQL="exists(select 1 from vehicles ev where ev.driver_id=? and ev.status='APPROVED' and ev.category_id=sb.category_id)";
     /** Driver (first ?) is a real favorite of the booking's creator (customer_favorite_drivers), not a client-supplied flag. */
+    /**
+     * Lowest active net price among the OTHER drivers (first ?), shown only
+     * when the booking allows it (BEST_VISIBLE); never an identity.
+     */
+    public static final String BEST_OTHER_OFFER_SQL="case when sb.offer_visibility_mode='BEST_VISIBLE' then (select min(bo.proposed_amount_minor) from driver_offers bo where bo.booking_id=sb.id and bo.status='ACTIVE' and bo.expires_at>now() and bo.driver_id<>?) end";
     public static final String CUSTOMER_FAVORITE_SQL="exists(select 1 from customer_favorite_drivers cf where cf.user_id=sb.creator_user_id and cf.driver_id=?)";
     private void eligibleVehicle(UUID bookingId,UUID d){
         Integer n=db.queryForObject("select count(*) from scheduled_bookings sb where sb.id=? and "+ELIGIBLE_VEHICLE_SQL,Integer.class,bookingId,d);

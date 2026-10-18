@@ -39,16 +39,22 @@ void main(){
     }));
     await tester.pumpWidget(const MaterialApp(home:OpportunitiesScreen()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Filtres'));
+    // Board 13 P2: filters open in a sheet and apply on « Appliquer ».
+    await tester.tap(find.text('Filtrer'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Toutes'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Van familial').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Appliquer'));
+    await tester.tap(find.text('Appliquer'));
+    await tester.pumpAndSettle();
     expect(queries.last['categoryId'],'van');
     expect(queries.last['page'],0);
-    await tester.ensureVisible(find.text('Réinitialiser').first);
-    await tester.tap(find.text('Réinitialiser').first);
+    await tester.tap(find.text('Filtrer'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Réinitialiser').last);
+    await tester.tap(find.text('Réinitialiser').last);
     await tester.pumpAndSettle();
     expect(queries.last.containsKey('categoryId'),isFalse);
     expect(tester.takeException(),isNull);

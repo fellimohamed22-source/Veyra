@@ -5,6 +5,7 @@ import '../app/theme.dart';
 import '../app_locale.dart';
 import '../core/formatters/error_messages.dart';
 import '../core/widgets/auth_ui.dart';
+import '../core/widgets/veyra_ui.dart' show VeyraStepTitle;
 import '../core/widgets/signup_consents.dart';
 
 String _t(String s) => AppLocale.t(s);

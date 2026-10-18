@@ -29,6 +29,8 @@ import 'core/formatters/money_formatter.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/welcome_hero.dart';
 import 'onboarding/driver_signup_flow.dart';
+import 'ui/driver_home_screen.dart';
+import 'ui/driver_ui.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/driver_documents.dart';
@@ -236,7 +238,9 @@ final router=GoRouter(
   StatefulShellRoute.indexedStack(
     builder:(c,s,navigationShell)=>AppShell(navigationShell:navigationShell),
     branches:[
-      StatefulShellBranch(routes:[GoRoute(path:'/home',builder:(c,s)=>const OpportunitiesScreen())]),
+      // Boards 02/12/13: Accueil, Demandes, Mes courses, Revenus, Profil.
+      StatefulShellBranch(routes:[GoRoute(path:'/home',builder:(c,s)=>DriverHomeScreen(api:api,refresh:RefreshBus.tick,go:c.go,push:(r)=>c.push(r)))]),
+      StatefulShellBranch(routes:[GoRoute(path:'/requests',builder:(c,s)=>const OpportunitiesScreen())]),
       StatefulShellBranch(routes:[GoRoute(path:'/agenda',builder:(c,s)=>const AgendaScreen())]),
       StatefulShellBranch(routes:[GoRoute(path:'/wallet',builder:(c,s)=>const WalletScreen())]),
       StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
@@ -1092,94 +1096,138 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
   );}
   void reload()=>setState((){future=load();});
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Courses planifiées')),actions:[
-      IconButton(onPressed:()=>context.push('/driver/offers'),icon:const Icon(Icons.local_offer_outlined),tooltip:t('Mes offres')),
-      IconButton(onPressed:()=>context.push('/notifications'),tooltip:t('Notifications'),icon:const Icon(Icons.notifications_outlined)),
-    ]),
-    body:RefreshIndicator(
-      onRefresh:()async{final refreshed=load();setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
-      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
-        Container(
-          padding:const EdgeInsets.all(16),
-          decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
-          child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            const Icon(Icons.event_available_rounded,color:VeyraColors.primary),
-            const SizedBox(width:10),
-            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Marketplace des réservations à venir'),style:const TextStyle(fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
-              const SizedBox(height:4),
-              Text(t('Consultez les trajets planifiés et proposez librement votre prix.'),style:const TextStyle(color:VeyraColors.textSecondary,height:1.3)),
-            ])),
-          ]),
-        ),
-        const SizedBox(height:14),
-        DropdownButtonFormField<String>(
-          key:ValueKey(sort),
-          isExpanded:true,
-          initialValue:sort,
-          decoration:InputDecoration(labelText:t('Trier les demandes')),
-          items:[
-            DropdownMenuItem(value:'date',child:Text(t('Date de départ'))),
-            DropdownMenuItem(value:'newest',child:Text(t('Plus récentes'))),
-            DropdownMenuItem(value:'pickup',child:Text(t('Lieu de départ (A → Z)'))),
-            DropdownMenuItem(value:'destination',child:Text(t('Destination (A → Z)'))),
-          ],
-          onChanged:(v){if(v!=null){setState((){
-            sort=v;
-            page=0;
-            future=load();
-          });}},
-        ),
-        const SizedBox(height:10),
-        ExpansionTile(
-          tilePadding:EdgeInsets.zero,
-          title:Row(children:[Expanded(child:Text(t('Filtres'))),if(pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null||categoryId!=null||dates!=null)const Icon(Icons.filter_alt,size:18)]),
-          children:[
+  // Fail-safe: an unknown availability is shown as online.
+  late Future<bool> online=safeAvailability();
+  Future<bool> safeAvailability()=>api.availability().catchError((_)=>true);
+  bool goingOnline=false;
+
+  bool get filtered=>pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null||categoryId!=null||dates!=null;
+
+  void resetFilters(){
+    pickupFilter.clear();
+    destinationFilter.clear();
+    setState((){minPassengers=null;sort='date';categoryId=null;dates=null;page=0;future=load();});
+  }
+
+  Future<void> goOnline()async{
+    setState(()=>goingOnline=true);
+    try{await api.setAvailability(true);if(mounted)setState((){online=Future.value(true);page=0;future=load();});}
+    catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
+    finally{if(mounted)setState(()=>goingOnline=false);}
+  }
+
+  /// « Filtrer » (planche 13 P2) : tri et filtres dans une feuille.
+  Future<void> openFilters()async{
+    await showModalBottomSheet<void>(
+      context:context,
+      isScrollControlled:true,
+      showDragHandle:true,
+      builder:(sheet)=>StatefulBuilder(builder:(sheet,setSheet){
+        void update(VoidCallback f){setState(f);setSheet((){});}
+        return Padding(
+          padding:EdgeInsets.fromLTRB(20,0,20,20+MediaQuery.viewInsetsOf(sheet).bottom),
+          child:SingleChildScrollView(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,mainAxisSize:MainAxisSize.min,children:[
+            Text(t('Filtrer les demandes'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w800)),
+            const SizedBox(height:14),
+            DropdownButtonFormField<String>(
+              key:ValueKey('sort-$sort'),
+              isExpanded:true,
+              initialValue:sort,
+              decoration:InputDecoration(labelText:t('Trier les demandes')),
+              items:[
+                DropdownMenuItem(value:'date',child:Text(t('Date de départ'))),
+                DropdownMenuItem(value:'newest',child:Text(t('Plus récentes'))),
+                DropdownMenuItem(value:'pickup',child:Text(t('Lieu de départ (A → Z)'))),
+                DropdownMenuItem(value:'destination',child:Text(t('Destination (A → Z)'))),
+              ],
+              onChanged:(v){if(v!=null)update(()=>sort=v);},
+            ),
+            const SizedBox(height:10),
             FutureBuilder<List<dynamic>>(future:categories,builder:(context,s){
-              if(s.hasError)return TextButton(onPressed:()=>setState((){categories=api.vehicleCategories();}),child:Text(t('Réessayer le chargement des catégories')));
-              return DropdownButtonFormField<String>(key:ValueKey(categoryId),initialValue:categoryId,isExpanded:true,
+              if(s.hasError)return TextButton(onPressed:()=>update((){categories=api.vehicleCategories();}),child:Text(t('Réessayer le chargement des catégories')));
+              if(!s.hasData)return const LinearProgressIndicator();
+              return DropdownButtonFormField<String>(key:ValueKey('cat-$categoryId'),initialValue:categoryId,isExpanded:true,
                 decoration:InputDecoration(labelText:t('Catégorie')),
                 items:[DropdownMenuItem<String>(value:null,child:Text(t('Toutes'))),...(s.data??[]).map((x)=>DropdownMenuItem<String>(value:x['id'].toString(),child:Text(x['display_name'].toString())))],
-                onChanged:(v)=>setState((){categoryId=v;page=0;future=load();}));
+                onChanged:(v)=>update(()=>categoryId=v));
             }),
+            const SizedBox(height:10),
             OutlinedButton.icon(icon:const Icon(Icons.date_range),label:Text(dates==null?t('Toutes les dates'):VeyraDateFormatter.dateTime(dates!.start.toIso8601String())+' – '+VeyraDateFormatter.dateTime(dates!.end.toIso8601String())),onPressed:()async{
               final chosen=await showDateRangePicker(context:context,firstDate:DateTime.now().subtract(const Duration(days:1)),lastDate:DateTime.now().add(const Duration(days:730)),initialDateRange:dates);
-              if(chosen!=null&&mounted)setState((){dates=chosen;page=0;future=load();});
+              if(chosen!=null&&mounted)update(()=>dates=chosen);
             }),
+            const SizedBox(height:10),
             TextField(controller:pickupFilter,decoration:InputDecoration(labelText:t('Lieu de départ contient'))),
             const SizedBox(height:8),
             TextField(controller:destinationFilter,decoration:InputDecoration(labelText:t('Destination contient'))),
             const SizedBox(height:8),
             DropdownButtonFormField<int?>(
-              key:ValueKey(minPassengers),
+              key:ValueKey('pax-$minPassengers'),
               initialValue:minPassengers,
               decoration:InputDecoration(labelText:t('Minimum passagers')),
               items:[DropdownMenuItem<int?>(value:null,child:Text(t('Tous'))), ...List.generate(8,(i)=>DropdownMenuItem<int?>(value:i+1,child:Text('${i+1}+')))],
-              onChanged:(v)=>setState(()=>minPassengers=v),
+              onChanged:(v)=>update(()=>minPassengers=v),
             ),
-            const SizedBox(height:10),
+            const SizedBox(height:16),
             Row(children:[
-              Expanded(child:OutlinedButton(onPressed:(){
-                pickupFilter.clear();
-                destinationFilter.clear();
-                setState((){
-                  minPassengers=null;sort='date';categoryId=null;dates=null;
-                  page=0;
-                  future=load();
-                });
-              },child:Text(t('Réinitialiser')))),
-              const SizedBox(width:8),
-              Expanded(child:FilledButton(onPressed:(){
-                setState((){
-                  page=0;
-                  future=load();
-                });
-              },child:Text(t('Appliquer')))),
+              Expanded(child:OutlinedButton(onPressed:(){Navigator.pop(sheet);resetFilters();},child:Text(t('Réinitialiser')))),
+              const SizedBox(width:10),
+              Expanded(child:FilledButton(onPressed:(){Navigator.pop(sheet);setState((){page=0;future=load();});},child:Text(t('Appliquer')))),
             ]),
-          ],
-        ),
-        const SizedBox(height:16),
+          ])),
+        );
+      }),
+    );
+  }
+
+  Widget emptyState(){
+    return FutureBuilder<bool>(future:online,builder:(context,o){
+      if(o.data==false){
+        return DriverCard(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          Row(children:[
+            const Icon(Icons.pause_circle_filled,color:VeyraColors.neutral),
+            const SizedBox(width:10),
+            Expanded(child:Text(t('Vous êtes hors ligne'),style:const TextStyle(fontWeight:FontWeight.w800))),
+          ]),
+          const SizedBox(height:6),
+          Text(t('Passez en ligne pour recevoir les nouvelles demandes de trajet.'),style:const TextStyle(color:VeyraColors.textSecondary)),
+          const SizedBox(height:12),
+          FilledButton(onPressed:goingOnline?null:goOnline,child:Text(t('Passer en ligne'))),
+        ]));
+      }
+      return DriverCard(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Row(children:[
+          const Icon(Icons.inbox_outlined,color:VeyraColors.textSecondary),
+          const SizedBox(width:10),
+          Expanded(child:Text(filtered?t('Aucune demande ne correspond aux filtres.'):t('Aucune demande ouverte'),style:const TextStyle(fontWeight:FontWeight.w800))),
+        ]),
+        const SizedBox(height:6),
+        Text(filtered?t('Modifiez ou réinitialisez les filtres pour élargir la recherche.'):t('Les nouvelles demandes apparaîtront ici.'),style:const TextStyle(color:VeyraColors.textSecondary)),
+        if(filtered)Align(alignment:Alignment.centerRight,child:TextButton(onPressed:resetFilters,child:Text(t('Réinitialiser')))),
+      ]));
+    });
+  }
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:Colors.white,
+    appBar:DriverTopBar(onNotifications:()=>context.push('/notifications')),
+    body:RefreshIndicator(
+      onRefresh:()async{final refreshed=load();setState((){future=refreshed;online=safeAvailability();});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
+      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.fromLTRB(16,8,16,24),children:[
+        Row(children:[
+          Expanded(child:Text(t('Demandes disponibles'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.w800))),
+          OutlinedButton.icon(
+            onPressed:openFilters,
+            style:OutlinedButton.styleFrom(minimumSize:const Size(0,40),foregroundColor:VeyraColors.textPrimary,padding:const EdgeInsets.symmetric(horizontal:12)),
+            icon:Badge(isLabelVisible:filtered,smallSize:8,child:const Icon(Icons.tune,size:18)),
+            label:Text(t('Filtrer')),
+          ),
+        ]),
+        Align(alignment:Alignment.centerLeft,child:TextButton.icon(
+          onPressed:()=>context.push('/driver/offers'),
+          icon:const Icon(Icons.local_offer_outlined,size:18),
+          label:Text(t('Mes offres')),
+        )),
         FutureBuilder<List<dynamic>>(
           future:future,
           builder:(context,s){
@@ -1190,65 +1238,22 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> with RouteAwa
             final items=s.data??[];
             if(items.isEmpty){
               if(page>0)return TextButton(onPressed:()=>setState((){page--;future=load();}),child:Text(t('Page précédente')));
-              final filtered=pickupFilter.text.trim().isNotEmpty||destinationFilter.text.trim().isNotEmpty||minPassengers!=null||categoryId!=null||dates!=null;
-              return Card(child:ListTile(
-                leading:const Icon(Icons.inbox_outlined),
-                title:Text(filtered?t('Aucune demande ne correspond aux filtres.'):t('Aucune demande ouverte')),
-                subtitle:Text(filtered?t('Modifiez ou réinitialisez les filtres pour élargir la recherche.'):t('Les nouvelles demandes apparaîtront ici.')),
-                trailing:filtered?TextButton(onPressed:(){pickupFilter.clear();destinationFilter.clear();setState((){minPassengers=null;sort='date';categoryId=null;dates=null;page=0;future=load();});},child:Text(t('Réinitialiser'))):null,
-              ));
+              return emptyState();
             }
             return Column(children:[
-              ...items.map((raw){
-              final x=Map<String,dynamic>.from(raw as Map);
-              final id=x['id'].toString();
-              final title=(x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString();
-              final ownOffer=x['own_offer_amount_minor']??x['ownOfferAmountMinor'];
-              final category=(x['category_name']??x['vehicle_category_name'])?.toString();
-              final passengers=x['passenger_count'];
-              final baggage=x['baggage_count'];
-              return Card(child:InkWell(
-                borderRadius:BorderRadius.circular(12),
-                onTap:()=>context.push('/request/'+id),
-                child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                  Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                    Container(width:42,height:42,decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(12)),child:const Icon(Icons.schedule_rounded,color:VeyraColors.primary)),
-                    const SizedBox(width:10),
-                    Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                      Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
-                      const SizedBox(height:5),
-                      Text(title,style:const TextStyle(fontWeight:FontWeight.w800,height:1.25)),
-                    ])),
-                    const Icon(Icons.chevron_right),
-                  ]),
-                  const SizedBox(height:8),
-                  Wrap(spacing:8,runSpacing:6,children:[
-                    if(x['customer_favorite']==true)const CustomerFavoriteChip(),
-                    if(category!=null&&category.isNotEmpty)Chip(label:Text(category)),
-                    if(passengers!=null)Chip(avatar:const Icon(Icons.people_outline,size:16),label:Text('$passengers '+t('passager(s)'))),
-                    if(baggage!=null)Chip(avatar:const Icon(Icons.luggage_outlined,size:16),label:Text('$baggage '+t('bagage(s)'))),
-                  ]),
-                  const SizedBox(height:6),
-                  OpportunityDistanceSummary(key:ValueKey('$id:$revision'),booking:x,position:listPosition),
-                  if(ownOffer!=null)Padding(padding:const EdgeInsets.only(top:6),child:Text(t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(ownOffer),style:const TextStyle(fontWeight:FontWeight.w700))),
-                ])),
-              ));
-            }).toList(),
+              for(final raw in items)Builder(builder:(context){
+                final x=Map<String,dynamic>.from(raw as Map);
+                final id=x['id'].toString();
+                return DriverRequestCard(
+                  request:x,
+                  onTap:()=>context.push('/request/'+id),
+                );
+              }),
               VeyraPaginationBar(
                 page:page,
                 hasNext:items.length==10,
-                onPrevious:(){
-                  setState((){
-                    page--;
-                    future=load();
-                  });
-                },
-                onNext:(){
-                  setState((){
-                    page++;
-                    future=load();
-                  });
-                },
+                onPrevious:()=>setState((){page--;future=load();}),
+                onNext:()=>setState((){page++;future=load();}),
               ),
             ]);
           },
@@ -2806,10 +2811,11 @@ class AppShell extends StatelessWidget{
       selectedIndex:navigationShell.currentIndex,
       onDestinationSelected:(i)=>navigationShell.goBranch(i,initialLocation:i==navigationShell.currentIndex),
       destinations:[
-        NavigationDestination(icon:const Icon(Icons.list_alt_outlined),selectedIcon:const Icon(Icons.list_alt),label:t('Demandes')),
-        NavigationDestination(icon:const Icon(Icons.calendar_month_outlined),selectedIcon:const Icon(Icons.calendar_month),label:t('Planning')),
-        NavigationDestination(icon:const Icon(Icons.account_balance_wallet_outlined),selectedIcon:const Icon(Icons.account_balance_wallet),label:t('Revenus')),
-        NavigationDestination(icon:const Icon(Icons.person_outline),selectedIcon:const Icon(Icons.person),label:t('Compte')),
+        NavigationDestination(icon:const Icon(Icons.home_outlined),selectedIcon:const Icon(Icons.home),label:t('Accueil')),
+        NavigationDestination(icon:const Icon(Icons.assignment_outlined),selectedIcon:const Icon(Icons.assignment),label:t('Demandes')),
+        NavigationDestination(icon:const Icon(Icons.calendar_month_outlined),selectedIcon:const Icon(Icons.calendar_month),label:t('Mes courses')),
+        NavigationDestination(icon:const Icon(Icons.euro_outlined),selectedIcon:const Icon(Icons.euro),label:t('Revenus')),
+        NavigationDestination(icon:const Icon(Icons.person_outline),selectedIcon:const Icon(Icons.person),label:t('Profil')),
       ],
     ),
   );
