@@ -31,11 +31,11 @@ import 'core/widgets/welcome_hero.dart';
 import 'onboarding/driver_signup_flow.dart';
 import 'ui/driver_home_screen.dart';
 import 'ui/driver_ui.dart';
+import 'core/widgets/veyra_ui.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/driver_documents.dart';
 import 'core/widgets/status_badge.dart';
-import 'core/widgets/customer_favorite_chip.dart';
 import 'core/widgets/offer_price_preview.dart';
 import 'core/widgets/suggested_price_hint.dart';
 import 'core/maps/route_geometry.dart';
@@ -1489,12 +1489,7 @@ class RequestScreen extends StatefulWidget{
   @override State<RequestScreen> createState()=>_RequestScreenState();
 }
 class _RequestScreenState extends State<RequestScreen>{
-  final amount=TextEditingController();
   late Future<Map<String,dynamic>> detail;
-  bool sending=false;
-  String? error;
-  bool isAdjusting=false;
-  bool _prefilled=false;
   Map<String,dynamic>? _tripEconomics;
   bool _tripEconomicsLoading=false;
   // Bug réel : le catch vide de _loadTripEconomics ne signalait rien -- un
@@ -1542,7 +1537,6 @@ class _RequestScreenState extends State<RequestScreen>{
 
   @override void initState(){
     super.initState();
-    amount.addListener(_refreshEconomics);
     detail=loadDetail();
   }
 
@@ -1553,7 +1547,6 @@ class _RequestScreenState extends State<RequestScreen>{
   }
   void retryDetail()=>setState((){detail=loadDetail();});
 
-  void _refreshEconomics(){if(!mounted)return;setState((){});}
 
   Future<void> _loadTripEconomics(Map<String,dynamic>x)async{
     final a=_number(_field(x,'pickup_lat','pickupLat')),b=_number(_field(x,'pickup_lng','pickupLng')),c=_number(_field(x,'dropoff_lat','dropoffLat')),e=_number(_field(x,'dropoff_lng','dropoffLng'));
@@ -1587,218 +1580,439 @@ class _RequestScreenState extends State<RequestScreen>{
   }
 
   @override void dispose(){
-    amount.removeListener(_refreshEconomics);
-    amount.dispose();
     super.dispose();
   }
 
-  Future<void> submit()async{
-    if(sending)return;
-    final euros=double.tryParse(amount.text.replaceAll(',','.'));
-    if(euros==null||!euros.isFinite||euros<=0){setState(()=>error=t('Saisissez un prix valide.'));return;}
-    setState((){sending=true;error=null;});
-    try{
-      final amountMinor=(euros*100).round();
-      // New feature: adjusting an existing offer calls the narrower
-      // PATCH endpoint instead of creating a brand new offer -- see
-      // BookingController.updateOffer's own comment for why this is a
-      // separate endpoint rather than reusing the original one.
-      if(isAdjusting){
-        await api.updateOffer(widget.bookingId,amountMinor);
-      }else{
-        await api.offer(widget.bookingId,amountMinor);
-      }
-      if(!mounted)return;
-      RefreshBus.bump();
-      // Spec section 2, explicit: "The current Driver implementation
-      // contains post-submit comparison messaging such as
-      // differenceFromBestMinor / 'your offer is X more expensive'.
-      // Remove this competitive comparison from the USER INTERFACE."
-      // Backend still returns and computes these fields (not a backend
-      // bug, not touched) -- simply never surfaced in this dialog
-      // anymore.
-      await showDialog(context:context,builder:(_)=>AlertDialog(
-        title:Text(isAdjusting?t('Offre mise à jour'):t('Offre envoyée')),
-        content:Text(t('Votre offre : ')+VeyraMoneyFormatter.fromMinor(amountMinor)+'\n'+t('Vous serez averti si le client vous sélectionne.')),
-        actions:[FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(context),child:Text(t('OK')))],
-      ));
-      if(mounted)context.go('/driver/offers');
-    }on DioException catch(e){
-      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
-    }catch(_){
-      if(mounted)setState(()=>error=t('L’offre n’a pas pu être envoyée ou la demande est déjà fermée.'));
-    }finally{
-      if(mounted)setState(()=>sending=false);
-    }
+  static (String,String?) splitPlace(String label){
+    final i=label.indexOf(',');
+    if(i<=0)return (label,null);
+    return (label.substring(0,i).trim(),label.substring(i+1).trim());
+  }
+
+  Widget section({String? title,required Widget child})=>DriverCard(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+    if(title!=null)...[Text(title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),const SizedBox(height:10)],
+    child,
+  ]));
+
+  Widget routeMap(Map<String,dynamic> x){
+    final a=_number(_field(x,'pickup_lat','pickupLat')),b=_number(_field(x,'pickup_lng','pickupLng'));
+    final c=_number(_field(x,'dropoff_lat','dropoffLat')),e=_number(_field(x,'dropoff_lng','dropoffLng'));
+    if(a==null||b==null||c==null||e==null)return const SizedBox.shrink();
+    final points=(_tripEconomics?['points'] as List? ??const[]).whereType<Map>()
+      .map((p)=>LatLng((p['lat'] as num).toDouble(),(p['lng'] as num).toDouble())).toList();
+    final meters=_number(_tripEconomics?['distanceMeters']);
+    final seconds=_number(_tripEconomics?['durationSeconds']);
+    return Padding(
+      padding:const EdgeInsets.only(bottom:14),
+      child:ClipRRect(
+        borderRadius:BorderRadius.circular(VeyraRadius.card),
+        child:Stack(children:[
+          VeyraRouteMap(pickup:LatLng(a,b),dropoff:LatLng(c,e),route:points,height:190),
+          if(meters!=null&&seconds!=null)Positioned(right:12,bottom:12,child:DriverPill(
+            '${VeyraMoneyFormatter.duration(seconds)} · ${VeyraMoneyFormatter.distance(meters)}',
+            fg:Colors.white,bg:VeyraColors.accent,
+          )),
+        ]),
+      ),
+    );
+  }
+
+  /// Distances de course et d'approche (repères, jamais bloquants).
+  Widget economics(Map<String,dynamic> x){
+    final courseMeters=_number(_tripEconomics?['distanceMeters'])??_number(_field(x,'trip_distance_meters','tripDistanceMeters'));
+    final routeSeconds=_number(_tripEconomics?['durationSeconds']);
+    final approachMeters=_number(approach?['distanceMeters']);
+    return section(title:t('Type de trajet'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Wrap(spacing:10,runSpacing:8,children:[
+        DriverPill(t('Aller simple'),fg:VeyraColors.textPrimary,bg:VeyraColors.surfaceMuted,icon:Icons.swap_calls),
+        if(courseMeters!=null)DriverPill('≈ '+VeyraMoneyFormatter.distance(courseMeters)+(routeSeconds==null?'':' · '+VeyraMoneyFormatter.duration(routeSeconds)),fg:VeyraColors.textPrimary,bg:VeyraColors.surfaceMuted,icon:Icons.schedule),
+      ]),
+      if(_tripEconomicsLoading)const Padding(padding:EdgeInsets.only(top:8),child:LinearProgressIndicator()),
+      if(courseMeters!=null)Padding(padding:const EdgeInsets.only(top:8),child:Text(t('Distance départ → destination')+' : '+VeyraMoneyFormatter.distance(courseMeters))),
+      if(routeSeconds!=null)Text(t('Durée routière estimée')+' : '+VeyraMoneyFormatter.duration(routeSeconds)),
+      if(_tripEconomicsError!=null)Padding(padding:const EdgeInsets.only(top:6),child:Text(_tripEconomicsError!,style:const TextStyle(color:VeyraColors.textSecondary))),
+      if(courseMeters==null&&!_tripEconomicsLoading)TextButton(onPressed:()=>detail.then(_loadTripEconomics),child:Text(t('Réessayer le calcul du trajet'))),
+      const Divider(height:20),
+      Text(approachMeters==null?t('Approche non calculée'):t('Distance d’approche')+' : '+VeyraMoneyFormatter.distance(approachMeters),style:const TextStyle(fontWeight:FontWeight.w600)),
+      if(approachError!=null)Text(approachError!,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+      if(_approachPermissionDeniedForever)TextButton.icon(onPressed:()=>Geolocator.openAppSettings(),icon:const Icon(Icons.settings),label:Text(t('Ouvrir les réglages'))),
+      Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:approachLoading?null:()=>loadApproach(requestPermission:true),icon:const Icon(Icons.my_location),label:Text(approachLoading?t('Localisation…'):t('Actualiser ma position')))),
+    ]));
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Détail de la course planifiée'))),
-    body:ListView(padding:const EdgeInsets.all(20),children:[
-      FutureBuilder<Map<String,dynamic>>(
-        future:detail,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
-          if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-            ?VeyraOfflineBanner(onRetry:retryDetail)
-            :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:retryDetail);
-          final x=s.data??{};
-          return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            if(x['customer_favorite']==true)const Padding(padding:EdgeInsets.only(bottom:8),child:CustomerFavoriteChip()),
-            Card(child:ListTile(
-              leading:const Icon(Icons.route),
-              title:Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString()),
-              subtitle:Text(VeyraDateFormatter.dateTime(x['scheduled_at'])+'\n'+(x['category_name']??'').toString()),
-              isThreeLine:true,
-            )),
-            Card(child:ListTile(
-              leading:const Icon(Icons.luggage_outlined),
-              title:Text((x['passenger_count']??1).toString()+' passager(s)'),
-              subtitle:Text((x['baggage_count']??0).toString()+' bagage(s)'+((x['customer_notes']??'').toString().isEmpty?'':' • '+x['customer_notes'].toString())),
-            )),
-          ]);
-        },
-      ),
-      FutureBuilder<Map<String,dynamic>>(
-        future:detail,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
-          if(s.hasError)return const SizedBox.shrink();
-          final x=s.data??{};
-          final bestMinor=x['currentBestOtherOfferMinor'];
-          final apiTripMeters=_number(_field(x,'trip_distance_meters','tripDistanceMeters'));
-          final courseMeters=_number(_tripEconomics?['distanceMeters'])??apiTripMeters;
-          final routeSeconds=_number(_tripEconomics?['durationSeconds']);
-          final approachMeters=_number(approach?['distanceMeters']);
-          final totalMeters=courseMeters==null?0:courseMeters+(approachMeters??0);
-          final typedEuros=double.tryParse(amount.text.replaceAll(',','.'));
-          final ownMinor=x['ownActiveOfferAmountMinor'] as num?;
-          final netEuros=typedEuros??(ownMinor==null?null:ownMinor.toDouble()/100);
-          final netPerKm=(netEuros!=null&&totalMeters>0)?netEuros/(totalMeters/1000):null;
-          return Column(children:[
-            Card(child:ListTile(
-              leading:const Icon(Icons.price_check_outlined),
-              title:Text(t('Repère du marché'),style:const TextStyle(fontWeight:FontWeight.w800)),
-              subtitle:Text(bestMinor==null
-                ?t('Aucune autre offre active pour le moment. Vous restez libre de fixer votre prix.')
-                :t('Meilleure offre actuelle des autres chauffeurs')+' : '+VeyraMoneyFormatter.fromMinor(bestMinor)+'\n'+t('Vous restez libre de fixer votre prix.')),
-            )),
-            Card(child:Padding(
-              padding:const EdgeInsets.all(16),
-              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                Row(children:[
-                  const Icon(Icons.analytics_outlined),
-                  const SizedBox(width:8),
-                  Text(t('Économie de votre course'),style:const TextStyle(fontWeight:FontWeight.bold)),
-                ]),
-                const SizedBox(height:10),
-                if(_tripEconomicsLoading)const LinearProgressIndicator(),
-                Text(courseMeters==null?t('Distance de la course indisponible'):t('Distance départ → destination')+' : '+VeyraMoneyFormatter.distance(courseMeters)),
-                if(_tripEconomicsError!=null)Text(_tripEconomicsError!,style:const TextStyle(color:Colors.black54)),
-                if(routeSeconds!=null)Text(t('Durée routière estimée')+' : '+VeyraMoneyFormatter.duration(routeSeconds)),
-                if(approachMeters!=null)Text(t('Distance d’approche')+' : '+VeyraMoneyFormatter.distance(approachMeters)),
-                if(courseMeters!=null&&approachMeters!=null)Text(t('Distance totale')+' : '+VeyraMoneyFormatter.distance(totalMeters)),
-                if(approachError!=null)Text(approachError!),
-                if(_approachPermissionDeniedForever)TextButton.icon(onPressed:()=>Geolocator.openAppSettings(),icon:const Icon(Icons.settings),label:Text(t('Ouvrir les réglages'))),
-                TextButton.icon(onPressed:approachLoading?null:()=>loadApproach(requestPermission:true),icon:const Icon(Icons.my_location),label:Text(approachLoading?t('Localisation…'):t('Actualiser ma position'))),
-                if(courseMeters==null)TextButton(onPressed:()=>detail.then(_loadTripEconomics),child:Text(t('Réessayer le calcul du trajet'))),
-                if(approachMeters==null)Text(t('Le revenu par km ci-dessous exclut l’approche tant qu’elle ne peut pas être calculée.')),
-                Text(netPerKm==null
-                  ?t('Saisissez votre prix net pour calculer votre net par km.')
-                  :t('Votre net estimé par km')+' : '+netPerKm.toStringAsFixed(2)+' €/km'),
-                const SizedBox(height:6),
-                Text(
-                  t('Ces données et le prix concurrent sont des repères. Vous choisissez librement le montant de votre offre.'),
-                  style:const TextStyle(color:Colors.black54,fontSize:12),
-                ),
+    backgroundColor:Colors.white,
+    appBar:AppBar(title:Text(t('Détail de la demande'))),
+    body:FutureBuilder<Map<String,dynamic>>(
+      future:detail,
+      builder:(context,s){
+        if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();
+        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+          ?VeyraOfflineBanner(onRetry:retryDetail)
+          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:retryDetail);
+        final x=s.data??{};
+        final (pTitle,pSub)=splitPlace((x['pickup_address']??'').toString());
+        final (dTitle,dSub)=splitPlace((x['dropoff_address']??'').toString());
+        final id=(x['id']??widget.bookingId).toString();
+        final notes=(x['customer_notes']??'').toString();
+        final best=x['currentBestOtherOfferMinor'];
+        final own=x['ownActiveOfferAmountMinor'];
+        return ListView(padding:const EdgeInsets.fromLTRB(16,8,16,24),children:[
+          if(x['customer_favorite']==true)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(
+            tone:VeyraTone.warning,
+            title:t('Vous êtes le chauffeur préféré de ce client'),
+            text:t('Ce client vous a ajouté à ses chauffeurs préférés.'),
+          )),
+          Row(children:[
+            DriverPill(x['hasActiveOffer']==true?t('Offre envoyée'):t('Nouvelle demande'),fg:VeyraColors.warning,bg:VeyraColors.warningBackground,icon:Icons.schedule),
+            const Spacer(),
+            Text('#'+(id.length>8?id.substring(0,8):id).toUpperCase(),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
+          ]),
+          const SizedBox(height:12),
+          section(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+            const SizedBox(height:12),
+            Row(children:[
+              const Icon(Icons.calendar_today_outlined,size:18),
+              const SizedBox(width:8),
+              Expanded(child:Text(driverWhen(x['scheduled_at']))),
+              DriverPill(driverStartsIn(x['scheduled_at']),fg:VeyraColors.accent,bg:VeyraColors.infoBackground),
+            ]),
+            const SizedBox(height:8),
+            DriverPaxBags(x['passenger_count'],x['baggage_count']),
+            if(x['category_name']!=null)...[
+              const SizedBox(height:8),
+              Row(children:[
+                const Icon(Icons.directions_car_outlined,size:18,color:VeyraColors.textSecondary),
+                const SizedBox(width:8),
+                Expanded(child:Text(t('Type demandé')+' : '+x['category_name'].toString(),style:const TextStyle(color:VeyraColors.textSecondary))),
               ]),
-            )),
-          ]);
-        },
-      ),
-      FutureBuilder<Map<String,dynamic>>(
-        future:detail,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const SizedBox.shrink();
-          if(s.hasError)return const SizedBox.shrink();
-          final x=s.data??{};
-          // Gap réel trouvé : hasActiveOffer existait déjà côté backend
-          // (DriverOpportunityController) mais n'était lu nulle part côté
-          // Flutter -- un chauffeur ayant déjà soumis une offre retombait
-          // sur ce même formulaire vide, pouvait retaper un prix et
-          // recevait alors ACTIVE_OFFER_EXISTS sans comprendre pourquoi.
-          //
-          // Nouvelle fonctionnalité : plutôt que de bloquer purement et
-          // simplement, le chauffeur peut maintenant réajuster son prix
-          // directement ici -- le champ est pré-rempli avec son offre
-          // active actuelle (ownActiveOfferAmountMinor, ajouté côté
-          // backend pour cette fonctionnalité), et l'envoi appelle le
-          // nouvel endpoint PATCH dédié plutôt que de créer une
-          // deuxième offre.
-          // Never mutate controller/state from a FutureBuilder builder.
-          // TextEditingController notifies its listeners synchronously, so
-          // assigning amount.text here used to call _refreshEconomics ->
-          // setState while RequestScreen was already building (the red
-          // "setState() or markNeedsBuild() called during build" screen).
-          // Defer the one-time prefill until this frame is complete.
-          if(x['hasActiveOffer']==true&&!_prefilled){
-            _prefilled=true;
-            WidgetsBinding.instance.addPostFrameCallback((_){
-              if(!mounted)return;
-              isAdjusting=true;
-              final currentMinor=x['ownActiveOfferAmountMinor'];
-              if(currentMinor!=null){
-                final value=((currentMinor as num)/100).toStringAsFixed(2).replaceAll('.',',');
-                if(amount.text!=value)amount.text=value;
-              }else{
-                setState((){});
-              }
-            });
-          }
-          if(x['hasActiveOffer']==true){
-            return Column(children:[
-              Card(child:ListTile(
-                leading:const Icon(Icons.check_circle_outline,color:Color(0xFF16A34A)),
-                title:Text(t('Vous avez déjà une offre active pour cette demande.')),
-                subtitle:Text(t('Vous pouvez ajuster votre prix ci-dessous, ou la retrouver dans Mes offres.')),
-                trailing:TextButton(onPressed:()=>context.push('/driver/offers'),child:Text(t('Voir'))),
-              )),
-              const SizedBox(height:16),
-              TextField(
-                controller:amount,
-                keyboardType:const TextInputType.numberWithOptions(decimal:true),
-                onChanged:(_)=>setState((){}),
-                decoration:InputDecoration(
-                  labelText:t('Votre prix net (€)'),
-                  helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
-                ),
+            ],
+            if(notes.isNotEmpty)...[
+              const SizedBox(height:12),
+              Container(
+                padding:const EdgeInsets.all(12),
+                decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+                child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  const Icon(Icons.chat_outlined,size:18,color:VeyraColors.textSecondary),
+                  const SizedBox(width:10),
+                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Text(t('Commentaire du client'),style:const TextStyle(fontWeight:FontWeight.w700,fontSize:13)),
+                    const SizedBox(height:2),
+                    Text(notes,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+                  ])),
+                ]),
               ),
-              if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-              const SizedBox(height:20),
-              FilledButton(onPressed:sending?null:submit,child:sending?const CircularProgressIndicator():Text(t('Mettre à jour mon offre'))),
-            ]);
-          }
-          return Column(children:[
-            SuggestedPriceHint(load:()=>api.suggestedPrice(widget.bookingId)),
-            TextField(
-              controller:amount,
-              keyboardType:const TextInputType.numberWithOptions(decimal:true),
-              onChanged:(_)=>setState((){}),
-              decoration:InputDecoration(
-                labelText:t('Votre prix net (€)'),
-                helperText:t('C’est le montant exact que vous devez recevoir pour la course.'),
-              ),
-            ),
-            OfferPricePreview(amountText:amount.text,fetchQuote:(minor)=>api.offerQuote(widget.bookingId,minor)),
-            if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-            if(x['has_eligible_vehicle']==false)Padding(padding:const EdgeInsets.only(top:12),child:Text(t('Aucun véhicule validé de cette catégorie : offre impossible.'),style:TextStyle(color:Theme.of(context).colorScheme.error,fontWeight:FontWeight.w700))),
-            const SizedBox(height:20),
-            FilledButton(onPressed:sending||x['has_eligible_vehicle']==false?null:submit,child:sending?const CircularProgressIndicator():Text(t('Envoyer mon offre'))),
-          ]);
-        },
+            ],
+          ])),
+          routeMap(x),
+          economics(x),
+          if(best!=null)section(child:Row(children:[
+            const Icon(Icons.price_check_outlined,color:VeyraColors.textSecondary),
+            const SizedBox(width:10),
+            Expanded(child:Text(t('Offre la plus basse'),style:const TextStyle(fontWeight:FontWeight.w600))),
+            Text(VeyraMoneyFormatter.fromMinor(best),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:18)),
+          ])),
+          if(own!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.success,text:t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(own))),
+          if(x['has_eligible_vehicle']==false)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.danger,text:t('Aucun véhicule validé de cette catégorie : offre impossible.'))),
+        ]);
+      },
+    ),
+    bottomNavigationBar:FutureBuilder<Map<String,dynamic>>(
+      future:detail,
+      builder:(context,s){
+        if(!s.hasData)return const SizedBox.shrink();
+        final x=s.data!;
+        final adjusting=x['hasActiveOffer']==true;
+        return SafeArea(child:Padding(
+          padding:const EdgeInsets.fromLTRB(16,8,16,16),
+          child:FilledButton(
+            onPressed:x['has_eligible_vehicle']==false?null:()=>Navigator.of(context).push(MaterialPageRoute(builder:(_)=>OfferComposerScreen(bookingId:widget.bookingId,request:x,adjusting:adjusting))),
+            child:Row(mainAxisSize:MainAxisSize.min,children:[
+              Text(adjusting?t('Modifier mon offre'):t('Créer mon offre')),
+              const SizedBox(width:8),
+              const Icon(Icons.chevron_right),
+            ]),
+          ),
+        ));
+      },
+    ),
+  );
+}
+
+/// Créer une offre → Récapitulatif → Offre envoyée (planche 14 P2-P4).
+/// Le prix saisi est le montant net du chauffeur ; la commission VEYRA
+/// (méthode A, DEC-01) est ajoutée pour le client. L'offre reste valable
+/// jusqu'à la fin de la réception des offres (DEC-18 : pas de validité au
+/// choix, pas de contre-offre).
+class OfferComposerScreen extends StatefulWidget{
+  final String bookingId;
+  final Map<String,dynamic> request;
+  final bool adjusting;
+  const OfferComposerScreen({required this.bookingId,required this.request,this.adjusting=false,super.key});
+  @override State<OfferComposerScreen> createState()=>_OfferComposerScreenState();
+}
+class _OfferComposerScreenState extends State<OfferComposerScreen>{
+  final amount=TextEditingController();
+  final message=TextEditingController();
+  late Future<List<Map<String,dynamic>>> vehicles;
+  String? vehicleId;
+  /// 0 = compose, 1 = summary, 2 = sent.
+  int stage=0;
+  Map<String,dynamic>? quote;
+  bool busy=false;
+  String? error;
+
+  @override void initState(){
+    super.initState();
+    final own=widget.request['ownActiveOfferAmountMinor'];
+    if(own!=null)amount.text=((own as num)/100).toStringAsFixed(2).replaceAll('.',',');
+    amount.addListener(()=>setState((){}));
+    message.addListener(()=>setState((){}));
+    vehicles=api.onboardingStatus().then((s){
+      final category=widget.request['category_id']?.toString();
+      final list=(s['vehicles'] as List? ??const[]).whereType<Map>().map((m)=>Map<String,dynamic>.from(m))
+        .where((v)=>v['status']=='APPROVED'&&(category==null||v['category_id']?.toString()==category)).toList();
+      if(list.isNotEmpty&&mounted)setState(()=>vehicleId??=list.first['id'].toString());
+      return list;
+    });
+  }
+
+  @override void dispose(){amount.dispose();message.dispose();super.dispose();}
+
+  int? get amountMinor=>OfferPricePreview.parseMinor(amount.text);
+
+  Future<void> review()async{
+    final minor=amountMinor;
+    if(minor==null||minor<=0)return setState(()=>error=t('Saisissez un prix valide.'));
+    setState((){busy=true;error=null;});
+    try{
+      final q=await api.offerQuote(widget.bookingId,minor);
+      if(mounted)setState((){quote=q;stage=1;});
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }finally{
+      if(mounted)setState(()=>busy=false);
+    }
+  }
+
+  Future<void> send()async{
+    final minor=amountMinor;
+    if(minor==null||busy)return;
+    setState((){busy=true;error=null;});
+    try{
+      if(widget.adjusting){
+        await api.updateOffer(widget.bookingId,minor);
+      }else{
+        await api.offer(widget.bookingId,minor,vehicleId:vehicleId,message:message.text);
+      }
+      RefreshBus.bump();
+      if(mounted)setState(()=>stage=2);
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }finally{
+      if(mounted)setState(()=>busy=false);
+    }
+  }
+
+  Widget vehicleTile(Map<String,dynamic> v,{bool selectable=true}){
+    final selected=v['id'].toString()==vehicleId;
+    return Padding(
+      padding:const EdgeInsets.only(bottom:10),
+      child:Material(
+        color:selected?VeyraColors.infoBackground:Colors.white,
+        borderRadius:BorderRadius.circular(VeyraRadius.md),
+        child:InkWell(
+          borderRadius:BorderRadius.circular(VeyraRadius.md),
+          onTap:selectable&&!widget.adjusting?()=>setState(()=>vehicleId=v['id'].toString()):null,
+          child:Container(
+            padding:const EdgeInsets.all(12),
+            decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.md),border:Border.all(color:selected?VeyraColors.accent:VeyraColors.border,width:selected?1.6:1)),
+            child:Row(children:[
+              const VeyraVehicleThumb(width:84),
+              const SizedBox(width:12),
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text('${v['brand']??''} ${v['model']??''}'.trim(),style:const TextStyle(fontWeight:FontWeight.w700)),
+                if(v['category_name']!=null)...[const SizedBox(height:4),DriverPill(v['category_name'].toString(),fg:VeyraColors.accent,bg:VeyraColors.infoBackground)],
+                const SizedBox(height:4),
+                DriverPaxBags(v['seats'],v['baggage_capacity'],labels:false),
+              ])),
+              if(selectable&&!widget.adjusting)Icon(selected?Icons.radio_button_checked:Icons.radio_button_unchecked,color:selected?VeyraColors.accent:VeyraColors.textTertiary),
+            ]),
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget priceRow(String label,dynamic minor,{bool total=false})=>Padding(
+    padding:const EdgeInsets.symmetric(vertical:4),
+    child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+      Flexible(child:Text(label,style:TextStyle(color:total?VeyraColors.textPrimary:VeyraColors.textSecondary,fontWeight:total?FontWeight.w800:FontWeight.w500))),
+      const SizedBox(width:8),
+      Text.rich(TextSpan(children:[
+        TextSpan(text:VeyraMoneyFormatter.fromMinor(minor),style:TextStyle(fontWeight:total?FontWeight.w800:FontWeight.w600,fontSize:total?18:14)),
+        if(total)const TextSpan(text:' TTC',style:TextStyle(fontSize:12,color:VeyraColors.textSecondary)),
+      ])),
     ]),
   );
+
+  String get validity=>t('Jusqu’à la fin de la réception des offres')+' ('+VeyraDateFormatter.dateTime(widget.request['offer_window_ends_at'])+')';
+
+  List<Widget> composeBody()=>[
+    Text(t('Votre véhicule'),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),
+    const SizedBox(height:10),
+    FutureBuilder<List<Map<String,dynamic>>>(future:vehicles,builder:(context,s){
+      if(s.connectionState!=ConnectionState.done)return const LinearProgressIndicator();
+      final list=s.data??const[];
+      if(list.isEmpty)return VeyraBanner(tone:VeyraTone.danger,text:t('Aucun véhicule validé de cette catégorie : offre impossible.'));
+      return Column(children:[
+        for(final v in list)vehicleTile(v,selectable:list.length>1),
+        Text(t('Seuls les véhicules validés de la catégorie demandée sont proposés.'),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
+      ]);
+    }),
+    const SizedBox(height:18),
+    Text(t('Prix de votre offre'),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),
+    const SizedBox(height:8),
+    TextField(
+      key:const ValueKey('offer-amount'),
+      controller:amount,
+      keyboardType:const TextInputType.numberWithOptions(decimal:true),
+      style:const TextStyle(fontSize:26,fontWeight:FontWeight.w800),
+      decoration:const InputDecoration(hintText:'0,00',suffixText:'€'),
+    ),
+    const SizedBox(height:6),
+    SuggestedPriceHint(load:()=>api.suggestedPrice(widget.bookingId)),
+    OfferPricePreview(amountText:amount.text,fetchQuote:(minor)=>api.offerQuote(widget.bookingId,minor)),
+    const SizedBox(height:12),
+    VeyraBanner(tone:VeyraTone.info,text:t('La commission VEYRA sera ajoutée automatiquement. Le client verra le prix total TTC.')),
+    const SizedBox(height:18),
+    Text(t('Validité de l’offre'),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),
+    const SizedBox(height:6),
+    Text(validity,style:const TextStyle(color:VeyraColors.textSecondary)),
+    if(!widget.adjusting)...[
+      const SizedBox(height:18),
+      Text.rich(TextSpan(children:[
+        TextSpan(text:t('Message pour le client'),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),
+        TextSpan(text:' '+t('(facultatif)'),style:const TextStyle(color:VeyraColors.textSecondary)),
+      ])),
+      const SizedBox(height:8),
+      TextField(
+        key:const ValueKey('offer-message'),
+        controller:message,
+        maxLength:200,
+        maxLines:3,
+        decoration:InputDecoration(hintText:t('Ex. : je serai ponctuel, véhicule climatisé.'),helperText:t('Sans numéro de téléphone ni e-mail.')),
+      ),
+    ],
+  ];
+
+  List<Widget> summaryBody(){
+    final r=widget.request;
+    final (pTitle,pSub)=_RequestScreenState.splitPlace((r['pickup_address']??'').toString());
+    final (dTitle,dSub)=_RequestScreenState.splitPlace((r['dropoff_address']??'').toString());
+    final q=quote??{};
+    final rate=(q['commissionRateBps'] as num?)?.toInt();
+    final pct=rate==null?'':' ('+(rate/100).toStringAsFixed(rate%100==0?0:1).replaceAll('.',',')+' %)';
+    return [
+      DriverCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Row(children:[
+          Expanded(child:Text(t('Récapitulatif de la demande'),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16))),
+          TextButton(onPressed:()=>Navigator.pop(context),child:Text(t('Modifier'))),
+        ]),
+        VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+        const SizedBox(height:10),
+        Row(children:[
+          const Icon(Icons.calendar_today_outlined,size:18),
+          const SizedBox(width:8),
+          Expanded(child:Text(driverWhen(r['scheduled_at']))),
+          DriverPill(driverStartsIn(r['scheduled_at']),fg:VeyraColors.accent,bg:VeyraColors.infoBackground),
+        ]),
+        const SizedBox(height:8),
+        DriverPaxBags(r['passenger_count'],r['baggage_count']),
+      ])),
+      DriverCard(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Row(children:[
+          Expanded(child:Text(t('Votre offre'),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16))),
+          TextButton(onPressed:()=>setState(()=>stage=0),child:Text(t('Modifier'))),
+        ]),
+        FutureBuilder<List<Map<String,dynamic>>>(future:vehicles,builder:(context,s){
+          final v=(s.data??const[]).where((v)=>v['id'].toString()==vehicleId).toList();
+          return v.isEmpty?const SizedBox.shrink():vehicleTile(v.first,selectable:false);
+        }),
+        priceRow(t('Votre prix'),amountMinor),
+        priceRow(t('Commission VEYRA')+pct,q['commissionMinor']),
+        const Divider(height:18),
+        priceRow(t('Prix total pour le client'),q['customerTotalMinor'],total:true),
+        const SizedBox(height:10),
+        Text(t('Validité de l’offre'),style:const TextStyle(color:VeyraColors.textSecondary)),
+        Text(validity,style:const TextStyle(fontWeight:FontWeight.w600)),
+        if(message.text.trim().isNotEmpty)...[
+          const SizedBox(height:10),
+          Text(t('Message pour le client'),style:const TextStyle(color:VeyraColors.textSecondary)),
+          Text(message.text.trim()),
+        ],
+      ])),
+    ];
+  }
+
+  Widget sentView(){
+    final q=quote??{};
+    return SafeArea(child:ListView(padding:const EdgeInsets.fromLTRB(24,32,24,24),children:[
+      Center(child:Container(
+        width:104,height:104,
+        decoration:const BoxDecoration(color:VeyraColors.successBackground,shape:BoxShape.circle),
+        child:const Icon(Icons.check_rounded,color:VeyraColors.success,size:64),
+      )),
+      const SizedBox(height:20),
+      Text(widget.adjusting?t('Votre offre a été mise à jour !'):t('Votre offre a été envoyée avec succès !'),textAlign:TextAlign.center,style:const TextStyle(fontSize:22,fontWeight:FontWeight.w800)),
+      const SizedBox(height:10),
+      Text(t('Le client sera notifié de votre proposition. Vous serez informé dès qu’il aura accepté ou refusé votre offre.'),textAlign:TextAlign.center,style:const TextStyle(color:VeyraColors.textSecondary)),
+      const SizedBox(height:20),
+      DriverCard(child:Column(children:[
+        priceRow(t('Prix de votre offre'),amountMinor),
+        priceRow(t('Prix total pour le client'),q['customerTotalMinor'],total:true),
+        const SizedBox(height:6),
+        Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Expanded(child:Text(t('Validité de l’offre'),style:const TextStyle(color:VeyraColors.textSecondary))),
+          Flexible(child:Text(VeyraDateFormatter.dateTime(widget.request['offer_window_ends_at']),textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w600))),
+        ]),
+      ])),
+      VeyraBanner(tone:VeyraTone.info,text:t('Vous recevrez une notification dès que le client aura répondu.')),
+      const SizedBox(height:20),
+      FilledButton(onPressed:()=>context.go('/driver/offers'),child:Text(t('Voir mes offres'))),
+      const SizedBox(height:10),
+      FilledButton(
+        style:FilledButton.styleFrom(backgroundColor:VeyraColors.surfaceMuted,foregroundColor:VeyraColors.textPrimary),
+        onPressed:()=>context.go('/requests'),
+        child:Text(t('Retour aux demandes')),
+      ),
+    ]));
+  }
+
+  @override Widget build(BuildContext context){
+    if(stage==2)return Scaffold(backgroundColor:Colors.white,body:sentView());
+    return PopScope(
+      canPop:stage==0,
+      onPopInvokedWithResult:(didPop,_){if(!didPop&&!busy)setState(()=>stage=0);},
+      child:Scaffold(
+        backgroundColor:Colors.white,
+        appBar:AppBar(title:Text(stage==0?(widget.adjusting?t('Modifier mon offre'):t('Créer une offre')):t('Récapitulatif de l’offre'))),
+        body:ListView(padding:const EdgeInsets.fromLTRB(16,8,16,24),children:[
+          ...(stage==0?composeBody():summaryBody()),
+          if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:VeyraBanner(tone:VeyraTone.danger,text:error!)),
+        ]),
+        bottomNavigationBar:SafeArea(child:Padding(
+          padding:const EdgeInsets.fromLTRB(16,8,16,16),
+          child:FilledButton.icon(
+            onPressed:busy||(stage==0&&vehicleId==null&&!widget.adjusting)?null:(stage==0?review:send),
+            icon:busy?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)):const Icon(Icons.send_outlined),
+            label:Text(stage==0?(widget.adjusting?t('Mettre à jour mon offre'):t('Envoyer mon offre')):t('Confirmer et envoyer')),
+          ),
+        )),
+      ),
+    );
+  }
 }
 
 class AgendaScreen extends StatefulWidget{

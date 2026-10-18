@@ -190,9 +190,12 @@ import java.util.*;
                 if(activeCashOffers!=null&&activeCashOffers>=1)throw new ApiException(HttpStatus.FORBIDDEN,"CASH_DEBT_RESTRICTED");
             }
         }
+        UUID vehicle=offerVehicle(bookingId,d,r.vehicleId());
+        String message=offerMessage(r.message());
         UUID id=UUID.randomUUID();
         Quote q=commissions.quoteForBooking(bookingId,r.amountMinor());
         insertOffer(id,bookingId,d,r,q,b.get("offer_window_ends_at"));
+        db.update("update driver_offers set vehicle_id=?,message=? where id=?",vehicle,message,id);
         int transitioned=db.update("update scheduled_bookings set status='OFFERS_RECEIVED',updated_at=now() where id=? and status='OPEN_FOR_OFFERS'",bookingId);
         // The UPDATE above is conditional (WHERE status='OPEN_FOR_OFFERS')
         // -- only the FIRST offer on a booking actually causes this
@@ -254,6 +257,8 @@ import java.util.*;
         // now, like any new offer, and never retro-applied to the old row.
         Quote q=commissions.quoteForBooking(bookingId,r.amountMinor());
         insertOffer(newOfferId,bookingId,d,r,q,b.get("offer_window_ends_at"));
+        // A price revision keeps the vehicle and message of the offer it replaces.
+        db.update("update driver_offers n set vehicle_id=o.vehicle_id,message=o.message from driver_offers o where n.id=? and o.id=?",newOfferId,offerIds.getFirst());
         Map<String,Object>response=new HashMap<>(Map.of("offerId",newOfferId));
         q.putInto(response);
         String visibilityMode=db.queryForObject("select offer_visibility_mode from scheduled_bookings where id=?",String.class,bookingId);
@@ -266,7 +271,7 @@ import java.util.*;
     @GetMapping("/scheduled-bookings/{bookingId}/offers") List<Map<String,Object>> ownerOffers(@PathVariable UUID bookingId){
         Map<String,Object>b=one("select creator_user_id,partner_id from scheduled_bookings where id=?",bookingId);
         owner(b);
-            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.commission_policy_id,o.commission_rate_bps,o.commission_minor,o.customer_total_minor,o.currency,o.status,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id join scheduled_bookings sb on sb.id=o.booking_id join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' and o.expires_at>now() and sb.offer_window_ends_at>now() and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true order by o.proposed_amount_minor,o.id",(rs,
+            return db.query("select o.id,o.driver_id,o.proposed_amount_minor,o.commission_policy_id,o.commission_rate_bps,o.commission_minor,o.customer_total_minor,o.currency,o.status,o.message,d.rating,u.first_name,u.last_name,v.brand,v.model,v.year,v.color,v.seats,v.baggage_capacity,vc.display_name as vehicle_category from driver_offers o join drivers d on d.id=o.driver_id join users u on u.id=d.user_id join scheduled_bookings sb on sb.id=o.booking_id join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by (v.id=o.vehicle_id) desc nulls last,v.id limit 1) v on true join vehicle_categories vc on vc.id=v.category_id where o.booking_id=? and o.status='ACTIVE' and o.expires_at>now() and sb.offer_window_ends_at>now() and sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and d.status='ACTIVE' and d.kyc_status='APPROVED' and d.marketplace_enabled=true order by o.proposed_amount_minor,o.id",(rs,
             n)->{
                 long p=rs.getLong("proposed_amount_minor");
                 Quote q=frozenOrQuote(bookingId,p,(UUID)rs.getObject("commission_policy_id"),(Integer)rs.getObject("commission_rate_bps"),(Long)rs.getObject("commission_minor"),(Long)rs.getObject("customer_total_minor"));
@@ -304,6 +309,9 @@ import java.util.*;
                 rs.getString("color"));
                 result.put("vehicleCategory",
                 rs.getString("vehicle_category"));
+                result.put("vehicleSeats",rs.getObject("seats"));
+                result.put("vehicleBaggage",rs.getObject("baggage_capacity"));
+                result.put("driverMessage",rs.getString("message"));
                 return result;
             }
         ,bookingId);
@@ -501,6 +509,30 @@ import java.util.*;
     private Quote frozenOrQuote(UUID bookingId,long driverPriceMinor,UUID policyId,Integer bps,Long commissionMinor,Long totalMinor){
         if(policyId!=null&&bps!=null&&commissionMinor!=null&&totalMinor!=null)return new Quote(policyId,null,bps,commissionMinor,totalMinor);
         return commissions.quoteForBooking(bookingId,driverPriceMinor);
+    }
+    /**
+     * Vehicle shown with the offer (boards 13 P4 / 14 P2): one of the
+     * driver's approved vehicles of the requested category, the first
+     * one by default.
+     */
+    UUID offerVehicle(UUID bookingId,UUID d,UUID requested){
+        List<UUID> eligible=db.queryForList("select v.id from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED' order by v.id",UUID.class,bookingId,d);
+        if(requested==null)return eligible.isEmpty()?null:eligible.getFirst();
+        if(!eligible.contains(requested))throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"VEHICLE_NOT_ELIGIBLE");
+        return requested;
+    }
+    static final java.util.regex.Pattern CONTACT_DETAILS=java.util.regex.Pattern.compile("[^\\s@]+@[^\\s@]+\\.[a-zA-Z]{2,}|(?:\\+?\\d[\\s.\\-]?){8,}");
+    /**
+     * Optional message to the client (200 characters). Phone numbers and
+     * e-mail addresses are refused: contact goes through the masked
+     * channels only (CL-15, DEC-06).
+     */
+    static String offerMessage(String raw){
+        if(raw==null||raw.isBlank())return null;
+        String m=raw.strip().replaceAll("\\p{Cntrl}"," ");
+        if(m.length()>200)throw new ApiException(HttpStatus.BAD_REQUEST,"OFFER_MESSAGE_TOO_LONG");
+        if(CONTACT_DETAILS.matcher(m).find())throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"OFFER_MESSAGE_CONTACT_FORBIDDEN");
+        return m;
     }
     private void insertOffer(UUID id,UUID bookingId,UUID driverId,Offer r,Quote q,Object expiresAt){
         db.update("insert into driver_offers(id,booking_id,driver_id,proposed_amount_minor,currency,status,expires_at,commission_policy_id,commission_rate_bps,commission_minor,customer_total_minor) values (?,?,?,?,?,'ACTIVE',?,?,?,?,?)",id,bookingId,driverId,r.amountMinor(),r.currency(),expiresAt,q.policyId(),q.rateBps(),q.commissionMinor(),q.totalMinor());

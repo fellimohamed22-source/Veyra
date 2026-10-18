@@ -2111,6 +2111,14 @@ class _OfferCard extends StatelessWidget{
             if(offer['vehicleCategory']!=null)Chip(label:Text(offer['vehicleCategory'].toString()),visualDensity:VisualDensity.compact,materialTapTargetSize:MaterialTapTargetSize.shrinkWrap),
             if(offer['driverVerified']==true)Chip(avatar:const Icon(Icons.verified_user_outlined,size:16,color:VeyraColors.success),label:Text(t('Vérifié')),visualDensity:VisualDensity.compact,materialTapTargetSize:MaterialTapTargetSize.shrinkWrap),
           ]),
+          // Seats / luggage declared for the offered vehicle (board 05 P2).
+          if(offer['vehicleSeats']!=null)...[
+            const SizedBox(height:4),
+            Wrap(spacing:14,children:[
+              Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.person_outline,size:16,color:VeyraColors.textSecondary),const SizedBox(width:3),Text('${offer['vehicleSeats']}',style:const TextStyle(color:VeyraColors.textSecondary))]),
+              if(offer['vehicleBaggage']!=null)Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.luggage_outlined,size:16,color:VeyraColors.textSecondary),const SizedBox(width:3),Text('${offer['vehicleBaggage']}',style:const TextStyle(color:VeyraColors.textSecondary))]),
+            ]),
+          ],
         ])),
         const VeyraVehicleThumb(width:84),
       ]),
@@ -2163,6 +2171,10 @@ class OfferDetailScreen extends StatelessWidget{
           ])),
           const VeyraVehicleThumb(width:96),
         ])),
+        if((offer['driverMessage']??'').toString().trim().isNotEmpty)_Section(
+          title:t('Message du chauffeur'),
+          child:Text(offer['driverMessage'].toString().trim(),style:const TextStyle(color:VeyraColors.textSecondary)),
+        ),
         _Section(title:t('Détails du trajet'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
           const SizedBox(height:12),

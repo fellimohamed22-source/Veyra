@@ -5,5 +5,7 @@ public final class BookingDtos{private BookingDtos(){}
  public record Create(@NotNull Point pickup,@NotNull Point dropoff,@NotNull OffsetDateTime scheduledAt,@NotNull UUID categoryId,@Pattern(regexp="CASH|ONLINE|PARTNER_INVOICE")String paymentMethod,@Pattern(regexp="CLIENT|GUEST|PARTNER")String payerType,UUID partnerId,String beneficiaryName,String beneficiaryPhone,@Min(1)@Max(9)Integer passengerCount,@Min(0)@Max(12)Integer baggageCount,@Size(max=1000)String customerNotes,@Pattern(regexp="PRIVATE|BEST_VISIBLE")String offerVisibilityMode,UUID preferredDriverId){
  public Create(Point pickup,Point dropoff,OffsetDateTime scheduledAt,UUID categoryId,String paymentMethod,String payerType,UUID partnerId,String beneficiaryName,String beneficiaryPhone,Integer passengerCount,Integer baggageCount,String customerNotes,String offerVisibilityMode){this(pickup,dropoff,scheduledAt,categoryId,paymentMethod,payerType,partnerId,beneficiaryName,beneficiaryPhone,passengerCount,baggageCount,customerNotes,offerVisibilityMode,null);}
  }
- public record Offer(@Min(1)long amountMinor,@Pattern(regexp="[A-Z]{3}")String currency){}
+ public record Offer(@Min(1)long amountMinor,@Pattern(regexp="[A-Z]{3}")String currency,UUID vehicleId,@Size(max=200)String message){
+  public Offer(long amountMinor,String currency){this(amountMinor,currency,null,null);}
+ }
 }
