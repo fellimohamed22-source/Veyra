@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_client/main.dart';
 import 'package:veyra_client/app/theme.dart';
-import 'package:veyra_client/core/widgets/status_badge.dart';
 
 void main() {
   for(final fee in [0, 500]) {
@@ -51,14 +50,14 @@ void main() {
       await tester.tap(find.text('Confirmer l’annulation'));
       await tester.pumpAndSettle();
       expect(cancellations,1);
-      expect(tester.widget<TextButton>(find.widgetWithText(TextButton,'Annulation…')).onPressed,isNull);
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton,'Annulation…')).onPressed,isNull);
       status='CANCELLED';
       cancelHandler!.resolve(Response(requestOptions:cancelRequest!,statusCode:200,
           data:{'cancellationFeeMinor':fee}));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.byType(VeyraStatusBadge),-180,
+      await tester.scrollUntilVisible(find.text('Annulée'),-180,
           scrollable:find.byType(Scrollable).first);
-      expect(tester.widget<VeyraStatusBadge>(find.byType(VeyraStatusBadge)).status,'CANCELLED');
+      expect(find.text('Annulée'),findsOneWidget);
       expect(cancellations,1);
       await tester.scrollUntilVisible(find.text('Réserver à nouveau'),180,
           scrollable:find.byType(Scrollable).first);

@@ -279,6 +279,7 @@ import java.util.*;
                 p);
                 result.put("commissionMinor",
                 commissionAmount);
+                result.put("commissionRateBps",q.rateBps());
                 result.put("totalMinor",
                 q.totalMinor());
                 result.put("currency",

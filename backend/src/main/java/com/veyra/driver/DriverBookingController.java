@@ -46,7 +46,7 @@ public class DriverBookingController {
     List<Map<String, Object>> rows = db.queryForList(
         "select sb.id,sb.pickup_address,sb.dropoff_address,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,sb.scheduled_at,sb.status,sb.payment_method," +
         "coalesce(sb.beneficiary_name_snapshot,concat(cu.first_name,' ',coalesce(cu.last_name,''))) as customer_name," +
-        "coalesce(sb.beneficiary_phone_snapshot,cu.phone) as customer_phone,sb.passenger_count,sb.baggage_count,sb.customer_notes,vc.display_name as category_name," +
+        "sb.passenger_count,sb.baggage_count,sb.customer_notes,vc.display_name as category_name," +
         "(select max(created_at) from booking_status_history where booking_id=sb.id and to_status='DRIVER_ARRIVED') as arrived_at," +
         "(select p.status from payments p where p.booking_id=sb.id order by p.created_at desc limit 1) as payment_status," +
         "bfs.driver_net_amount_minor,bfs.platform_commission_amount_minor,bfs.customer_total_amount_minor,bfs.currency," +

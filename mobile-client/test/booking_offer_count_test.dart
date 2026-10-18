@@ -42,14 +42,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(offersId, 'ride-1');
     expect(find.byType(OffersScreen), findsOneWidget);
-    expect(find.text('1 offre reçue'), findsOneWidget);
+    // Board 05: the offers themselves are listed (no count header).
+    expect(find.text('Alexandre Martin'), findsOneWidget);
+    expect(find.text('Emma Martin'), findsNothing);
     count = 2;
     RefreshBus.bump();
     await tester.pumpAndSettle();
-    expect(find.text('2 offres reçues'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Emma'), 180,
+    await tester.scrollUntilVisible(find.text('Emma Martin'), 180,
         scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first);
-    expect(find.text('Emma'), findsOneWidget);
+    expect(find.text('Emma Martin'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

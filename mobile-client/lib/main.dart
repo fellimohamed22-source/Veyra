@@ -2,7 +2,6 @@ import 'core/widgets/profile_dialog.dart';
 import 'dart:async';
 import 'core/active_booking.dart';
 import 'core/maps/tracking_eta.dart';
-import 'core/widgets/booking_financial_summary.dart';
 import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -21,7 +20,6 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
 import 'app_locale.dart';
 import 'chat_socket.dart';
@@ -638,7 +636,8 @@ class _StatePill extends StatelessWidget{
     decoration:BoxDecoration(color:bg,borderRadius:BorderRadius.circular(VeyraRadius.pill)),
     child:Row(mainAxisSize:MainAxisSize.min,children:[
       if(icon!=null)...[Icon(icon,size:14,color:fg),const SizedBox(width:4)],
-      Text(text,style:TextStyle(color:fg,fontSize:12,fontWeight:FontWeight.w700)),
+      // Flexible: wraps instead of overflowing with enlarged text.
+      Flexible(child:Text(text,style:TextStyle(color:fg,fontSize:12,fontWeight:FontWeight.w700))),
     ]),
   );
 }
@@ -683,12 +682,10 @@ class _PaxBags extends StatelessWidget{
   @override Widget build(BuildContext context){
     final p=(x['passenger_count'] as num?)?.toInt()??1;
     final b=(x['baggage_count'] as num?)?.toInt()??0;
-    return Row(children:[
-      const Icon(Icons.person_outline,size:18,color:VeyraColors.textSecondary),const SizedBox(width:4),
-      Text('$p '+(p>1?t('passagers'):t('passager')),style:const TextStyle(color:VeyraColors.textSecondary)),
-      const SizedBox(width:18),
-      const Icon(Icons.luggage_outlined,size:18,color:VeyraColors.textSecondary),const SizedBox(width:4),
-      Text('$b '+(b>1?t('bagages'):t('bagage')),style:const TextStyle(color:VeyraColors.textSecondary)),
+    // Wrap, not Row: stays on two lines with enlarged text.
+    return Wrap(spacing:18,runSpacing:4,children:[
+      Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.person_outline,size:18,color:VeyraColors.textSecondary),const SizedBox(width:4),Flexible(child:Text('$p '+(p>1?t('passagers'):t('passager')),style:const TextStyle(color:VeyraColors.textSecondary)))]),
+      Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.luggage_outlined,size:18,color:VeyraColors.textSecondary),const SizedBox(width:4),Flexible(child:Text('$b '+(b>1?t('bagages'):t('bagage')),style:const TextStyle(color:VeyraColors.textSecondary)))]),
     ]);
   }
 }
@@ -1848,6 +1845,10 @@ class _AddressScreenState extends State<AddressScreen>{
   }
 }
 
+/// Offres des chauffeurs (planche 05 P2, planches 03 P2 et 04 P3) : aucun
+/// classement contraignant, prix final client commission comprise, tri et
+/// filtre « Mes préférés » à la main du client. Touche une carte : détail
+/// (P3), puis confirmation (P4).
 class OffersScreen extends StatefulWidget{
   final String bookingId;
   const OffersScreen({required this.bookingId,super.key});
@@ -1856,22 +1857,25 @@ class OffersScreen extends StatefulWidget{
 class _OffersScreenState extends State<OffersScreen>{
   late Future<List<dynamic>> future;
   late Future<Map<String,dynamic>> bookingFuture;
+  Set<String> favorites={};
   String? error;
   String? acceptingOfferId;
   Timer? refreshTimer;
   bool refreshing=false;
+  bool byRating=false;
+  bool favoritesOnly=false;
+
   @override void initState(){
     super.initState();
     refreshTimer=Timer.periodic(const Duration(seconds:10),(_)=>refreshOffers());
     RefreshBus.tick.addListener(refreshOffers);
     future=api.offers(widget.bookingId);
-    // Real gap fixed here: this screen only ever fetched the offers
-    // list, never the booking's own details -- someone landing here
-    // before any offer exists (the normal, expected state right after
-    // publishing) had no way to see their own trip's pickup, dropoff,
-    // date, or status anywhere, on this screen or otherwise, since this
-    // is the only screen a not-yet-assigned booking actually routes to.
+    // The booking itself is shown too: right after publishing there is
+    // no offer yet, and this is the only screen such a booking opens.
     bookingFuture=api.bookingDetail(widget.bookingId);
+    api.favoriteDrivers().then((rows){
+      if(mounted)setState(()=>favorites=rows.whereType<Map>().map((r)=>r['driver_id'].toString()).toSet());
+    }).catchError((_){});
   }
 
   Future<void> refreshOffers()async{
@@ -1881,11 +1885,7 @@ class _OffersScreenState extends State<OffersScreen>{
     finally{refreshing=false;}
   }
   @override void dispose(){RefreshBus.tick.removeListener(refreshOffers);refreshTimer?.cancel();super.dispose();}
-  Future<void> confirmOffer(Map<String,dynamic> offer)async{
-    if(acceptingOfferId!=null)return;
-    final yes=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:Text(t('Choisir ce chauffeur ?')),content:Text([offer['driverFirstName'],offer['driverLastName'],offer['vehicleBrand'],offer['vehicleModel'],offer['vehicleColor'],offer['vehicleYear'],t('Total à payer')+' : '+VeyraMoneyFormatter.fromMinor(offer['totalMinor'])].where((v)=>v!=null).join(' • ')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Comparer encore'))),FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Confirmer mon choix')))]));
-    if(yes==true&&mounted)await chooseOffer(offer['offerId'].toString());
-  }
+
   Future<void> chooseOffer(String offerId)async{
     if(acceptingOfferId!=null)return;
     setState((){acceptingOfferId=offerId;error=null;});
@@ -1894,124 +1894,379 @@ class _OffersScreenState extends State<OffersScreen>{
       final booking=await api.bookingDetail(widget.bookingId);
       if(!mounted)return;
       RefreshBus.bump();
-      if(booking['payment_method']=='ONLINE'){
-        context.push('/payment/'+widget.bookingId);
-      }else{
-        context.push('/booking/'+widget.bookingId);
-      }
+      // Leave the offer screens behind: the booking now lives in the
+      // requests tab, with payment first when the client pays online.
+      context.go('/bookings');
+      context.push(booking['payment_method']=='ONLINE'?'/payment/${widget.bookingId}':'/booking/${widget.bookingId}');
     }on DioException catch(e){
       if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
-    }catch(_){
-      if(mounted)setState(()=>error=t('Impossible de choisir cette offre pour le moment.'));
+      rethrow;
     }finally{
       if(mounted)setState(()=>acceptingOfferId=null);
     }
   }
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    appBar:AppBar(actions:[IconButton(onPressed:refreshOffers,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))],title:Text(t('Choisir votre chauffeur')),backgroundColor:const Color(0xFFF2F6FB),elevation:0),
-    body:RefreshIndicator(onRefresh:refreshOffers,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
-      FutureBuilder<Map<String,dynamic>>(
-        future:bookingFuture,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done||s.hasError)return const SizedBox.shrink();
-          final b=s.data??{};
-          return Card(
-            shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),
-            child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(
-                (b['pickup_address']??'').toString()+' → '+(b['dropoff_address']??'').toString(),
-                style:const TextStyle(fontWeight:FontWeight.w600),
-              ),
-              const SizedBox(height:6),
-              // Défaut d'accessibilité réel (test offers_accessibility_test, texte
-              // x1,5 sur 320 px) : le badge de statut était un enfant NON flexible
-              // d'un Row -- dès que son libellé ("OFFRES REÇUES") est plus large que
-              // la ligne, RenderFlex déborde. Wrap + spaceBetween garde le badge à
-              // droite en taille normale et le fait passer à la ligne sinon.
-              SizedBox(width:double.infinity,child:Wrap(
-                alignment:WrapAlignment.spaceBetween,
-                crossAxisAlignment:WrapCrossAlignment.center,
-                spacing:8,runSpacing:6,
-                children:[
-                  Text(VeyraDateFormatter.dateTime(b['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
-                  VeyraStatusBadge(status:(b['status']??'').toString()),
-                ],
-              )),
-            ])),
-          );
-        },
-      ),
-      const SizedBox(height:16),
-      if(error!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-      FutureBuilder<List<dynamic>>(
-        future:future,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-          if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-            ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId);}))
-            :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
-          final items=s.data??[];
-          if(items.isEmpty)return Padding(padding:const EdgeInsets.all(24),child:Text(t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.')));
-          return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text(items.length==1?t('1 offre reçue'):items.length.toString()+' '+t('offres reçues'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.w900,color:VeyraColors.primaryDark)),
-            const SizedBox(height:5),
-            Text(t('Comparez librement le prix, le véhicule et le chauffeur.'),style:const TextStyle(color:VeyraColors.textSecondary,height:1.35)),
+  void openOffer(Map<String,dynamic> booking,Map<String,dynamic> offer,bool best){
+    Navigator.push(context,MaterialPageRoute(builder:(_)=>OfferDetailScreen(
+      booking:booking,offer:offer,favorite:favorites.contains(offer['driverId']?.toString()),best:best,
+      onChoose:()=>chooseOffer(offer['offerId'].toString()),
+    )));
+  }
 
-            const SizedBox(height:14),
-            for(final raw in items)Builder(builder:(context){
-              final x=Map<String,dynamic>.from(raw as Map);
-              final driverName=(x['driverFirstName']??'Chauffeur').toString();
-              final vehicle=[(x['vehicleBrand']??'').toString(),(x['vehicleModel']??'').toString()].where((v)=>v.isNotEmpty).join(' ');
-              final rating=(x['rating']??'-').toString();
-            return Card(
-              margin:const EdgeInsets.only(bottom:12),
-              shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16)),
-              child:InkWell(onTap:acceptingOfferId!=null?null:()=>confirmOffer(x),child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                Row(children:[
-                  CircleAvatar(radius:24,backgroundColor:const Color(0xFF1565C0).withValues(alpha:0.12),child:const Icon(Icons.local_taxi,color:Color(0xFF1565C0))),
-                  const SizedBox(width:12),
-                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                    Text(driverName,style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
-                    Row(children:[
-                      const Icon(Icons.star,color:Color(0xFFF59E0B),size:16),
-                      const SizedBox(width:2),
-                      Text(rating,style:const TextStyle(color:Colors.black54)),
-                      const SizedBox(width:8),
-                      Expanded(child:Text('${x['vehicleCategory']??'VTC'} • $vehicle',style:const TextStyle(color:Colors.black54,fontSize:12),overflow:TextOverflow.ellipsis)),
-                    ]),
-                  ])),
-                ]),
-                Align(alignment:Alignment.centerRight,child:Column(crossAxisAlignment:CrossAxisAlignment.end,children:[
-                    Text(t('Total à payer'),style:const TextStyle(fontSize:11,color:Colors.black45)),
-                    Text(VeyraMoneyFormatter.fromMinor(x['totalMinor']),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(0xFF123A66))),
-                  ])),
-                Text([x['vehicleColor'],x['vehicleYear']].where((v)=>v!=null).join(' • ')),
-                const SizedBox(height:8),
-                if(x['driverVerified']==true)Row(children:[
-                  const Icon(Icons.verified_user_outlined,size:16,color:VeyraColors.success),
-                  const SizedBox(width:5),
-                  Expanded(child:Text(t('Chauffeur Veyra vérifié'),style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
-                ]),
-                const SizedBox(height:14),
-                SizedBox(width:double.infinity,child:FilledButton(
-                  style:FilledButton.styleFrom(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-                  onPressed:acceptingOfferId!=null?null:()=>confirmOffer(x),
-                  child:acceptingOfferId==x['offerId'].toString()
-                    ?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
-                    :Text(t('Choisir cette offre')),
-                )),
-              ]))),
-            );
-          }),
-          ]);
-        },
+  Widget summary(Map<String,dynamic> b)=>Container(
+    padding:const EdgeInsets.all(14),
+    decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.lg),border:Border.all(color:VeyraColors.border)),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Row(children:[
+        const Icon(Icons.location_on_outlined,size:20),
+        const SizedBox(width:8),
+        Expanded(child:Text('${veyraPlaceTitle(b['pickup_address'])}  →  ${veyraPlaceTitle(b['dropoff_address'])}',style:const TextStyle(fontWeight:FontWeight.w700))),
+      ]),
+      const SizedBox(height:6),
+      Text(veyraBookingWhen(b['scheduled_at']),style:const TextStyle(color:VeyraColors.textSecondary)),
+      const SizedBox(height:6),
+      _PaxBags(b),
+    ]),
+  );
+
+  Widget chip(String label,IconData icon,bool on,VoidCallback onTap)=>Material(
+    color:on?VeyraColors.infoBackground:Colors.white,
+    borderRadius:BorderRadius.circular(VeyraRadius.md),
+    child:InkWell(
+      borderRadius:BorderRadius.circular(VeyraRadius.md),
+      onTap:onTap,
+      child:Container(
+        padding:const EdgeInsets.symmetric(horizontal:12,vertical:9),
+        decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.md),border:Border.all(color:on?VeyraColors.accent:VeyraColors.border)),
+        child:Row(mainAxisSize:MainAxisSize.min,children:[Icon(icon,size:18,color:on?VeyraColors.accent:VeyraColors.textPrimary),const SizedBox(width:6),Flexible(child:Text(label,style:const TextStyle(fontWeight:FontWeight.w600,fontSize:13)))]),
       ),
-    ])),
+    ),
+  );
+
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:Text(t('Offres des chauffeurs')),actions:[IconButton(onPressed:refreshOffers,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
+    body:RefreshIndicator(onRefresh:refreshOffers,child:FutureBuilder<Map<String,dynamic>>(
+      future:bookingFuture,
+      builder:(context,bs){
+        final b=bs.data??{};
+        return ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.fromLTRB(16,8,16,24),children:[
+          if(bs.hasData)summary(b),
+          const SizedBox(height:14),
+          if(error!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.danger,text:error!)),
+          FutureBuilder<List<dynamic>>(
+            future:future,
+            builder:(context,s){
+              if(s.connectionState!=ConnectionState.done)return const Padding(padding:EdgeInsets.all(32),child:Center(child:CircularProgressIndicator()));
+              if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+                ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.offers(widget.bookingId);}))
+                :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.offers(widget.bookingId);}));
+              var items=(s.data??[]).whereType<Map>().map((m)=>Map<String,dynamic>.from(m)).toList();
+              if(items.isEmpty)return Padding(padding:const EdgeInsets.symmetric(vertical:24),child:VeyraEmptyView(icon:Icons.hourglass_empty,message:t('Aucune offre pour le moment. Vous serez notifié dès qu’un chauffeur propose un prix.')));
+              final bestTotal=items.map((o)=>(o['totalMinor'] as num).toInt()).reduce((a,c)=>a<c?a:c);
+              if(favoritesOnly)items=items.where((o)=>favorites.contains(o['driverId']?.toString())).toList();
+              items.sort((a,c)=>byRating
+                ?((c['rating'] as num?)??0).compareTo((a['rating'] as num?)??0)
+                :(a['totalMinor'] as num).compareTo(c['totalMinor'] as num));
+              return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                _BestPriceBanner(bestTotal),
+                const SizedBox(height:12),
+                Wrap(spacing:8,runSpacing:8,children:[
+                  chip(byRating?t('Trier par Note'):t('Trier par Prix'),Icons.swap_vert,false,()=>setState(()=>byRating=!byRating)),
+                  chip(t('Mes préférés'),favoritesOnly?Icons.favorite:Icons.favorite_border,favoritesOnly,()=>setState(()=>favoritesOnly=!favoritesOnly)),
+                ]),
+                const SizedBox(height:12),
+                if(items.isEmpty)VeyraEmptyView(icon:Icons.favorite_border,message:t('Aucun de vos chauffeurs préférés n’a encore fait d’offre.')),
+                for(final o in items)_OfferCard(
+                  offer:o,
+                  best:(o['totalMinor'] as num).toInt()==bestTotal,
+                  favorite:favorites.contains(o['driverId']?.toString()),
+                  busy:acceptingOfferId==o['offerId'].toString(),
+                  onTap:acceptingOfferId!=null?null:()=>openOffer(b,o,(o['totalMinor'] as num).toInt()==bestTotal),
+                ),
+              ]);
+            },
+          ),
+        ]);
+      },
+    )),
   );
 }
 
+class _FavoritePill extends StatelessWidget{
+  const _FavoritePill();
+  @override Widget build(BuildContext context)=>_StatePill(t('Mon chauffeur préféré'),fg:const Color(0xFFC0262D),bg:const Color(0xFFFDECEE),icon:Icons.favorite);
+}
+
+class _DriverAvatar extends StatelessWidget{
+  final String name;
+  final double radius;
+  const _DriverAvatar(this.name,{this.radius=24});
+  @override Widget build(BuildContext context)=>CircleAvatar(radius:radius,backgroundColor:VeyraColors.surfaceMuted,child:Text(_initials(name),style:TextStyle(color:VeyraColors.primary,fontWeight:FontWeight.w800,fontSize:radius*0.6)));
+}
+
+class _Rating extends StatelessWidget{
+  final dynamic rating;
+  const _Rating(this.rating);
+  @override Widget build(BuildContext context){
+    final r=(rating as num?)?.toDouble()??0;
+    return Row(mainAxisSize:MainAxisSize.min,children:[
+      const Icon(Icons.star_rounded,size:18,color:Color(0xFFF5A623)),
+      const SizedBox(width:2),
+      Text(r==0?t('Nouveau'):r.toStringAsFixed(1).replaceAll('.',','),style:const TextStyle(fontWeight:FontWeight.w600)),
+    ]);
+  }
+}
+
+/// Carte d'offre (planche 05 P2).
+class _OfferCard extends StatelessWidget{
+  final Map<String,dynamic> offer;
+  final bool best;
+  final bool favorite;
+  final bool busy;
+  final VoidCallback? onTap;
+  const _OfferCard({required this.offer,required this.best,required this.favorite,required this.busy,required this.onTap});
+  @override Widget build(BuildContext context){
+    final name='${offer['driverFirstName']??''} ${offer['driverLastName']??''}'.trim();
+    final vehicle=[offer['vehicleBrand'],offer['vehicleModel']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' ');
+    return Semantics(button:true,label:'$name, ${VeyraMoneyFormatter.fromMinor(offer['totalMinor'])}',child:_ShadowCard(onTap:onTap,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      // Pill left, price right (board 05 P2); a Wrap so the price drops
+      // below the pill with enlarged text.
+      SizedBox(width:double.infinity,child:Wrap(alignment:best?WrapAlignment.spaceBetween:WrapAlignment.end,crossAxisAlignment:WrapCrossAlignment.center,spacing:8,runSpacing:6,children:[
+        if(best)_StatePill(t('Meilleur prix'),fg:VeyraColors.success,bg:VeyraColors.successBackground,icon:Icons.verified),
+        Column(crossAxisAlignment:CrossAxisAlignment.end,mainAxisSize:MainAxisSize.min,children:[
+          Text(VeyraMoneyFormatter.fromMinor(offer['totalMinor']),style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
+          Text(t('TTC · commission incluse'),style:const TextStyle(fontSize:11,color:VeyraColors.textSecondary)),
+        ]),
+      ])),
+      const SizedBox(height:8),
+      Row(children:[
+        _DriverAvatar(name),
+        const SizedBox(width:10),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(name.isEmpty?t('Chauffeur'):name,style:const TextStyle(fontSize:16,fontWeight:FontWeight.w700)),
+          _Rating(offer['rating']),
+          if(favorite)...[const SizedBox(height:4),const _FavoritePill()],
+        ])),
+      ]),
+      const SizedBox(height:10),
+      Row(children:[
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(vehicle,style:const TextStyle(color:VeyraColors.accent,fontWeight:FontWeight.w600)),
+          const SizedBox(height:4),
+          Wrap(spacing:6,runSpacing:4,children:[
+            if(offer['vehicleCategory']!=null)Chip(label:Text(offer['vehicleCategory'].toString()),visualDensity:VisualDensity.compact,materialTapTargetSize:MaterialTapTargetSize.shrinkWrap),
+            if(offer['driverVerified']==true)Chip(avatar:const Icon(Icons.verified_user_outlined,size:16,color:VeyraColors.success),label:Text(t('Vérifié')),visualDensity:VisualDensity.compact,materialTapTargetSize:MaterialTapTargetSize.shrinkWrap),
+          ]),
+        ])),
+        const VeyraVehicleThumb(width:84),
+      ]),
+      if(busy)const Padding(padding:EdgeInsets.only(top:10),child:LinearProgressIndicator()),
+    ])));
+  }
+}
+
+/// Détail de l'offre (planche 05 P3, planche 03 P3).
+class OfferDetailScreen extends StatelessWidget{
+  final Map<String,dynamic> booking;
+  final Map<String,dynamic> offer;
+  final bool favorite;
+  final bool best;
+  final Future<void> Function() onChoose;
+  const OfferDetailScreen({required this.booking,required this.offer,required this.favorite,required this.best,required this.onChoose,super.key});
+
+  @override Widget build(BuildContext context){
+    final name='${offer['driverFirstName']??''} ${offer['driverLastName']??''}'.trim();
+    final vehicle=[offer['vehicleBrand'],offer['vehicleModel']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' ');
+    final (pTitle,pSub)=_AddressScreenState.splitLabel(booking['pickup_address']?.toString()??'');
+    final (dTitle,dSub)=_AddressScreenState.splitLabel(booking['dropoff_address']?.toString()??'');
+    return Scaffold(
+      appBar:AppBar(title:Text(t('Détail de l’offre'))),
+      body:ListView(padding:const EdgeInsets.fromLTRB(16,8,16,16),children:[
+        Row(children:[
+          _DriverAvatar(name,radius:30),
+          const SizedBox(width:14),
+          Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(name.isEmpty?t('Chauffeur'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
+            _Rating(offer['rating']),
+            if(favorite)...[const SizedBox(height:6),const _FavoritePill()],
+            if(best)...[const SizedBox(height:6),_StatePill(t('Meilleur prix'),fg:VeyraColors.success,bg:VeyraColors.successBackground,icon:Icons.verified)],
+          ])),
+        ]),
+        const SizedBox(height:18),
+        _Section(child:Row(children:[
+          Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(vehicle,style:const TextStyle(fontSize:17,fontWeight:FontWeight.w700)),
+            const SizedBox(height:6),
+            Wrap(spacing:6,children:[
+              if(offer['vehicleCategory']!=null)Chip(label:Text(offer['vehicleCategory'].toString()),visualDensity:VisualDensity.compact),
+              if(offer['vehicleColor']!=null)Chip(label:Text(offer['vehicleColor'].toString()),visualDensity:VisualDensity.compact),
+              if(offer['vehicleYear']!=null)Chip(label:Text(offer['vehicleYear'].toString()),visualDensity:VisualDensity.compact),
+            ]),
+            if(offer['driverVerified']==true)...[
+              const SizedBox(height:6),
+              Row(children:[const Icon(Icons.verified_user_outlined,size:18,color:VeyraColors.success),const SizedBox(width:6),Expanded(child:Text(t('Chauffeur Veyra vérifié'),style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600)))]),
+            ],
+          ])),
+          const VeyraVehicleThumb(width:96),
+        ])),
+        _Section(title:t('Détails du trajet'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+          const SizedBox(height:12),
+          Row(children:[const Icon(Icons.calendar_today_outlined,size:18),const SizedBox(width:8),Expanded(child:Text(veyraBookingWhen(booking['scheduled_at'])))]),
+          const SizedBox(height:8),
+          _PaxBags(booking),
+        ])),
+        _PriceDetail(offer:offer),
+      ]),
+      bottomNavigationBar:SafeArea(child:Padding(
+        padding:const EdgeInsets.fromLTRB(16,8,16,16),
+        child:FilledButton(
+          onPressed:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>ConfirmBookingScreen(booking:booking,offer:offer,favorite:favorite,onConfirm:onChoose))),
+          child:Text(t('Choisir ce chauffeur')),
+        ),
+      )),
+    );
+  }
+}
+
+class _Section extends StatelessWidget{
+  final String? title;
+  final Widget child;
+  const _Section({this.title,required this.child});
+  @override Widget build(BuildContext context)=>Container(
+    margin:const EdgeInsets.only(bottom:12),
+    padding:const EdgeInsets.all(16),
+    decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.lg),border:Border.all(color:VeyraColors.border)),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+      if(title!=null)...[VeyraSectionLabel(title!),const SizedBox(height:10)],
+      child,
+    ]),
+  );
+}
+
+/// « Détail du prix » (planche 05 P3/P4) : prix chauffeur, commission
+/// VEYRA et total TTC, tels que figés sur l'offre (méthode A).
+class _PriceDetail extends StatelessWidget{
+  final Map<String,dynamic> offer;
+  const _PriceDetail({required this.offer});
+  Widget line(String label,dynamic minor,{bool total=false})=>Padding(
+    padding:const EdgeInsets.symmetric(vertical:4),
+    child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+      Flexible(child:Text(label,style:TextStyle(color:total?VeyraColors.textPrimary:VeyraColors.textSecondary,fontWeight:total?FontWeight.w800:FontWeight.w500,fontSize:total?16:14))),
+      const SizedBox(width:8),
+      Flexible(child:Text.rich(TextSpan(children:[
+        TextSpan(text:VeyraMoneyFormatter.fromMinor(minor),style:TextStyle(fontWeight:total?FontWeight.w800:FontWeight.w600,fontSize:total?18:14)),
+        if(total)const TextSpan(text:' TTC',style:TextStyle(fontSize:12,color:VeyraColors.textSecondary)),
+      ]),textAlign:TextAlign.end)),
+    ]),
+  );
+  @override Widget build(BuildContext context){
+    final bps=(offer['commissionRateBps'] as num?)?.toInt();
+    final pct=bps==null?'':' (${(bps/100).toStringAsFixed(bps%100==0?0:1).replaceAll('.',',')} %)';
+    return _Section(title:t('Détail du prix'),child:Column(children:[
+      line(t('Prix de la course'),offer['driverPriceMinor']),
+      line(t('Commission VEYRA')+pct,offer['commissionMinor']),
+      const Divider(height:18),
+      line(t('Prix total à payer'),offer['totalMinor'],total:true),
+    ]));
+  }
+}
+
+/// Confirmer la réservation (planche 05 P4, planche 10 P1).
+class ConfirmBookingScreen extends StatefulWidget{
+  final Map<String,dynamic> booking;
+  final Map<String,dynamic> offer;
+  final bool favorite;
+  final Future<void> Function() onConfirm;
+  const ConfirmBookingScreen({required this.booking,required this.offer,required this.favorite,required this.onConfirm,super.key});
+  @override State<ConfirmBookingScreen> createState()=>_ConfirmBookingScreenState();
+}
+class _ConfirmBookingScreenState extends State<ConfirmBookingScreen>{
+  bool accepted=false;
+  bool busy=false;
+  String? error;
+
+  Future<void> confirm()async{
+    if(busy||!accepted)return;
+    setState((){busy=true;error=null;});
+    try{
+      await widget.onConfirm();
+    }catch(e){
+      if(mounted)setState(()=>error=e is DioException?VeyraErrorMessages.forException(e):t('Impossible de choisir cette offre pour le moment.'));
+    }finally{
+      if(mounted)setState(()=>busy=false);
+    }
+  }
+
+  @override Widget build(BuildContext context){
+    final o=widget.offer,b=widget.booking;
+    final name='${o['driverFirstName']??''} ${o['driverLastName']??''}'.trim();
+    final vehicle=[o['vehicleBrand'],o['vehicleModel']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' ');
+    final online=b['payment_method']=='ONLINE';
+    return Scaffold(
+      appBar:AppBar(title:Text(t('Confirmer la réservation'))),
+      body:ListView(padding:const EdgeInsets.fromLTRB(16,8,16,16),children:[
+        _Section(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Row(children:[
+            _DriverAvatar(name),
+            const SizedBox(width:12),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(name.isEmpty?t('Chauffeur'):name,style:const TextStyle(fontSize:17,fontWeight:FontWeight.w700)),
+              _Rating(o['rating']),
+              if(widget.favorite)...[const SizedBox(height:4),const _FavoritePill()],
+            ])),
+          ]),
+          const SizedBox(height:10),
+          Row(children:[
+            const VeyraVehicleThumb(width:84),
+            const SizedBox(width:12),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(vehicle,style:const TextStyle(fontWeight:FontWeight.w700)),
+              if(o['vehicleCategory']!=null)Text(o['vehicleCategory'].toString(),style:const TextStyle(color:VeyraColors.accent)),
+            ])),
+          ]),
+        ])),
+        _Section(title:t('Récapitulatif du trajet'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Builder(builder:(_){
+            final (pTitle,pSub)=_AddressScreenState.splitLabel((b['pickup_address']??'').toString());
+            final (dTitle,dSub)=_AddressScreenState.splitLabel((b['dropoff_address']??'').toString());
+            return VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub);
+          }),
+          const SizedBox(height:12),
+          Row(children:[const Icon(Icons.calendar_today_outlined,size:18),const SizedBox(width:8),Expanded(child:Text(veyraBookingWhen(b['scheduled_at'])))]),
+          const SizedBox(height:6),
+          _PaxBags(b),
+        ])),
+        _PriceDetail(offer:o),
+        _Section(title:t('Méthode de paiement'),child:Row(children:[
+          Icon(online?Icons.credit_card:Icons.payments_outlined,color:VeyraColors.primary),
+          const SizedBox(width:12),
+          Expanded(child:Text(online?t('Carte bancaire — débit à la confirmation'):t('Paiement en cash au chauffeur'),style:const TextStyle(fontWeight:FontWeight.w600))),
+        ])),
+        CheckboxListTile(
+          value:accepted,
+          onChanged:(v)=>setState(()=>accepted=v??false),
+          controlAffinity:ListTileControlAffinity.leading,
+          contentPadding:EdgeInsets.zero,
+          title:Text(t('J’accepte les conditions d’utilisation et la politique d’annulation.'),style:const TextStyle(fontSize:13)),
+        ),
+        // Board 05 P4: amber cancellation note. The free-cancellation delay
+        // is admin-configurable (DEC-09), so the exact fee is shown by the
+        // cancellation preview rather than hard-coded here.
+        VeyraBanner(tone:VeyraTone.warning,text:t('Les éventuels frais d’annulation dépendent de la politique en vigueur et sont affichés avant toute annulation.')),
+        if(error!=null)...[const SizedBox(height:10),VeyraBanner(tone:VeyraTone.danger,text:error!)],
+      ]),
+      bottomNavigationBar:SafeArea(child:Padding(
+        padding:const EdgeInsets.fromLTRB(16,8,16,16),
+        child:FilledButton.icon(
+          onPressed:busy||!accepted?null:confirm,
+          icon:busy?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)):Icon(online?Icons.lock_outline:Icons.check),
+          label:Text(online?t('Confirmer et payer'):t('Confirmer la réservation')),
+        ),
+      )),
+    );
+  }
+}
 
 bool bookingCanPayOnline(Map<String,dynamic>? booking)=>booking!=null&&
   booking['payment_method']=='ONLINE'&&booking['payment_status']!='CAPTURED'&&
@@ -2265,148 +2520,282 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
     }
   }
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Détail réservation')),actions:[IconButton(onPressed:refreshStatus,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
-    body:FutureBuilder<Map<String,dynamic>>(
-      future:future,
-      builder:(context,s){
-        if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-        if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
-          ?VeyraOfflineBanner(onRetry:reload)
-          :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
-        final x=s.data??{};
-        final status=(x['status']??'').toString();
-        final driverName=((x['driver_first_name']??'') as Object).toString()+' '+((x['driver_last_name']??'') as Object).toString();
-        final driverPhone=x['driver_phone']?.toString();
-        return RefreshIndicator(onRefresh:refreshStatus,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
-          Text((x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
-          const SizedBox(height:8),
-          Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-          Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
-          if((x['customer_notes']??'').toString().isNotEmpty)Text(t('Remarques')+' : '+x['customer_notes'].toString()),
-          if({'OPEN_FOR_OFFERS','OFFERS_RECEIVED'}.contains(status))...[
-            Text(t('Réception des offres jusqu’au')+' '+VeyraDateFormatter.dateTime(x['offer_window_ends_at'])),
-            Text(x['offer_count']==1?t('1 offre reçue'):(x['offer_count']??0).toString()+' '+t('offres reçues')),
-            FilledButton(onPressed:()=>context.push('/offers/'+widget.bookingId),child:Text(t('Voir les offres'))),
-            TextButton(onPressed:cancelling?null:confirmAndCancel,child:Text(t('Annuler la réservation'))),
-          ],
-          if(status=='CONFIRMED')Text(t('Votre chauffeur est engagé. Vous serez informé de son départ et de son arrivée.')),
-          if(x['selected_driver_id']!=null)Text([x['vehicle_brand'],x['vehicle_model'],x['vehicle_color'],x['plate_number']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' • ')),
-          if(x['payment_method']=='ONLINE')Text(t('Paiement')+' : '+paymentStatusLabel(x['payment_status']?.toString())),
-          const SizedBox(height:12),
-          Card(child:Padding(padding:const EdgeInsets.all(16),child:SizedBox(width:double.infinity,child:Wrap(
-            alignment:WrapAlignment.spaceBetween,crossAxisAlignment:WrapCrossAlignment.center,
-            spacing:8,runSpacing:8,children:[Text(t('Statut')),VeyraStatusBadge(status:status)],
-          )))),
-          Card(
-            child:Padding(
-              padding:const EdgeInsets.all(16),
-              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                Text(t('Étapes de votre réservation'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
-                const SizedBox(height:8),
-                Text(
-                  {'OPEN_FOR_OFFERS':t('Demande publiée • En attente des offres des chauffeurs'),
-                   'OFFERS_RECEIVED':t('Offres reçues • Comparez et choisissez librement votre chauffeur'),
-                   'PENDING_PAYMENT':t('Chauffeur choisi • Paiement à finaliser'),
-                   'CONFIRMED':t('Trajet confirmé • Votre chauffeur se prépare'),
-                   'DRIVER_EN_ROUTE':t('Chauffeur en route vers le lieu de prise en charge'),
-                   'DRIVER_ARRIVED':t('Chauffeur arrivé • Vérifiez le véhicule et communiquez le PIN à bord'),
-                   'IN_PROGRESS':t('Course en cours'),
-                   'COMPLETED':t('Course terminée • Vous pouvez noter votre chauffeur'),
-                   'CLOSED':t('Course terminée'),
-                  }[status]??VeyraStatusLabels.bookingStatus(status),
-                ),
-              ]),
-            ),
-          ),
-          if(!{'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER'}.contains(status))
-            Card(
-              child:Padding(
-                padding:const EdgeInsets.all(16),
-                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                  Text(t('Bon à savoir'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
-                  const SizedBox(height:8),
-                  Text(t('Présentez-vous au point de prise en charge à l’heure prévue.')),
-                  const SizedBox(height:6),
-                  Text(t('Les éventuels frais d’annulation sont calculés selon les conditions de votre réservation. Leur montant exact est affiché avant confirmation de l’annulation.')),
-                ]),
-              ),
-            ),
-          if({'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))
-            Card(
-              child:Padding(
-                padding:const EdgeInsets.all(16),
-                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                  Text(t('Préparer votre trajet'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
-                  const SizedBox(height:8),
-                  Text(t('Départ : ')+(x['pickup_address']??'').toString()),
-                  const SizedBox(height:6),
-                  Text(t('Destination : ')+(x['dropoff_address']??'').toString()),
-                  const SizedBox(height:6),
-                  Text(t('Prise en charge prévue : ')+VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                  if(x['selected_driver_id']!=null)...[
-                    const SizedBox(height:8),
-                    Text(t('Vérifiez le véhicule et son immatriculation avant de monter.')),
-                  ],
-                ]),
-              ),
-            ),
-          if(x['selected_driver_id']!=null)Card(child:ListTile(
-            leading:const CircleAvatar(child:Icon(Icons.person)),
-            title:Text(driverName.trim().isEmpty?t('Chauffeur confirmé'):driverName.trim()),
-            subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text('Note : '+(x['driver_rating']??'-').toString()),
-              if(x['driver_verified']==true)Text(t('Chauffeur Veyra vérifié')),
+  static const _rideStates={'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'};
+  static const _cancellableStates={'OPEN_FOR_OFFERS','OFFERS_RECEIVED','CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'};
+  static const _pinStates={'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED'};
+  static const _terminalStates={'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER'};
+
+  /// « 2 h 45 min » (planche 10 P2), « 25 min » (P3), « 1 j 02 h 45 min » (planche 05 P5).
+  static String countdown(Duration d){
+    if(d.isNegative)return t('Imminent');
+    String two(int v)=>v.toString().padLeft(2,'0');
+    final days=d.inDays,h=d.inHours%24,m=d.inMinutes%60;
+    if(days>0)return '$days j ${two(h)} h ${two(m)} min';
+    if(h>0)return '$h h ${two(m)} min';
+    return '$m min';
+  }
+
+  Widget statusPill(Map<String,dynamic> x){
+    final status=(x['status']??'').toString();
+    // Terminal outcomes keep their full wording (« Demande expirée »…).
+    if(_terminalStates.contains(status)&&!_pastStates.contains(status)){
+      final cancelled=status.contains('CANCEL')||status=='CUSTOMER_NO_SHOW';
+      return _StatePill(VeyraStatusLabels.bookingStatus(status),fg:cancelled?VeyraColors.danger:VeyraColors.neutral,bg:cancelled?VeyraColors.dangerBackground:VeyraColors.neutralBackground);
+    }
+    return _pillFor(x);
+  }
+
+  Widget countdownCard(DateTime when,Duration left){
+    final soon=left.inMinutes<=30;
+    final fg=soon?VeyraColors.success:VeyraColors.accent;
+    return Container(
+      margin:const EdgeInsets.only(bottom:12),
+      padding:const EdgeInsets.all(18),
+      decoration:BoxDecoration(color:soon?VeyraColors.successBackground:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.lg)),
+      child:Row(children:[
+        Icon(Icons.schedule,size:52,color:fg),
+        const SizedBox(width:18),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(t('Départ dans'),style:const TextStyle(fontWeight:FontWeight.w600)),
+          Text(countdown(left),style:TextStyle(fontSize:26,fontWeight:FontWeight.w800,color:soon?VeyraColors.textPrimary:fg)),
+          Text(veyraBookingWhen(when.toUtc().toIso8601String()),style:const TextStyle(color:VeyraColors.textSecondary)),
+        ])),
+      ]),
+    );
+  }
+
+  Widget rideBanner(String status){
+    final (title,sub)=switch(status){
+      'DRIVER_ARRIVED'=>(t('Votre chauffeur est arrivé'),t('Vérifiez le véhicule et communiquez le PIN à bord.')),
+      'IN_PROGRESS'=>(t('Course en cours'),t('Bon trajet avec VEYRA.')),
+      _=>(t('Votre chauffeur est en route'),t('Suivez son arrivée en temps réel.')),
+    };
+    return Container(
+      margin:const EdgeInsets.only(bottom:12),
+      padding:const EdgeInsets.all(16),
+      decoration:BoxDecoration(color:VeyraColors.successBackground,borderRadius:BorderRadius.circular(VeyraRadius.lg)),
+      child:Row(children:[
+        const Icon(Icons.directions_car_outlined,size:32,color:VeyraColors.success),
+        const SizedBox(width:14),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),
+          Text(sub,style:const TextStyle(color:VeyraColors.textSecondary)),
+        ])),
+      ]),
+    );
+  }
+
+  Widget driverCard(Map<String,dynamic> x){
+    final name='${x['driver_first_name']??''} ${x['driver_last_name']??''}'.trim();
+    final vehicle=[x['vehicle_brand'],x['vehicle_model']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' ');
+    return _Section(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Row(children:[
+        _DriverAvatar(name,radius:30),
+        const SizedBox(width:14),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(name.isEmpty?t('Chauffeur confirmé'):name,style:const TextStyle(fontSize:17,fontWeight:FontWeight.w700)),
+          _Rating(x['driver_rating']),
+          if(favorite)...[const SizedBox(height:4),const _FavoritePill()],
+        ])),
+      ]),
+      const SizedBox(height:12),
+      Row(children:[
+        const VeyraVehicleThumb(width:110),
+        const SizedBox(width:12),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          if(vehicle.isNotEmpty)Text(vehicle,style:const TextStyle(fontWeight:FontWeight.w600)),
+          if(x['category_name']!=null)...[const SizedBox(height:4),_StatePill(x['category_name'].toString(),fg:VeyraColors.accent,bg:VeyraColors.infoBackground)],
+          if(x['plate_number']!=null)...[const SizedBox(height:4),Text(x['plate_number'].toString(),style:const TextStyle(color:VeyraColors.textSecondary))],
+        ])),
+      ]),
+      if(x['driver_verified']==true)...[
+        const SizedBox(height:10),
+        Row(children:[const Icon(Icons.verified_user_outlined,size:18,color:VeyraColors.success),const SizedBox(width:6),Expanded(child:Text(t('Chauffeur Veyra vérifié'),style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600)))]),
+      ],
+    ]));
+  }
+
+  /// Message / Appeler (planche 10 P2-P3) : ouverts 30 min avant le départ.
+  /// L'appel passe uniquement par un numéro masqué (DEC-06, CL-15) ; tant
+  /// que celui-ci n'est pas branché, le bouton reste désactivé.
+  Widget contactBlock(bool open)=>Padding(
+    padding:const EdgeInsets.only(bottom:12),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+      Row(children:[
+        Expanded(child:OutlinedButton.icon(
+          onPressed:open?()=>context.push('/chat/'+widget.bookingId):null,
+          icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Message')),
+        )),
+        const SizedBox(width:10),
+        Expanded(child:Tooltip(message:t('Appel par numéro masqué bientôt disponible'),child:FilledButton.icon(
+          onPressed:null,
+          icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler')),
+        ))),
+      ]),
+      const SizedBox(height:10),
+      VeyraBanner(
+        tone:open?VeyraTone.warning:VeyraTone.info,
+        text:open?t('Vous pouvez contacter votre chauffeur jusqu’à 1 heure après la fin de la course.'):t('Vous pourrez contacter votre chauffeur 30 minutes avant le départ.'),
+      ),
+    ]),
+  );
+
+  Widget tripSection(Map<String,dynamic> x){
+    final (pTitle,pSub)=_AddressScreenState.splitLabel((x['pickup_address']??'').toString());
+    final (dTitle,dSub)=_AddressScreenState.splitLabel((x['dropoff_address']??'').toString());
+    final notes=(x['customer_notes']??'').toString();
+    return _Section(title:t('Détails du trajet'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+      const SizedBox(height:12),
+      Row(children:[const Icon(Icons.calendar_today_outlined,size:18),const SizedBox(width:8),Expanded(child:Text(veyraBookingWhen(x['scheduled_at'])))]),
+      const SizedBox(height:8),
+      _PaxBags(x),
+      if(notes.isNotEmpty)...[
+        const SizedBox(height:12),
+        Container(
+          padding:const EdgeInsets.all(12),
+          decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+          child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            const Icon(Icons.chat_outlined,size:18,color:VeyraColors.textSecondary),
+            const SizedBox(width:10),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(t('Commentaire pour le chauffeur'),style:const TextStyle(fontWeight:FontWeight.w700,fontSize:13)),
+              const SizedBox(height:2),
+              Text(notes,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+            ])),
+          ]),
+        ),
+      ],
+    ]));
+  }
+
+  Widget priceSection(Map<String,dynamic> x){
+    final online=x['payment_method']=='ONLINE';
+    return _Section(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+      if(x['customer_total_amount_minor']!=null)Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+        Flexible(child:Text(t('Prix total'),style:const TextStyle(fontWeight:FontWeight.w700,fontSize:16))),
+        Flexible(child:Text.rich(TextSpan(children:[
+          TextSpan(text:VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor']),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:18)),
+          const TextSpan(text:' TTC',style:TextStyle(fontSize:12,color:VeyraColors.textSecondary)),
+        ]),textAlign:TextAlign.end)),
+      ]),
+      const SizedBox(height:8),
+      Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+        Flexible(child:Text(t('Méthode de paiement'),style:const TextStyle(color:VeyraColors.textSecondary))),
+        const SizedBox(width:8),
+        Flexible(child:Text(online?t('Carte bancaire'):t('Cash au chauffeur'),textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w600))),
+      ]),
+      if(online)...[
+        const SizedBox(height:6),
+        Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+          Flexible(child:Text(t('Paiement'),style:const TextStyle(color:VeyraColors.textSecondary))),
+          const SizedBox(width:8),
+          Flexible(child:Text(paymentStatusLabel(x['payment_status']?.toString()),textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w600))),
+        ]),
+      ],
+    ]));
+  }
+
+  Widget pinSection()=>_Section(title:t('Code PIN de prise en charge'),child:pin==null
+    ?OutlinedButton(onPressed:loadPin,child:Text(t('Afficher le PIN')))
+    :Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(t('Communiquez ce code au chauffeur uniquement lorsque vous êtes dans le véhicule.'),style:const TextStyle(fontSize:13,color:VeyraColors.textSecondary)),
+      const SizedBox(height:8),
+      VeyraPinDisplay(pin:pin!),
+    ]));
+
+  Widget ratingSection()=>_Section(title:ratingSubmitted?null:t('Noter le chauffeur'),child:ratingSubmitted
+    ?Row(children:[const Icon(Icons.check_circle,color:VeyraColors.success),const SizedBox(width:8),Expanded(child:Text(t('Merci pour votre avis !')))])
+    :Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Wrap(children:[for(int i=1;i<=5;i++)IconButton(
+        icon:Icon(i<=ratingScore?Icons.star_rounded:Icons.star_border_rounded,color:const Color(0xFFF5A623),size:32),
+        tooltip:AppLocale.code.value=='en'?(i==1?'1 star':'$i stars'):(i==1?'1 étoile':'$i étoiles'),
+        onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
+      )]),
+      FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
+    ]));
+
+  Widget? bottomActions(Map<String,dynamic> x){
+    final status=(x['status']??'').toString();
+    final canCancel=_cancellableStates.contains(status);
+    final canTrack=_rideStates.contains(status);
+    if(!canCancel&&!canTrack)return null;
+    return SafeArea(child:Padding(
+      padding:const EdgeInsets.fromLTRB(16,8,16,12),
+      child:Row(children:[
+        if(canCancel)Expanded(child:OutlinedButton(
+          style:OutlinedButton.styleFrom(foregroundColor:VeyraColors.danger,side:const BorderSide(color:VeyraColors.danger)),
+          onPressed:(cancelling||loadingPreview)?null:confirmAndCancel,
+          child:Row(mainAxisSize:MainAxisSize.min,children:[
+            const Icon(Icons.event_busy_outlined,size:18),
+            const SizedBox(width:6),
+            Flexible(child:Text(cancelling?t('Annulation…'):loadingPreview?t('Calcul des frais…'):t('Annuler la réservation'),textAlign:TextAlign.center)),
+          ]),
+        )),
+        if(canCancel&&canTrack)const SizedBox(width:10),
+        if(canTrack)Expanded(child:FilledButton(
+          onPressed:()=>context.push('/live/'+widget.bookingId),
+          child:Text(t('Suivre mon chauffeur'),textAlign:TextAlign.center),
+        )),
+      ]),
+    ));
+  }
+
+  @override Widget build(BuildContext context)=>FutureBuilder<Map<String,dynamic>>(
+    future:future,
+    builder:(context,s){
+      final loaded=s.connectionState==ConnectionState.done&&!s.hasError;
+      final x=loaded?(s.data??<String,dynamic>{}):<String,dynamic>{};
+      final status=(x['status']??'').toString();
+      final offerPhase=_offerPhaseStates.contains(status);
+      return Scaffold(
+        appBar:AppBar(title:Text(offerPhase?t('Ma demande'):t('Ma réservation')),actions:[IconButton(onPressed:refreshStatus,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
+        bottomNavigationBar:loaded?bottomActions(x):null,
+        body:Builder(builder:(context){
+          if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+          if(s.hasError)return VeyraErrorMessages.isOffline(s.error!)
+            ?VeyraOfflineBanner(onRetry:reload)
+            :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload);
+          final hasDriver=x['selected_driver_id']!=null;
+          final terminal=_terminalStates.contains(status);
+          final when=DateTime.tryParse((x['scheduled_at']??'').toString())?.toLocal();
+          final left=when?.difference(DateTime.now());
+          final contactOpen=_rideStates.contains(status)||(status=='CONFIRMED'&&left!=null&&left.inMinutes<=30);
+          final id=(x['id']??widget.bookingId).toString();
+          final ref='#'+(id.length>8?id.substring(0,8):id).toUpperCase();
+          final offers=(x['offer_count'] as num?)?.toInt()??0;
+          return RefreshIndicator(onRefresh:refreshStatus,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.fromLTRB(16,8,16,24),children:[
+            Row(children:[
+              Expanded(child:Align(alignment:Alignment.centerLeft,child:statusPill(x))),
+              const SizedBox(width:8),
+              Text(ref,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
             ]),
-          )),
-          if(x['customer_total_amount_minor']!=null)BookingFinancialSummary(booking:x,paymentLabel:paymentStatusLabel(x['payment_status']?.toString())),
-          if(bookingCanPayOnline(x))
-            FilledButton.icon(onPressed:()=>context.push('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:Text(t('Payer en ligne'))),
-          if({'CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))...[
-            OutlinedButton.icon(onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Chat Veyra'))),
-            OutlinedButton.icon(
-              onPressed:driverPhone==null||driverPhone.isEmpty?null:()=>launchUrl(Uri(scheme:'tel',path:driverPhone)),
-              icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler le chauffeur'))),
-          ],
-          if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))
-            FilledButton.icon(onPressed:()=>context.push('/live/'+widget.bookingId),icon:const Icon(Icons.map_outlined),label:Text(t('Suivre la course'))),
-          if(status=='DRIVER_ARRIVED')
-            Card(color:const Color(0xFF16A34A),child:Padding(padding:const EdgeInsets.all(16),child:Row(children:[
-              const Icon(Icons.directions_car,color:Colors.white,size:28),
-              const SizedBox(width:12),
-              Expanded(child:Text(t('Votre chauffeur est arrivé'),style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold,fontSize:16))),
-            ]))),
-          if(status=='CONFIRMED'||status=='DRIVER_EN_ROUTE'||status=='DRIVER_ARRIVED')...[
-            if(pin==null)
-              OutlinedButton(onPressed:loadPin,child:Text(t('Afficher le PIN')))
-            else...[
-              Text(t('Communiquez ce code au chauffeur uniquement lorsque vous êtes dans le véhicule.'),style:const TextStyle(fontSize:13,color:Colors.black54)),
-              const SizedBox(height:8),
-              VeyraPinDisplay(pin:pin!),
+            const SizedBox(height:12),
+            if(offerPhase)_Section(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              Text(t('Réception des offres jusqu’au')+' '+VeyraDateFormatter.dateTime(x['offer_window_ends_at']),style:const TextStyle(color:VeyraColors.textSecondary)),
+              if(offers>0&&x['best_offer_total_minor']!=null)...[const SizedBox(height:12),_BestPriceBanner(x['best_offer_total_minor'])],
+              const SizedBox(height:12),
+              FilledButton(onPressed:()=>context.push('/offers/'+widget.bookingId),child:Text(t('Voir les offres'))),
+            ])),
+            if(status=='CONFIRMED'&&when!=null&&left!=null)countdownCard(when,left),
+            if(_rideStates.contains(status))rideBanner(status),
+            if(hasDriver)driverCard(x),
+            if(hasDriver&&!terminal)contactBlock(contactOpen),
+            tripSection(x),
+            if(!offerPhase)priceSection(x),
+            if(bookingCanPayOnline(x))Padding(padding:const EdgeInsets.only(bottom:12),child:FilledButton.icon(onPressed:()=>context.push('/payment/'+widget.bookingId),icon:const Icon(Icons.credit_card),label:Text(t('Payer en ligne')))),
+            if(_pinStates.contains(status))pinSection(),
+            if(_pastStates.contains(status))...[
+              ratingSection(),
+              if(hasDriver)Padding(padding:const EdgeInsets.only(bottom:12),child:OutlinedButton.icon(onPressed:favoriteBusy?null:()=>toggleFavorite(x),icon:Icon(favorite?Icons.favorite:Icons.favorite_border,color:VeyraColors.pinRed),label:Text(favorite?t('Retirer des favoris'):t('Ajouter le chauffeur aux favoris')))),
             ],
-            TextButton(onPressed:(cancelling||loadingPreview)?null:confirmAndCancel,child:Text(cancelling?t('Annulation…'):loadingPreview?t('Calcul des frais…'):t('Annuler la réservation'))),
-          ],
-          if({'COMPLETED','CLOSED','CANCELLED','CANCELLED_BY_CLIENT','CANCELLED_BY_DRIVER','DRIVER_CANCELLED','CUSTOMER_NO_SHOW','EXPIRED','NO_OFFER','NO_DRIVER'}.contains(status))
-            OutlinedButton.icon(onPressed:()=>context.push('/addresses',extra:x),icon:const Icon(Icons.replay),label:Text(t('Réserver à nouveau'))),
-          if({'COMPLETED','CLOSED'}.contains(status))OutlinedButton.icon(onPressed:favoriteBusy?null:()=>toggleFavorite(x),icon:Icon(favorite?Icons.favorite:Icons.favorite_border),label:Text(favorite?t('Retirer des favoris'):t('Ajouter le chauffeur aux favoris'))),
-          if({'COMPLETED','CLOSED'}.contains(status))
-            Card(child:Padding(padding:const EdgeInsets.all(16),child:ratingSubmitted?Row(children:[Icon(Icons.check_circle,color:Colors.green),SizedBox(width:8),Text(t('Merci pour votre avis !'))]):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Noter le chauffeur'),style:const TextStyle(fontWeight:FontWeight.bold)),
-              const SizedBox(height:8),
-              Row(children:[for(int i=1;i<=5;i++)IconButton(
-                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
-                tooltip:AppLocale.code.value=='en'
-                  ?(i==1?'1 star':'$i stars')
-                  :(i==1?'1 étoile':'$i étoiles'),
-                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
-              )]),
-              FilledButton(onPressed:ratingSubmitting||ratingScore<1?null:submitRating,child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note'))),
-            ]))),
-          if(refreshError!=null)Text(refreshError!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
-          if(message!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(message!)),
-        ]));
-      },
-    ),
+            if(terminal)FilledButton.icon(onPressed:()=>context.push('/addresses',extra:x),icon:const Icon(Icons.replay),label:Text(t('Réserver à nouveau'))),
+            if(refreshError!=null)Padding(padding:const EdgeInsets.only(top:12),child:VeyraBanner(tone:VeyraTone.warning,text:refreshError!)),
+            if(message!=null)Padding(padding:const EdgeInsets.only(top:12),child:VeyraBanner(tone:VeyraTone.info,text:message!)),
+          ]));
+        }),
+      );
+    },
   );
 }
 

@@ -51,14 +51,31 @@ void main() {
         home: const OffersScreen(bookingId: 'booking-1')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('Alexandre'));
-    await tester.tap(find.text('Alexandre'));
+    // Board 05: the card opens the offer detail, never selects directly.
+    await tester.ensureVisible(find.text('Alexandre Martin'));
     await tester.pumpAndSettle();
-    expect(find.text('Choisir ce chauffeur ?'), findsOneWidget);
+    await tester.tap(find.text('Alexandre Martin'));
+    await tester.pumpAndSettle();
+    expect(find.text('Détail de l’offre'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Prix total à payer'), 200,
+        scrollable: find.byType(Scrollable).last);
+    expect(find.text('Prix total à payer'), findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(submissions, 0);
-    await tester.tap(find.text('Comparer encore'));
+    await tester.tap(find.text('Choisir ce chauffeur'));
     await tester.pumpAndSettle();
+    // Explicit confirmation: the button stays disabled until the terms
+    // are accepted, and nothing is submitted before.
+    expect(find.text('Confirmer la réservation'), findsWidgets);
+    final confirm = find.widgetWithText(FilledButton, 'Confirmer la réservation');
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+    expect(tester.takeException(), isNull);
+    expect(submissions, 0);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(OffersScreen), findsOneWidget);
     expect(submissions, 0);
     await tester.pumpWidget(const SizedBox.shrink());
     expect(tester.takeException(), isNull);

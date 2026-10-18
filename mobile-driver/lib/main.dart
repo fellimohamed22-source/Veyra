@@ -2209,7 +2209,6 @@ class _RideScreenState extends State<RideScreen>{
 
         final x=s.data??{};
         final status=(x['status']??'').toString();
-        final phone=x['customer_phone']?.toString();
         final paymentMethod=(x['payment_method']??'').toString();
         final pickupLat=(x['pickup_lat'] as num?)?.toDouble();
         final pickupLng=(x['pickup_lng'] as num?)?.toDouble();
@@ -2467,13 +2466,13 @@ class _RideScreenState extends State<RideScreen>{
                     label:Text(t('Naviguer vers la destination')),
                   ),
                 Row(children:[
-                  Expanded(child:OutlinedButton.icon(
-                    onPressed:phone==null||phone.isEmpty
-                      ?null
-                      :()=>launchUrl(Uri(scheme:'tel',path:phone)),
+                  // Calls go through a masked number only (DEC-06, CL-15):
+                  // the customer's phone is never sent to the driver app.
+                  Expanded(child:Tooltip(message:t('Appel par numéro masqué bientôt disponible'),child:OutlinedButton.icon(
+                    onPressed:null,
                     icon:const Icon(Icons.phone_outlined),
                     label:Text(t('Appeler')),
-                  )),
+                  ))),
                   const SizedBox(width:12),
                   Expanded(child:OutlinedButton.icon(
                     onPressed:()=>context.push('/chat/'+widget.bookingId),
