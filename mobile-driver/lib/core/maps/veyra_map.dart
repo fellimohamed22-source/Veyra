@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../widgets/veyra_ui.dart' show veyraMapTilesEnabled;
 import 'map_motion.dart';
 import 'route_geometry.dart';
 
@@ -230,7 +231,8 @@ class _VeyraMapState extends State<VeyraMap>
           },
         ),
         children:[
-          TileLayer(
+          // No network tiles under flutter test (same rule as veyra_ui).
+          if(veyraMapTilesEnabled)TileLayer(
             urlTemplate:_lightMap
               ?'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
               :'https://tile.openstreetmap.org/{z}/{x}/{y}.png',

@@ -2511,7 +2511,7 @@ class _RideScreenState extends State<RideScreen>{
   }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Mission planifiée'))),
+    appBar:AppBar(title:Text(t('Détail de la course'))),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
@@ -2562,93 +2562,137 @@ class _RideScreenState extends State<RideScreen>{
             ?240.0
             :220.0;
 
+        final (pill,pillFg,pillBg)=switch(status){
+          'CONFIRMED'=>(t('Confirmée'),VeyraColors.success,VeyraColors.successBackground),
+          'DRIVER_EN_ROUTE'=>(t('En route'),VeyraColors.accent,VeyraColors.infoBackground),
+          'DRIVER_ARRIVED'=>(t('Arrivé'),VeyraColors.accent,VeyraColors.infoBackground),
+          'IN_PROGRESS'=>(t('En cours'),VeyraColors.success,VeyraColors.successBackground),
+          'COMPLETED'||'CLOSED'=>(t('Terminée'),VeyraColors.neutral,VeyraColors.neutralBackground),
+          _=>(VeyraStatusLabels.bookingStatus(status),VeyraColors.danger,VeyraColors.dangerBackground),
+        };
+        final (pTitle,pSub)=_RequestScreenState.splitPlace((x['pickup_address']??'').toString());
+        final (dTitle,dSub)=_RequestScreenState.splitPlace((x['dropoff_address']??'').toString());
+        final notes=(x['customer_notes']??'').toString();
+        final customer=(x['customer_name']??'').toString().trim();
+        final vehicle=[x['vehicle_brand'],x['vehicle_model']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' ');
+        // Board 12 P8: « 15 min · 6 km · Arrivée à 15:45 » for the leg in progress.
+        final legSeconds=status=='DRIVER_EN_ROUTE'||status=='IN_PROGRESS'?route.durationSeconds:null;
+        final legMeters=status=='DRIVER_EN_ROUTE'||status=='IN_PROGRESS'?route.distanceMeters:null;
+        final eta=legSeconds==null?null:DateTime.now().add(Duration(seconds:legSeconds.round()));
+
+        Widget section({String? title,required Widget child})=>DriverCard(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          if(title!=null)...[Text(title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),const SizedBox(height:10)],
+          child,
+        ]));
+        Widget money(String label,dynamic minor,{bool strong=false})=>Padding(
+          padding:const EdgeInsets.symmetric(vertical:3),
+          child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+            Flexible(child:Text(label,style:TextStyle(color:strong?VeyraColors.textPrimary:VeyraColors.textSecondary,fontWeight:strong?FontWeight.w700:FontWeight.w500))),
+            const SizedBox(width:8),
+            Text(VeyraMoneyFormatter.fromMinor(minor),style:TextStyle(fontWeight:strong?FontWeight.w800:FontWeight.w600)),
+          ]),
+        );
+
         return ListView(
           padding:EdgeInsets.zero,
           children:[
-            SizedBox(
-              height:mapHeight,
-              child:VeyraMap(
-                pickup:pickup,
-                dropoff:dropoff,
-                driver:driver,
-                driverHeading:position?.heading,
-                route:route,
-                secondaryRoute:tripRoute,
-                userAgentPackageName:'com.veyra.driver',
-              ),
-            ),
-            Padding(
-              padding:const EdgeInsets.fromLTRB(20,18,20,28),
-              child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-                Row(children:[
-                  Expanded(child:Text(
-                    VeyraStatusLabels.bookingStatus(status),
-                    style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold),
-                  )),
-                  VeyraStatusBadge(status:status),
-                ]),
-                const SizedBox(height:10),
-                Text(
-                  (x['pickup_address']??'Départ').toString()+
-                    ' → '+
-                    (x['dropoff_address']??'Destination').toString(),
-                  style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600),
+            Stack(children:[
+              SizedBox(
+                height:mapHeight,
+                child:VeyraMap(
+                  pickup:pickup,
+                  dropoff:dropoff,
+                  driver:driver,
+                  driverHeading:position?.heading,
+                  route:route,
+                  secondaryRoute:tripRoute,
+                  userAgentPackageName:'com.veyra.driver',
                 ),
-                Text(t('Prise en charge prévue')+' : '+VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
-                if((x['customer_notes']??'').toString().isNotEmpty)Text(t('Remarques')+' : '+x['customer_notes'].toString()),
-                if(x['plate_number']!=null)Text(t('Véhicule approuvé')+' : '+[x['vehicle_brand'],x['vehicle_model'],x['vehicle_color'],x['plate_number']].where((value)=>value!=null&&value.toString().isNotEmpty).join(' • ')),
-                if(status=='DRIVER_ARRIVED')Text(t('Vous êtes arrivé au point de prise en charge. Contactez le client avant toute déclaration d’absence.')),
-                const SizedBox(height:12),
-                Row(children:[
-                  Expanded(child:_DriverEtaCard(
-                    icon:Icons.person_pin_circle_rounded,
-                    label:status=='IN_PROGRESS'?t('Client pris en charge'):t('Vers le client'),
-                    value:status=='DRIVER_ARRIVED'||status=='IN_PROGRESS'
-                      ?t('Arrivé')
-                      :(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds)),
-                    detail:status=='DRIVER_EN_ROUTE'&&route.distanceMeters!=null
-                      ?VeyraMoneyFormatter.distance(route.distanceMeters)
-                      :null,
-                    accent:const Color(0xFF2563EB),
-                  )),
-                  const SizedBox(width:10),
-                  Expanded(child:_DriverEtaCard(
-                    icon:Icons.flag_rounded,
-                    label:t('Client → destination'),
-                    value:status=='IN_PROGRESS'
-                      ?(route.durationSeconds==null?'—':VeyraMoneyFormatter.duration(route.durationSeconds))
-                      :(tripRoute.durationSeconds==null?'—':VeyraMoneyFormatter.duration(tripRoute.durationSeconds)),
-                    detail:status=='IN_PROGRESS'
-                      ?(route.distanceMeters==null?null:VeyraMoneyFormatter.distance(route.distanceMeters))
-                      :(tripRoute.distanceMeters==null?null:VeyraMoneyFormatter.distance(tripRoute.distanceMeters)),
-                    accent:const Color(0xFF111827),
-                  )),
-                ]),
-                if(x['customer_name']!=null)
-                  Padding(
-                    padding:const EdgeInsets.only(top:8),
-                    child:Text(t('Client : ')+x['customer_name'].toString()),
-                  ),
-                if(paymentMethod=='CASH')Card(child:ListTile(
-                  leading:const Icon(Icons.payments_outlined),
-                  title:Text(t('Montant à encaisser au client : ')+VeyraMoneyFormatter.fromMinor(x['customer_total_amount_minor'])),
-                  subtitle:Text(
-                    t('Votre montant net : ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])+
-                    ' • '+t('Commission Veyra : ')+VeyraMoneyFormatter.fromMinor(x['platform_commission_amount_minor'])+
-                    ' '+t('(dette CASH après la course)'),
-                  ),
+              ),
+              Positioned(left:16,top:12,child:DriverPill(pill,fg:pillFg,bg:pillBg,icon:active?Icons.circle:null)),
+            ]),
+            Padding(
+              padding:const EdgeInsets.fromLTRB(16,14,16,28),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                if(legSeconds!=null)section(child:Row(children:[
+                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Text(VeyraMoneyFormatter.duration(legSeconds)+(legMeters==null?'':' · '+VeyraMoneyFormatter.distance(legMeters)),style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
+                    Text(
+                      (status=='IN_PROGRESS'?t('Arrivée à destination à'):t('Arrivée chez le client à'))+' ${eta!.hour.toString().padLeft(2,'0')}:${eta.minute.toString().padLeft(2,'0')}',
+                      style:const TextStyle(color:VeyraColors.textSecondary),
+                    ),
+                  ])),
+                  Icon(status=='IN_PROGRESS'?Icons.flag_rounded:Icons.person_pin_circle_rounded,color:VeyraColors.accent,size:30),
+                ])),
+                if(status=='DRIVER_ARRIVED')Padding(padding:const EdgeInsets.only(bottom:14),child:VeyraBanner(
+                  tone:VeyraTone.success,
+                  title:t('Vous êtes arrivé'),
+                  text:t('Vous êtes arrivé au point de prise en charge. Contactez le client avant toute déclaration d’absence.'),
                 )),
-                if(paymentMethod=='ONLINE')Card(child:ListTile(
-                  leading:const Icon(Icons.credit_card),
-                  title:Text(t('Paiement en ligne • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
-                  subtitle:Text(x['payment_status']=='CAPTURED'?t('Payé en ligne'):x['payment_status']=='REFUNDED'?t('Remboursé'):t('Paiement non confirmé. Il doit être réglé avant le démarrage.')),
-                )),
-                if(paymentMethod=='PARTNER_INVOICE')Card(child:ListTile(
-                  leading:const Icon(Icons.receipt_long),
-                  title:Text(t('Facturation partenaire • Net chauffeur ')+VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor'])),
-                  subtitle:Text(t('Le partenaire est facturé par Veyra selon son contrat.')),
-                )),
+                // Client card (board 12 P7) with masked call and chat.
+                section(child:Row(children:[
+                  CircleAvatar(radius:24,backgroundColor:VeyraColors.surfaceMuted,child:Text(customer.isEmpty?'?':customer.substring(0,1).toUpperCase(),style:const TextStyle(fontWeight:FontWeight.w800,color:VeyraColors.primary))),
+                  const SizedBox(width:12),
+                  Expanded(child:Text(customer.isEmpty?t('Client'):customer,style:const TextStyle(fontWeight:FontWeight.w700,fontSize:16))),
+                  // Calls go through a masked number only (DEC-06, CL-15):
+                  // the customer's phone is never sent to the driver app.
+                  IconButton.outlined(tooltip:t('Appel par numéro masqué bientôt disponible'),onPressed:null,icon:const Icon(Icons.phone_outlined)),
+                  const SizedBox(width:6),
+                  IconButton.outlined(tooltip:t('Message'),onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline)),
+                ])),
+                section(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Row(children:[
+                    const Icon(Icons.calendar_today_outlined,size:18),
+                    const SizedBox(width:8),
+                    Expanded(child:Text(driverWhen(x['scheduled_at']))),
+                    if(status=='CONFIRMED')DriverPill(driverStartsIn(x['scheduled_at']),fg:VeyraColors.accent,bg:VeyraColors.infoBackground),
+                  ]),
+                  const SizedBox(height:12),
+                  VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+                  const SizedBox(height:10),
+                  DriverPaxBags(x['passenger_count'],x['baggage_count']),
+                  if(vehicle.isNotEmpty||x['plate_number']!=null)...[
+                    const SizedBox(height:10),
+                    Row(children:[
+                      const VeyraVehicleThumb(width:64),
+                      const SizedBox(width:10),
+                      Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Text(vehicle,style:const TextStyle(fontWeight:FontWeight.w600)),
+                        Text([x['category_name'],x['vehicle_color'],x['plate_number']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' · '),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+                      ])),
+                    ]),
+                  ],
+                  if(notes.isNotEmpty)...[
+                    const SizedBox(height:12),
+                    Container(
+                      padding:const EdgeInsets.all(12),
+                      decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+                      child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        const Icon(Icons.chat_outlined,size:18,color:VeyraColors.textSecondary),
+                        const SizedBox(width:10),
+                        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                          Text(t('Commentaire du client'),style:const TextStyle(fontWeight:FontWeight.w700,fontSize:13)),
+                          Text(notes,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+                        ])),
+                      ]),
+                    ),
+                  ],
+                ])),
+                if(paymentMethod=='CASH')section(title:t('Paiement en espèces'),child:Column(children:[
+                  money(t('Montant à encaisser au client'),x['customer_total_amount_minor'],strong:true),
+                  money(t('Votre montant net'),x['driver_net_amount_minor']),
+                  money(t('Commission Veyra (dette CASH après la course)'),x['platform_commission_amount_minor']),
+                ])),
+                if(paymentMethod=='ONLINE')section(title:t('Paiement en ligne'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  money(t('Votre montant net'),x['driver_net_amount_minor'],strong:true),
+                  const SizedBox(height:4),
+                  Text(x['payment_status']=='CAPTURED'?t('Payé en ligne'):x['payment_status']=='REFUNDED'?t('Remboursé'):t('Paiement non confirmé. Il doit être réglé avant le démarrage.'),
+                    style:TextStyle(color:x['payment_status']=='CAPTURED'?VeyraColors.success:VeyraColors.warning,fontWeight:FontWeight.w600)),
+                ])),
+                if(paymentMethod=='PARTNER_INVOICE')section(title:t('Facturation partenaire'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  money(t('Votre montant net'),x['driver_net_amount_minor'],strong:true),
+                  Text(t('Le partenaire est facturé par Veyra selon son contrat.'),style:const TextStyle(color:VeyraColors.textSecondary)),
+                ])),
                 if(error!=null)Padding(
                   padding:const EdgeInsets.symmetric(vertical:10),
                   child:VeyraErrorView(
@@ -2674,6 +2718,7 @@ class _RideScreenState extends State<RideScreen>{
                     label:Text(t('Je suis en route')),
                   ),
                   TextButton(
+                    style:TextButton.styleFrom(foregroundColor:VeyraColors.danger),
                     onPressed:busy?null:_cancelAssigned,
                     child:Text(t('Annuler ma prise en charge')),
                   ),
@@ -2684,20 +2729,20 @@ class _RideScreenState extends State<RideScreen>{
                     icon:const Icon(Icons.flag_outlined),
                     label:Text(t('Je suis arrivé')),
                   ),
-                if(status=='DRIVER_ARRIVED')...[
-                  const SizedBox(height:8),
-                  Text(
-                    t('Code PIN du client'),
-                    style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16),
-                  ),
+                if(status=='DRIVER_ARRIVED')section(title:t('Code PIN du client'),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                  Text(t('Demandez le code à 4 chiffres au client une fois à bord.'),style:const TextStyle(color:VeyraColors.textSecondary)),
                   const SizedBox(height:8),
                   TextField(
+                    key:const ValueKey('ride-pin'),
                     controller:pin,
                     maxLength:4,
                     keyboardType:TextInputType.number,
+                    textAlign:TextAlign.center,
+                    style:const TextStyle(fontSize:24,fontWeight:FontWeight.w800,letterSpacing:12),
                     onChanged:(_)=>setState((){}),
-                    decoration:InputDecoration(labelText:t('PIN client (4 chiffres)')),
+                    decoration:InputDecoration(hintText:'••••',counterText:'',labelText:t('PIN client (4 chiffres)')),
                   ),
+                  const SizedBox(height:8),
                   FilledButton(
                     onPressed:busy||pin.text.length!=4
                       ?null
@@ -2705,13 +2750,16 @@ class _RideScreenState extends State<RideScreen>{
                     child:Text(t('Démarrer la course')),
                   ),
                   TextButton(
+                    style:TextButton.styleFrom(foregroundColor:VeyraColors.danger),
                     onPressed:busy||noShowAvailableAt(x)==null||DateTime.now().isBefore(noShowAvailableAt(x)!)?null:confirmNoShow,
                     child:Text(t('Déclarer le client absent')),
                   ),
-                  Text(noShowAvailableAt(x)==null?t('Heure d’arrivée indisponible. Actualisez la course.'):t('Déclaration possible à partir de')+' '+VeyraDateFormatter.dateTime(noShowAvailableAt(x)!.toIso8601String())),
-                ],
+                  Text(noShowAvailableAt(x)==null?t('Heure d’arrivée indisponible. Actualisez la course.'):t('Déclaration possible à partir de')+' '+VeyraDateFormatter.dateTime(noShowAvailableAt(x)!.toIso8601String()),
+                    textAlign:TextAlign.center,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
+                ])),
                 if(status=='IN_PROGRESS')
                   FilledButton(
+                    style:FilledButton.styleFrom(backgroundColor:VeyraColors.danger),
                     onPressed:busy?null:()async{
                       final confirmed=await showDialog<bool>(
                         context:context,
@@ -2736,34 +2784,31 @@ class _RideScreenState extends State<RideScreen>{
                     },
                     child:Text(t('Terminer la course')),
                   ),
-                if({'COMPLETED','CLOSED'}.contains(status))
-                  Card(child:Padding(
-                    padding:const EdgeInsets.all(16),
-                    child:ratingSubmitted
-                      ?Row(children:[
-                          const Icon(Icons.check_circle,color:Colors.green),
-                          const SizedBox(width:8),
-                          Text(t('Merci pour votre avis !')),
-                        ])
-                      :Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                          Text(t('Noter le client'),style:const TextStyle(fontWeight:FontWeight.bold)),
-                          const SizedBox(height:8),
-                          Row(children:[
-                            for(int i=1;i<=5;i++)
-                              IconButton(
-                                icon:Icon(i<=ratingScore?Icons.star:Icons.star_border,color:Colors.amber),
-                                tooltip:AppLocale.code.value=='en'
-                                  ?(i==1?'1 star':'$i stars')
-                                  :(i==1?'1 étoile':'$i étoiles'),
-                                onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
-                              ),
-                          ]),
-                          FilledButton(
-                            onPressed:ratingSubmitting||ratingScore<1?null:submitRating,
-                            child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note')),
-                          ),
+                if({'COMPLETED','CLOSED'}.contains(status))section(
+                  title:ratingSubmitted?null:t('Noter le client'),
+                  child:ratingSubmitted
+                    ?Row(children:[
+                        const Icon(Icons.check_circle,color:VeyraColors.success),
+                        const SizedBox(width:8),
+                        Expanded(child:Text(t('Merci pour votre avis !'))),
+                      ])
+                    :Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Wrap(children:[
+                          for(int i=1;i<=5;i++)
+                            IconButton(
+                              icon:Icon(i<=ratingScore?Icons.star_rounded:Icons.star_border_rounded,color:const Color(0xFFF5A623),size:32),
+                              tooltip:AppLocale.code.value=='en'
+                                ?(i==1?'1 star':'$i stars')
+                                :(i==1?'1 étoile':'$i étoiles'),
+                              onPressed:ratingSubmitting?null:()=>setState(()=>ratingScore=i),
+                            ),
                         ]),
-                  )),
+                        FilledButton(
+                          onPressed:ratingSubmitting||ratingScore<1?null:submitRating,
+                          child:Text(ratingSubmitting?t('Envoi…'):t('Envoyer la note')),
+                        ),
+                      ]),
+                ),
                 const SizedBox(height:12),
                 if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED'}.contains(status)&&pickupLat!=null&&pickupLng!=null)
                   OutlinedButton.icon(
@@ -2783,21 +2828,6 @@ class _RideScreenState extends State<RideScreen>{
                     icon:const Icon(Icons.navigation_outlined),
                     label:Text(t('Naviguer vers la destination')),
                   ),
-                Row(children:[
-                  // Calls go through a masked number only (DEC-06, CL-15):
-                  // the customer's phone is never sent to the driver app.
-                  Expanded(child:Tooltip(message:t('Appel par numéro masqué bientôt disponible'),child:OutlinedButton.icon(
-                    onPressed:null,
-                    icon:const Icon(Icons.phone_outlined),
-                    label:Text(t('Appeler')),
-                  ))),
-                  const SizedBox(width:12),
-                  Expanded(child:OutlinedButton.icon(
-                    onPressed:()=>context.push('/chat/'+widget.bookingId),
-                    icon:const Icon(Icons.chat_bubble_outline),
-                    label:Text(t('Message')),
-                  )),
-                ]),
               ]),
             ),
           ],
@@ -2806,8 +2836,6 @@ class _RideScreenState extends State<RideScreen>{
     ),
   );
 }
-
-
 class WalletScreen extends StatefulWidget{
   const WalletScreen({super.key});
   @override State<WalletScreen> createState()=>_WalletScreenState();
@@ -3090,43 +3118,6 @@ class AppShell extends StatelessWidget{
 }
 
 
-class _DriverEtaCard extends StatelessWidget{
-  final IconData icon;
-  final String label;
-  final String value;
-  final String? detail;
-  final Color accent;
-
-  const _DriverEtaCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.detail,
-    required this.accent,
-  });
-
-  @override Widget build(BuildContext context)=>Container(
-    padding:const EdgeInsets.fromLTRB(12,12,12,11),
-    decoration:BoxDecoration(
-      color:accent.withValues(alpha:.07),
-      borderRadius:BorderRadius.circular(18),
-      border:Border.all(color:accent.withValues(alpha:.12)),
-    ),
-    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Icon(icon,color:accent,size:20),
-      const SizedBox(height:8),
-      Text(label,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(
-        color:Color(0xFF6B7280),fontSize:11,fontWeight:FontWeight.w600,height:1.15,
-      )),
-      const SizedBox(height:4),
-      Text(value,style:TextStyle(color:accent,fontSize:18,fontWeight:FontWeight.w900)),
-      if(detail!=null)...[
-        const SizedBox(height:2),
-        Text(detail!,style:const TextStyle(color:Color(0xFF6B7280),fontSize:11)),
-      ],
-    ]),
-  );
-}
 
 
 class DriverChatScreen extends StatefulWidget{
