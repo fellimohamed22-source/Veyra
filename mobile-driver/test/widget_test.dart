@@ -1,1 +1,17 @@
-import 'package:flutter_test/flutter_test.dart';import 'package:veyra_driver/main.dart';void main(){testWidgets('login',(t)async{await t.pumpWidget(const DriverApp());await t.pumpAndSettle();expect(find.text('Veyra'),findsOneWidget);expect(find.text('Se connecter'),findsOneWidget);});}
+import 'package:flutter_test/flutter_test.dart';
+import 'package:veyra_driver/main.dart';
+
+void main(){
+  testWidgets('driver welcome (board 08 B1)',(t)async{
+    await t.pumpWidget(const DriverApp());
+    await t.pumpAndSettle();
+    expect(find.text('VEYRA'),findsOneWidget);
+    expect(find.text('Rejoignez VEYRA'),findsOneWidget);
+    expect(find.text('Créer un compte chauffeur'),findsOneWidget);
+    await t.tap(find.text('Se connecter'));
+    await t.pumpAndSettle();
+    // The sign-in form keeps e-mail and Firebase phone sign-in.
+    expect(find.text('Mot de passe'),findsOneWidget);
+    expect(find.text('Continuer avec le téléphone'),findsOneWidget);
+  });
+}

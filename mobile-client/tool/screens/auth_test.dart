@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,7 @@ import 'package:veyra_client/main.dart';
 import 'package:veyra_client/app/theme.dart';
 import 'package:veyra_client/core/widgets/auth_ui.dart';
 import 'package:veyra_client/core/widgets/phone_verification_screen.dart';
+import 'package:veyra_client/core/widgets/welcome_hero.dart';
 import 'harness.dart';
 
 Widget _app(Widget home) => MaterialApp(theme: veyraTheme(), home: home, debugShowCheckedModeBanner: false);
@@ -34,6 +36,16 @@ void main() {
   testWidgets('welcome', (tester) async {
     _signedOut();
     await shot(tester, _app(const LoginScreen()), 'auth_01_welcome');
+  });
+  // Runs only when the onboarding photo is present (originals pending).
+  testWidgets('welcome with photo', (tester) async {
+    if (!File(VeyraAssets.welcomeClient).existsSync()) return;
+    _signedOut();
+    await shot(tester, _app(const LoginScreen()), 'auth_01_welcome_photo', before: (t) async {
+      // Image decoding is real I/O: let it finish outside the fake clock.
+      await t.runAsync(() => Future<void>.delayed(const Duration(seconds: 1)));
+      await _settle(t);
+    });
   });
   testWidgets('login form', (tester) async {
     _signedOut();

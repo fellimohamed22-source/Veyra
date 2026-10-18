@@ -60,3 +60,19 @@ Moteur de commission V4 avec portées client, catégorie et profil, et simulatio
 | DEC-16 | Index corrigé des maquettes **validé** |
 | DEC-18 | Pas de contre-offre ; prix conseillé via une grille en base (fournie par le propriétaire) ; validité liée à la fenêtre d'offres |
 | DEC-21 | Capacité bagages non fixée pour l'instant (évolution ultérieure) |
+
+## Audit des images du pack « TOTAL » (18/10/2026)
+
+Hiérarchie appliquée : maquette A/B/C du propriétaire (identique à la planche 08) > 17 planches ; la planche `04_PROPOSITIONS_NON_VALIDEES` (emblème V doré, splash, icône) n'est **pas** utilisée. Palette des écrans d'inscription : bleu nuit `#021C38`, blanc, bleu vif de progression `#0C6CFD`, bleu clair de sélection `#E8F0FE` (tokens `VeyraColors`). Logo d'interface : mot-symbole VEYRA bleu nuit (texte, police Plus Jakarta Sans).
+
+| Écran | Référence | Asset fourni | Résolution native | Destination | Cadrage | Qualité | Statut |
+|---|---|---|---|---|---|---|---|
+| Client A1 Bienvenue | 08 A1 | `login_client_paris.png` | 232 × 156 | `mobile-client/assets/images/onboarding/welcome_client.jpg` | portrait 9:16, tour Eiffel à droite, ciel en haut | **inutilisable** : barre d'état « 9:41 », logo, slogan et pilules de langue incrustés ; ~5× trop petit | original requis |
+| Chauffeur B1 Bienvenue | 08 B1 | `login_chauffeur_paris.png` | 155 × 145 | `mobile-driver/assets/images/onboarding/welcome_driver.jpg` | portrait 9:16, chauffeur à droite, bas sombre | **inutilisable** : barre d'état, logo, « Rejoignez VEYRA / Drive with VEYRA » incrustés | original requis |
+| Logos | 08 A1/B1 | `logo_veyra_bleu.png`, `logo_veyra_chauffeur.png` | 90 × 30, 64 × 22 | — | — | trop petits, fond non transparent | mot-symbole rendu en texte ; SVG original souhaité |
+| Véhicules (offres, réservation) | 05, 10 | `voiture_berline_noire.png` | 127 × 60 | — | — | fond blanc avec bandeau d'UI, marque visible | **non utilisé** : ne pas présenter un visuel générique comme le véhicule du chauffeur |
+| Choix de catégorie (parcours de réservation) | 09 | `voiture_*` | ≤ 138 px | — | — | une seule berline pour toutes les catégories | non utilisé (catégorie et angle non respectés) |
+
+Intégration livrée : emplacement photo prêt dans les deux apps (`VeyraWelcomeHero`, chemins centralisés `VeyraAssets`, `BoxFit.cover` + point focal, texte bleu nuit sur photo comme la maquette, fond marine tant que la photo manque, aucune substitution silencieuse). Déposer les originaux aux chemins ci-dessus suffit ; exigences dans `assets/images/onboarding/README.md`.
+
+À fournir par le propriétaire : photos originales 1080 × 1920 min. sans texte ni UI (client, chauffeur), droits commerciaux (photo, modèles, marque Mercedes visible), logo vectoriel, master d'icône 1024 × 1024 si une nouvelle icône est souhaitée, et décision sur le bouton « Continuer avec Apple » (non implémenté).

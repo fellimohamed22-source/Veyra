@@ -31,6 +31,7 @@ import 'core/formatters/status_labels.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/signup_consents.dart';
 import 'core/widgets/auth_ui.dart';
+import 'core/widgets/welcome_hero.dart';
 import 'core/widgets/saved_cards_screen.dart';
 import 'core/widgets/phone_verification_screen.dart';
 import 'core/widgets/veyra_ui.dart';
@@ -617,27 +618,24 @@ class _LoginScreenState extends State<LoginScreen>{
   @override Widget build(BuildContext context)=>Scaffold(
     backgroundColor:VeyraColors.primary,
     body:Column(children:[
-      // Navy hero (board 08 A1): wordmark, tagline, language choice.
-      Expanded(child:Container(
-        width:double.infinity,
-        decoration:const BoxDecoration(gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[Color(0xFF0A2E57),VeyraColors.primary])),
-        child:SafeArea(bottom:false,child:Padding(
-          padding:const EdgeInsets.symmetric(horizontal:24),
-          child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
-            const VeyraWordmark(size:44,color:Colors.white),
-            const SizedBox(height:14),
-            Text(t('Voyagez en toute confiance'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w600)),
-            const SizedBox(height:22),
-            Wrap(spacing:10,runSpacing:10,alignment:WrapAlignment.center,children:[
-              languagePill('fr','🇫🇷','Français'),
-              languagePill('en','🇬🇧','English'),
-            ]),
+      // Photo hero (board 08 A1): wordmark, tagline, language choice. It
+      // runs 28 px under the sheet so the rounded corners sit on the photo.
+      Expanded(child:Stack(clipBehavior:Clip.none,children:[
+        Positioned(left:0,right:0,top:0,bottom:-28,child:VeyraWelcomeHero(
+          asset:VeyraAssets.welcomeClient,
+          title:t('Voyagez en toute confiance'),
+          focal:Alignment.centerRight,
+          languages:(_)=>Wrap(spacing:10,runSpacing:10,alignment:WrapAlignment.center,children:[
+            languagePill('fr','🇫🇷','Français'),
+            languagePill('en','🇬🇧','English'),
           ]),
         )),
-      )),
+      ])),
       Container(
         width:double.infinity,
         decoration:const BoxDecoration(color:Colors.white,borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        // The sheet never takes the whole screen; its content scrolls.
+        constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*.72),
         child:SafeArea(top:false,child:SingleChildScrollView(
           padding:const EdgeInsets.fromLTRB(24,24,24,16),
           child:AutofillGroup(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:showForm?loginForm():welcomeActions())),

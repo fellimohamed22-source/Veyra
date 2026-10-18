@@ -22,6 +22,8 @@ dev_dependencies:
   flutter_test: {sdk: flutter}
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/onboarding/
   # Police des maquettes (DEC-12), licence SIL OFL 1.1 : assets/fonts/OFL.txt
   fonts:
     - family: PlusJakartaSans

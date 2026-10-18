@@ -27,6 +27,7 @@ import 'core/formatters/status_labels.dart';
 import 'core/formatters/date_formatter.dart';
 import 'core/formatters/money_formatter.dart';
 import 'core/widgets/veyra_button.dart';
+import 'core/widgets/welcome_hero.dart';
 import 'core/widgets/signup_consents.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
@@ -549,80 +550,132 @@ class _LoginScreenState extends State<LoginScreen>{
   }
 
 
+  /// Board 08 B1 shows the welcome actions; « Se connecter » opens the
+  /// sign-in form (e-mail, phone) on the same screen.
+  bool showForm=false;
+
+  Widget languagePill(String code,String flag,String label)=>ValueListenableBuilder<String>(
+    valueListenable:AppLocale.code,
+    builder:(context,current,_){
+      final on=current==code;
+      return Material(
+        color:on?Colors.white:Colors.white.withValues(alpha:.14),
+        borderRadius:BorderRadius.circular(VeyraRadius.pill),
+        child:InkWell(
+          borderRadius:BorderRadius.circular(VeyraRadius.pill),
+          onTap:()=>AppLocale.set(code),
+          child:Padding(
+            padding:const EdgeInsets.symmetric(horizontal:14,vertical:8),
+            child:Row(mainAxisSize:MainAxisSize.min,children:[
+              Text(flag,style:const TextStyle(fontSize:16)),
+              const SizedBox(width:6),
+              Text(label,style:TextStyle(fontWeight:FontWeight.w700,color:on?VeyraColors.primary:Colors.white)),
+            ]),
+          ),
+        ),
+      );
+    },
+  );
+
+  Widget socialButton(String label,Widget icon,VoidCallback? onPressed)=>OutlinedButton(
+    onPressed:onPressed,
+    style:OutlinedButton.styleFrom(foregroundColor:VeyraColors.textPrimary,minimumSize:const Size.fromHeight(52)),
+    child:Row(children:[icon,const SizedBox(width:12),Expanded(child:Text(label,textAlign:TextAlign.center)),const SizedBox(width:28)]),
+  );
+
+  Widget orDivider()=>Row(children:[
+    const Expanded(child:Divider()),
+    Padding(padding:const EdgeInsets.symmetric(horizontal:12),child:Text(t('OU'),style:const TextStyle(color:VeyraColors.textSecondary,fontWeight:FontWeight.w600))),
+    const Expanded(child:Divider()),
+  ]);
+
+  List<Widget> sessionState()=>[
+    if(startupChecking)Padding(padding:const EdgeInsets.only(bottom:12),child:Row(children:[
+      const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)),
+      const SizedBox(width:12),
+      Expanded(child:Text(t('Restauration de votre session…'),style:const TextStyle(color:VeyraColors.textSecondary))),
+    ])),
+    if(startupRetryAvailable)Card(
+      color:VeyraColors.warningBackground,
+      margin:const EdgeInsets.only(bottom:12),
+      child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text(t('Connexion impossible'),style:const TextStyle(fontWeight:FontWeight.bold)),
+        const SizedBox(height:4),
+        Text(t('Votre session est conservée.'),style:const TextStyle(color:VeyraColors.textSecondary)),
+        const SizedBox(height:12),
+        OutlinedButton(onPressed:_restoreSession,child:Text(t('Réessayer'))),
+      ])),
+    ),
+  ];
+
+  List<Widget> welcomeActions()=>[
+    ...sessionState(),
+    FilledButton(onPressed:loading?null:()=>context.push('/register'),child:Text(t('Créer un compte chauffeur'))),
+    const SizedBox(height:12),
+    FilledButton(
+      style:FilledButton.styleFrom(backgroundColor:VeyraColors.infoBackground,foregroundColor:VeyraColors.primary),
+      onPressed:loading?null:()=>setState(()=>showForm=true),
+      child:Text(t('Se connecter')),
+    ),
+    const SizedBox(height:16),
+    orDivider(),
+    const SizedBox(height:16),
+    socialButton(t('Continuer avec Google'),const Text('G',style:TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:Color(0xFF4285F4))),loading?null:_googleLogin),
+  ];
+
+  List<Widget> loginForm()=>[
+    Row(children:[
+      IconButton(tooltip:t('Retour'),onPressed:()=>setState((){showForm=false;error=null;offline=false;}),icon:const Icon(Icons.chevron_left,size:30)),
+      Text(t('Se connecter'),style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
+    ]),
+    const SizedBox(height:8),
+    ...sessionState(),
+    Text(t('E-mail'),style:const TextStyle(fontWeight:FontWeight.w600)),
+    const SizedBox(height:6),
+    TextField(controller:email,keyboardType:TextInputType.emailAddress,autofillHints:const [AutofillHints.email],decoration:const InputDecoration(hintText:'nom@exemple.fr')),
+    const SizedBox(height:14),
+    Text(t('Mot de passe'),style:const TextStyle(fontWeight:FontWeight.w600)),
+    const SizedBox(height:6),
+    TextField(controller:password,obscureText:true,autofillHints:const [AutofillHints.password]),
+    Align(alignment:Alignment.centerRight,child:TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?')))),
+    if(offline)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraOfflineBanner(onRetry:submit)),
+    if(error!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:Text(error!,style:const TextStyle(color:VeyraColors.danger))),
+    VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
+    const SizedBox(height:16),
+    orDivider(),
+    const SizedBox(height:16),
+    // Firebase phone sign-in (DEC-07) stays available for drivers.
+    socialButton(t('Continuer avec le téléphone'),const Icon(Icons.phone_android_rounded),loading?null:_phoneLogin),
+  ];
+
   @override Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:const Color(0xFFF2F6FB),
-    body:SafeArea(child:Column(children:[
+    backgroundColor:VeyraColors.primary,
+    body:Column(children:[
+      // Photo hero (board 08 B1): wordmark, « Rejoignez VEYRA », languages.
+      Expanded(child:Stack(clipBehavior:Clip.none,children:[
+        Positioned(left:0,right:0,top:0,bottom:-28,child:VeyraWelcomeHero(
+          asset:VeyraAssets.welcomeDriver,
+          title:t('Rejoignez VEYRA'),
+          titleAtBottom:true,
+          focal:Alignment.centerRight,
+          languages:(_)=>Wrap(spacing:10,runSpacing:10,alignment:WrapAlignment.center,children:[
+            languagePill('fr','🇫🇷','Français'),
+            languagePill('en','🇬🇧','English'),
+          ]),
+        )),
+      ])),
       Container(
         width:double.infinity,
-        padding:const EdgeInsets.fromLTRB(24,32,24,40),
-        decoration:const BoxDecoration(
-          gradient:LinearGradient(
-            begin:Alignment.topCenter,end:Alignment.bottomCenter,
-            colors:[Color(0xFF123A66),Color(0xFF1565C0)],
-          ),
-        ),
-        child:Column(children:[
-          Align(alignment:Alignment.topRight,child:LanguageSwitch(style:TextButton.styleFrom(foregroundColor:Colors.white))),
-          const Icon(Icons.location_on,color:Colors.white,size:40),
-          const SizedBox(height:8),
-          const Text('Veyra',style:TextStyle(color:Colors.white,fontSize:32,fontWeight:FontWeight.bold)),
-          const SizedBox(height:4),
-          Text(t('Espace Chauffeur'),style:const TextStyle(color:Colors.white70,fontSize:14)),
-        ]),
+        decoration:const BoxDecoration(color:Colors.white,borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        // The sheet never takes the whole screen; its content scrolls.
+        constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*.72),
+        child:SafeArea(top:false,child:SingleChildScrollView(
+          padding:const EdgeInsets.fromLTRB(24,24,24,16),
+          child:AutofillGroup(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:showForm?loginForm():welcomeActions())),
+        )),
       ),
-      Expanded(child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-        Text(t('Connectez-vous à votre compte'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
-        if(startupChecking)Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Row(children:[
-          const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)),
-          const SizedBox(width:12),
-          Text(t('Restauration de votre session…'),style:const TextStyle(color:Colors.black54)),
-        ])),
-        if(startupRetryAvailable)Card(
-          color:const Color(0xFFFFF7ED),
-          margin:const EdgeInsets.symmetric(vertical:12),
-          child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text(t('Connexion impossible'),style:const TextStyle(fontWeight:FontWeight.bold)),
-            const SizedBox(height:4),
-            Text(t('Votre session est conservée.'),style:const TextStyle(color:Colors.black54)),
-            const SizedBox(height:12),
-            OutlinedButton(onPressed:_restoreSession,child:Text(t('Réessayer'))),
-          ])),
-        ),
-        const SizedBox(height:20),
-        TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'),prefixIcon:const Icon(Icons.mail_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
-        const SizedBox(height:12),
-        TextField(controller:password,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),prefixIcon:const Icon(Icons.lock_outline),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:BorderSide.none))),
-        if(offline)Padding(padding:const EdgeInsets.only(top:12),child:VeyraOfflineBanner(onRetry:submit)),
-        if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-        const SizedBox(height:20),
-        VeyraPrimaryButton(label:t('Se connecter'),loading:loading,onPressed:submit),
-        const SizedBox(height:14),
-        Row(children:[
-          const Expanded(child:Divider()),
-          Padding(
-            padding:const EdgeInsets.symmetric(horizontal:12),
-            child:Text(t('ou'),style:const TextStyle(color:Color(0xFF6B7280))),
-          ),
-          const Expanded(child:Divider()),
-        ]),
-        const SizedBox(height:14),
-        OutlinedButton.icon(
-          onPressed:loading?null:_googleLogin,
-          icon:const Icon(Icons.g_mobiledata_rounded,size:28),
-          label:Text(t('Continuer avec Google')),
-          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
-        ),
-        const SizedBox(height:10),
-        OutlinedButton.icon(
-          onPressed:loading?null:_phoneLogin,
-          icon:const Icon(Icons.phone_android_rounded),
-          label:Text(t('Continuer avec le téléphone')),
-          style:OutlinedButton.styleFrom(padding:const EdgeInsets.symmetric(vertical:14)),
-        ),
-        TextButton(onPressed:()=>context.push('/register'),child:Text(t('Créer un compte Chauffeur'))),
-        TextButton(onPressed:()=>context.push('/forgot'),child:Text(t('Mot de passe oublié ?'))),
-      ]))),
-    ])));
+    ]),
+  );
 }
 
 /// Gap complet trouvé côté chauffeur : ni la demande ("mot de passe
