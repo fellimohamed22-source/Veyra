@@ -28,7 +28,7 @@ import 'core/formatters/date_formatter.dart';
 import 'core/formatters/money_formatter.dart';
 import 'core/widgets/veyra_button.dart';
 import 'core/widgets/welcome_hero.dart';
-import 'core/widgets/signup_consents.dart';
+import 'onboarding/driver_signup_flow.dart';
 import 'core/widgets/state_views.dart';
 import 'core/widgets/password_dialog.dart';
 import 'core/widgets/driver_documents.dart';
@@ -210,7 +210,22 @@ final router=GoRouter(
   initialLocation:'/login',
   routes:[
   GoRoute(path:'/login',builder:(c,s)=>const LoginScreen()),
-  GoRoute(path:'/register',builder:(c,s)=>const RegisterDriverScreen()),
+  // Board 08 B: driver sign-up wizard; /onboarding resumes a draft dossier.
+  GoRoute(path:'/register',builder:(c,s)=>DriverSignupFlow(
+    api:api,
+    pickFile:pickDriverFile,
+    onAccountCreated:configureDriverPush,
+    onSubmitted:()=>c.go('/kyc'),
+    onExit:()=>c.canPop()?c.pop():c.go('/login'),
+  )),
+  GoRoute(path:'/onboarding',builder:(c,s)=>DriverSignupFlow(
+    api:api,
+    pickFile:pickDriverFile,
+    onAccountCreated:configureDriverPush,
+    onSubmitted:()=>c.go('/kyc'),
+    onExit:()=>c.go('/account'),
+    resume:true,
+  )),
   GoRoute(path:'/kyc',builder:(c,s)=>const KycScreen()),
   GoRoute(path:'/forgot',builder:(c,s)=>const ForgotPasswordScreen()),
   GoRoute(path:'/reset-password',builder:(c,s)=>const ResetPasswordScreen()),
@@ -918,6 +933,12 @@ class _KycScreenState extends State<KycScreen>{
         if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
         if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=loadDossier();}));
         final status=s.data??{};
+        // A dossier never submitted is completed in the sign-up wizard
+        // (board 08 B); this screen shows the review status afterwards.
+        if(status['kyc_status']=='DRAFT'){
+          WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)context.go('/onboarding');});
+          return const Center(child:CircularProgressIndicator());
+        }
         final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true&&
           (status['vehicles'] as List? ??[]).whereType<Map>().any((v)=>v['status']=='APPROVED');
 
@@ -2794,87 +2815,6 @@ class AppShell extends StatelessWidget{
   );
 }
 
-class RegisterDriverScreen extends StatefulWidget{
-  const RegisterDriverScreen({super.key});
-  @override State<RegisterDriverScreen> createState()=>_RegisterDriverScreenState();
-}
-class _RegisterDriverScreenState extends State<RegisterDriverScreen>{
-  final firstName=TextEditingController();
-  final lastName=TextEditingController();
-  final phone=TextEditingController();
-  final email=TextEditingController();
-  final password=TextEditingController();
-  final formKey=GlobalKey<FormState>();
-  bool loading=false;
-  String? error;
-  bool acceptTerms=false;
-  bool acceptPrivacy=false;
-  bool marketingOptIn=false;
-  bool consentErrors=false;
-
-  @override void dispose(){firstName.dispose();lastName.dispose();phone.dispose();email.dispose();password.dispose();super.dispose();}
-
-  Future<void> submit()async{
-    if(loading||!formKey.currentState!.validate())return;
-    if(firstName.text.trim().isEmpty||phone.text.trim().length<6||email.text.trim().isEmpty||password.text.length<10){
-      setState(()=>error=t('Prénom, téléphone, e-mail et mot de passe de 10 caractères minimum requis.'));
-      return;
-    }
-    if(!SignupConsents.mandatoryAccepted(acceptTerms,acceptPrivacy)){
-      setState((){consentErrors=true;error=t('Acceptez les CGU et la politique de confidentialité pour continuer.');});
-      return;
-    }
-    setState((){loading=true;error=null;});
-    try{
-      await api.register(
-        email:email.text,
-        password:password.text,
-        firstName:firstName.text,
-        lastName:lastName.text,
-        phone:phone.text,
-        acceptTerms:acceptTerms,
-        acceptPrivacy:acceptPrivacy,
-        marketingOptIn:marketingOptIn,
-      );
-      if(!mounted)return;
-      context.go('/kyc');
-      await configureDriverPush();
-    }catch(_){
-      if(mounted)setState(()=>error=t('Création du compte impossible.'));
-    }finally{
-      if(mounted)setState(()=>loading=false);
-    }
-  }
-
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Créer un compte Chauffeur'))),
-    body:SafeArea(child:Form(key:formKey,autovalidateMode:AutovalidateMode.onUserInteraction,child:ListView(padding:const EdgeInsets.all(24),children:[
-      TextFormField(controller:firstName,validator:(v)=>(v??'').trim().isEmpty?t('Prénom requis'):null,decoration:InputDecoration(labelText:t('Prénom'))),
-      const SizedBox(height:12),
-      TextFormField(controller:lastName,decoration:InputDecoration(labelText:t('Nom'))),
-      const SizedBox(height:12),
-      TextFormField(controller:phone,validator:(v)=>(v??'').trim().length<6?t('Téléphone incomplet'):null,keyboardType:TextInputType.phone,decoration:InputDecoration(labelText:t('Téléphone'))),
-      const SizedBox(height:12),
-      TextFormField(controller:email,validator:(v)=>RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v??'').trim())?null:t('E-mail invalide'),keyboardType:TextInputType.emailAddress,decoration:InputDecoration(labelText:t('Email'))),
-      const SizedBox(height:12),
-      TextFormField(controller:password,validator:(v)=>(v??'').length<10?t('10 caractères minimum'):null,obscureText:true,decoration:InputDecoration(labelText:t('Mot de passe'),helperText:'10 caractères minimum')),
-      const SizedBox(height:12),
-      SignupConsents(
-        acceptTerms:acceptTerms,
-        acceptPrivacy:acceptPrivacy,
-        marketingOptIn:marketingOptIn,
-        showErrors:consentErrors,
-        onTerms:(v)=>setState(()=>acceptTerms=v),
-        onPrivacy:(v)=>setState(()=>acceptPrivacy=v),
-        onMarketing:(v)=>setState(()=>marketingOptIn=v),
-      ),
-      if(error!=null)Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-      const SizedBox(height:16),
-      FilledButton(onPressed:loading?null:submit,child:loading?Text(t('Création…')):Text(t('Continuer vers mon dossier VTC'))),
-    ]))),
-  );
-}
-
 
 class _DriverEtaCard extends StatelessWidget{
   final IconData icon;
@@ -3195,4 +3135,13 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
       ),
     ),
   );
+}
+
+/// Document or photo for the driver dossier (PDF, JPG, PNG).
+Future<String?> pickDriverFile({bool imageOnly=false})async{
+  final r=await FilePicker.platform.pickFiles(
+    type:imageOnly?FileType.image:FileType.custom,
+    allowedExtensions:imageOnly?null:['pdf','jpg','jpeg','png'],
+  );
+  return r==null||r.files.isEmpty?null:r.files.single.path;
 }

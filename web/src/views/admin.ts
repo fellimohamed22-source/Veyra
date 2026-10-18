@@ -30,7 +30,7 @@ import {statusLabel,paymentMethodLabel,dateTime,kycStatusLabel,documentTypeLabel
           <p *ngIf="documentsLoading">Chargement des documents…</p>
           <p *ngIf="!documentsLoading && documents.length===0">Aucun document soumis.</p>
           <div *ngFor="let doc of documents" style="padding:4px 0">
-            {{documentTypeLabel(doc.type)}} — {{kycStatusLabel(doc.status)}}
+            {{documentTypeLabel(doc.type)}}<span *ngIf="doc.side"> ({{doc.side==='BACK'?'verso':'recto'}})</span> — {{kycStatusLabel(doc.status)}}
             <span *ngIf="doc.expires_at"> — expire le {{dateTime(doc.expires_at)}}</span>
             <button (click)="viewDocument(doc.id)">Voir</button>
           </div>

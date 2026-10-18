@@ -261,24 +261,43 @@ class Api {
   Future<Map<String,dynamic>> createProfile() async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/driver/profile')).data);
 
-  Future<void> uploadDocument(String type,String filePath) async {
+  /// One document page. [side] FRONT/BACK keeps recto and verso apart;
+  /// [subtype] tells which identity document (ID_CARD, PASSPORT,
+  /// RESIDENCE_PERMIT); [expiresAt] is an ISO date (yyyy-MM-dd).
+  Future<void> uploadDocument(String type,String filePath,{String? side,String? subtype,String? expiresAt}) async {
     final form=FormData.fromMap({
       'type':type,
       'file':await MultipartFile.fromFile(filePath),
+      if(side!=null)'side':side,
+      if(subtype!=null)'subtype':subtype,
+      if(expiresAt!=null)'expiresAt':expiresAt,
     });
     await dio.post('/api/v1/driver/documents',data:form);
   }
 
   Future<void> saveCompany({
-    String? siren,String? siret,required String legalName
+    String? siren,String? siret,required String legalName,String? legalForm,String? address
   }) async {
     await dio.put('/api/v1/driver/onboarding/company',data:{
-      'siren':siren,'siret':siret,'legalName':legalName
+      'siren':siren,'siret':siret,'legalName':legalName,'legalForm':legalForm,'address':address
     });
   }
 
+  /// Birth date (yyyy-MM-dd) and driver type (INDEPENDENT / AFFILIATED).
+  Future<void> saveDriverProfile({String? birthDate,String? driverType}) async {
+    await dio.put('/api/v1/driver/onboarding/profile',data:{'birthDate':birthDate,'driverType':driverType});
+  }
+
+  Future<void> saveLicense({required String licenseNumber,required String category,String? expiresAt}) async {
+    await dio.put('/api/v1/driver/onboarding/license',data:{'licenseNumber':licenseNumber,'category':category,'expiresAt':expiresAt});
+  }
+
+  /// « Envoyer mon dossier »: 422 DOSSIER_INCOMPLETE lists what is missing.
+  Future<Map<String,dynamic>> submitDossier() async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/driver/onboarding/submit')).data);
+
   Future<void> saveVtc({
-    required String registrationNumber,
+    String? registrationNumber,
     required String cardNumber,
     String? issuedAt,
     String? expiresAt,
@@ -301,6 +320,8 @@ class Api {
     required int year,
     required String plateNumber,
     String? color,
+    int? seats,
+    int? baggageCapacity,
   }) async {
     await dio.post('/api/v1/driver/onboarding/vehicles',data:{
       'categoryId':categoryId,
@@ -309,6 +330,8 @@ class Api {
       'year':year,
       'plateNumber':plateNumber,
       'color':color,
+      'seats':seats,
+      'baggageCapacity':baggageCapacity,
     });
   }
 

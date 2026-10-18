@@ -42,7 +42,7 @@ public class AdminController {
   @GetMapping("/drivers/{id}/documents")
   public List<Map<String,Object>> driverDocuments(@PathVariable UUID id){
     return db.queryForList(
-      "select id,type,status,original_filename,content_type,expires_at,rejection_reason_code,created_at " +
+      "select id,type,side,subtype,status,original_filename,content_type,expires_at,rejection_reason_code,created_at " +
       "from driver_documents where driver_id=? order by created_at desc",
       id);
   }
