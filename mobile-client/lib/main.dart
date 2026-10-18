@@ -799,7 +799,8 @@ class _RequestCard extends StatelessWidget{
         const Icon(Icons.calendar_today_outlined,size:18,color:VeyraColors.accent),
         const SizedBox(width:8),
         Expanded(child:Text(veyraBookingWhen(x['scheduled_at']),style:const TextStyle(fontWeight:FontWeight.w600))),
-        _pillFor(x),
+        const SizedBox(width:8),
+        Flexible(child:_pillFor(x)),
       ]),
       const SizedBox(height:12),
       Row(children:[Expanded(child:_MiniRoute(x)),const SizedBox(width:10),const VeyraVehicleThumb(width:72)]),
@@ -809,15 +810,16 @@ class _RequestCard extends StatelessWidget{
       const SizedBox(height:12),
       if(x['selected_driver_id']!=null&&!offerPhase)Row(children:[
         Expanded(child:_DriverLine(x)),
-        FilledButton(
+        const SizedBox(width:8),
+        Flexible(child:FilledButton(
           style:FilledButton.styleFrom(minimumSize:const Size(0,40),backgroundColor:VeyraColors.surfaceMuted,foregroundColor:VeyraColors.textPrimary,padding:const EdgeInsets.symmetric(horizontal:12),textStyle:const TextStyle(fontFamily:veyraFontFamily,fontSize:13,fontWeight:FontWeight.w700)),
-          onPressed:open,child:Text(t('Voir ma réservation')),
-        ),
+          onPressed:open,child:Text(t('Voir ma réservation'),textAlign:TextAlign.center),
+        )),
       ])
-      else if(offerPhase&&offers>0)FilledButton(onPressed:open,child:Row(mainAxisSize:MainAxisSize.min,children:[Text(t('Voir les offres')),const SizedBox(width:6),const Icon(Icons.chevron_right)]))
+      else if(offerPhase&&offers>0)FilledButton(onPressed:open,child:Row(mainAxisSize:MainAxisSize.min,children:[Flexible(child:Text(t('Voir les offres'),textAlign:TextAlign.center)),const SizedBox(width:6),const Icon(Icons.chevron_right)]))
       else FilledButton(
         style:FilledButton.styleFrom(backgroundColor:VeyraColors.surfaceMuted,foregroundColor:VeyraColors.textPrimary),
-        onPressed:open,child:Row(mainAxisSize:MainAxisSize.min,children:[Text(t('Voir les détails')),const SizedBox(width:6),const Icon(Icons.chevron_right)]),
+        onPressed:open,child:Row(mainAxisSize:MainAxisSize.min,children:[Flexible(child:Text(t('Voir les détails'),textAlign:TextAlign.center)),const SizedBox(width:6),const Icon(Icons.chevron_right)]),
       ),
     ]));
   }
@@ -998,7 +1000,7 @@ class _AccueilScreenState extends State<AccueilScreen>{
         const SizedBox(height:10),
         fakeField(Icons.location_on,VeyraColors.pinRed,t('Destination'),t('Ex : Aéroport Charles-de-Gaulle')),
         const SizedBox(height:14),
-        FilledButton(onPressed:()=>context.push('/addresses'),child:Row(mainAxisSize:MainAxisSize.min,children:[Text(t('Rechercher mon trajet')),const SizedBox(width:6),const Icon(Icons.chevron_right)])),
+        FilledButton(onPressed:()=>context.push('/addresses'),child:Row(mainAxisSize:MainAxisSize.min,children:[Flexible(child:Text(t('Rechercher mon trajet'),textAlign:TextAlign.center)),const SizedBox(width:6),const Icon(Icons.chevron_right)])),
       ]),
     )),
   );

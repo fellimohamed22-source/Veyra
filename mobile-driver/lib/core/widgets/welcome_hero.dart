@@ -57,7 +57,7 @@ class _VeyraWelcomeHeroState extends State<VeyraWelcomeHero> {
   // so the navy wordmark never sits on the navy fallback while decoding.
   bool painted = false;
 
-  Widget _wordmark(Color color) => Text('VEYRA',
+  Widget _wordmark(Color color) => Text('VEYRA', textScaler: TextScaler.noScaling,
       style: TextStyle(fontSize: 40, fontWeight: FontWeight.w700, letterSpacing: 40 * 0.22, color: color));
 
   @override

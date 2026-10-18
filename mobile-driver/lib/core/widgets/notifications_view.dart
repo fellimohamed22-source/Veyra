@@ -159,7 +159,11 @@ class _VeyraNotificationsScreenState extends State<VeyraNotificationsScreen> {
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(title: Text(_t('Notifications')), actions: [
-          TextButton(onPressed: markingAll ? null : markAll, child: Text(_t('Tout marquer comme lu'), style: const TextStyle(decoration: TextDecoration.underline))),
+          // Capped width: wraps on two lines with enlarged text.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: TextButton(onPressed: markingAll ? null : markAll, child: Text(_t('Tout marquer comme lu'), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.end, style: const TextStyle(decoration: TextDecoration.underline, fontSize: 13))),
+          ),
         ]),
         body: RefreshIndicator(
           onRefresh: () async { reload(); try { await future; } catch (_) {} },

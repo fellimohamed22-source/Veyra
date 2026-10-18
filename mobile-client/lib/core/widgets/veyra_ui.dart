@@ -20,6 +20,8 @@ class VeyraWordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text('VEYRA',
       semanticsLabel: 'Veyra',
+      // A logo keeps its size whatever the user's text scale.
+      textScaler: TextScaler.noScaling,
       style: TextStyle(fontSize: size, fontWeight: FontWeight.w700, letterSpacing: size * 0.22, color: color));
 }
 
