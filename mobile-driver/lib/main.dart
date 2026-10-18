@@ -1451,16 +1451,17 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
               Widget priceLine(String label,dynamic minor,{bool ttc=false})=>Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
                 Flexible(child:Text(label,style:const TextStyle(color:VeyraColors.textSecondary))),
                 const SizedBox(width:8),
-                Text.rich(TextSpan(children:[
+                Flexible(child:Text.rich(textAlign:TextAlign.end,TextSpan(children:[
                   TextSpan(text:VeyraMoneyFormatter.fromMinor(minor),style:const TextStyle(fontWeight:FontWeight.w700)),
                   if(ttc)const TextSpan(text:' TTC',style:TextStyle(fontSize:11,color:VeyraColors.textSecondary)),
-                ])),
+                ]))),
               ]);
               return DriverCard(
                 onTap:bookingId==null?null:open,
                 child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                   Row(children:[
-                    DriverPill(pill,fg:fg,bg:bg,icon:icon),
+                    Flexible(child:DriverPill(pill,fg:fg,bg:bg,icon:icon)),
+                    const SizedBox(width:8),
                     const Spacer(),
                     if(status=='ACTIVE'&&expires!=null)Text(driverStartsIn(expires).replaceFirst(t('Dans')+' ',''),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
                     const Icon(Icons.chevron_right,color:VeyraColors.textSecondary),
@@ -1737,7 +1738,8 @@ class _RequestScreenState extends State<RequestScreen>{
             text:t('Ce client vous a ajouté à ses chauffeurs préférés.'),
           )),
           Row(children:[
-            DriverPill(x['hasActiveOffer']==true?t('Offre envoyée'):t('Nouvelle demande'),fg:VeyraColors.warning,bg:VeyraColors.warningBackground,icon:Icons.schedule),
+            Flexible(child:DriverPill(x['hasActiveOffer']==true?t('Offre envoyée'):t('Nouvelle demande'),fg:VeyraColors.warning,bg:VeyraColors.warningBackground,icon:Icons.schedule)),
+            const SizedBox(width:8),
             const Spacer(),
             Text('#'+(id.length>8?id.substring(0,8):id).toUpperCase(),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
           ]),
@@ -1802,7 +1804,7 @@ class _RequestScreenState extends State<RequestScreen>{
           child:FilledButton(
             onPressed:x['has_eligible_vehicle']==false?null:()=>Navigator.of(context).push(MaterialPageRoute(builder:(_)=>OfferComposerScreen(bookingId:widget.bookingId,request:x,adjusting:adjusting))),
             child:Row(mainAxisSize:MainAxisSize.min,children:[
-              Text(adjusting?t('Modifier mon offre'):t('Créer mon offre')),
+              Flexible(child:Text(adjusting?t('Modifier mon offre'):t('Créer mon offre'),textAlign:TextAlign.center)),
               const SizedBox(width:8),
               const Icon(Icons.chevron_right),
             ]),
@@ -2158,8 +2160,8 @@ class _AgendaScreenState extends State<AgendaScreen>{
       child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
         Row(children:[
           Text(hhmm(x['scheduled_at']),style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
-          const Spacer(),
-          DriverPill(pill,fg:fg,bg:bg),
+          const SizedBox(width:8),
+          Flexible(child:Align(alignment:Alignment.centerRight,child:DriverPill(pill,fg:fg,bg:bg))),
         ]),
         const SizedBox(height:8),
         DriverMiniRoute((x['pickup_address']??'').toString(),(x['dropoff_address']??'').toString()),

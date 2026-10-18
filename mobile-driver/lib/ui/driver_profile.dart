@@ -119,7 +119,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       Row(children: [
                         const Icon(Icons.star_rounded, size: 18, color: Color(0xFFF5A623)),
                         const SizedBox(width: 2),
-                        Text(rating == 0 ? _t('Nouveau') : '${rating.toStringAsFixed(1).replaceAll('.', ',')} ($count)'),
+                        Flexible(child: Text(rating == 0 ? _t('Nouveau') : '${rating.toStringAsFixed(1).replaceAll('.', ',')} ($count)')),
                       ]),
                       FutureBuilder<Map<String, dynamic>>(future: dossier, builder: (context, d) {
                         final approved = d.data?['kyc_status'] == 'APPROVED';
