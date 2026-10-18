@@ -79,7 +79,8 @@ void main() {
       await tester.tap(find.text('Voir mes offres'));
       await tester.pumpAndSettle();
       expect(find.byType(MesOffresScreen), findsOneWidget);
-      expect(find.text('Nice → Cannes'), findsOneWidget);
+      expect(find.text('Nice'), findsOneWidget);
+      expect(find.text('Cannes'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });

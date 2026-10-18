@@ -32,6 +32,7 @@ import 'core/widgets/veyra_button.dart';
 import 'core/widgets/signup_consents.dart';
 import 'core/widgets/auth_ui.dart';
 import 'core/widgets/welcome_hero.dart';
+import 'core/widgets/notifications_view.dart';
 import 'core/widgets/saved_cards_screen.dart';
 import 'core/widgets/phone_verification_screen.dart';
 import 'core/widgets/veyra_ui.dart';
@@ -405,7 +406,13 @@ final router=GoRouter(
     ],
   ),
   // Notifications open from the home bell (boards 05, 15), above the shell.
-  GoRoute(path:'/notifications',builder:(c,s)=>const NotificationsScreen()),
+  // Board 16: grouped list with read state (CL-18).
+  GoRoute(path:'/notifications',builder:(c,s)=>VeyraNotificationsScreen(
+    load:()=>api.notifications(),
+    markRead:api.markNotificationRead,
+    markAllRead:api.markAllNotificationsRead,
+    open:(n){if(n.bookingId!=null)c.go(clientNotificationRoute(n.bookingId!,n.template,n.data));},
+  )),
   GoRoute(path:'/addresses',builder:(c,s)=>AddressScreen(initialBooking:s.extra is Map?Map<String,dynamic>.from(s.extra as Map):null)),
   GoRoute(path:'/offers/:id',builder:(c,s)=>OffersScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/payment/:id',builder:(c,s)=>PaymentScreen(bookingId:s.pathParameters['id']!)),
@@ -932,7 +939,7 @@ class _AccueilScreenState extends State<AccueilScreen>{
     api.avatarBytes().then((v){if(mounted&&v!=null&&v.isNotEmpty)setState(()=>avatar=v);}).catchError((_){});
   }
   void _refresh()=>setState(_load);
-  void _load(){me=api.me();bookings=api.bookings();}
+  void _load(){me=api.me();bookings=api.bookings();unawaited(refreshUnreadNotifications());}
   // Lives inside the shell's nested navigator: refreshed through
   // RefreshBus, never through the root RouteObserver (see git history).
   @override void dispose(){RefreshBus.tick.removeListener(_refresh);super.dispose();}
@@ -944,7 +951,10 @@ class _AccueilScreenState extends State<AccueilScreen>{
       Row(children:[
         const VeyraWordmark(color:Colors.white,size:24),
         const Spacer(),
-        IconButton(tooltip:t('Notifications'),onPressed:()=>context.push('/notifications'),icon:const Icon(Icons.notifications_none,color:Colors.white,size:28)),
+        IconButton(tooltip:t('Notifications'),onPressed:()=>context.push('/notifications'),icon:ValueListenableBuilder<int>(
+          valueListenable:veyraUnreadNotifications,
+          builder:(context,n,_)=>Badge(isLabelVisible:n>0,label:Text(n>9?'9+':'$n'),child:const Icon(Icons.notifications_none,color:Colors.white,size:28)),
+        )),
         const SizedBox(width:4),
         GestureDetector(onTap:()=>context.go('/account'),child:CircleAvatar(radius:20,backgroundColor:Colors.white24,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,color:Colors.white):null)),
       ]),
@@ -3514,62 +3524,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>{
 }
 
 
-class NotificationsScreen extends StatefulWidget{
-  const NotificationsScreen({super.key});
-  @override State<NotificationsScreen> createState()=>_NotificationsScreenState();
-}
-
-class _NotificationsScreenState extends State<NotificationsScreen>{
-  late Future<List<dynamic>> future;
-  @override void initState(){super.initState();future=api.notifications();}
-  void reload()=>setState((){future=api.notifications();});
-
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Notifications'))),
-    body:RefreshIndicator(
-      onRefresh:()async{reload();try{await future;}catch(_){/* FutureBuilder displays the load error. */}},
-      child:FutureBuilder<List<dynamic>>(
-        future:future,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done){
-            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
-          }
-          if(s.hasError){
-            final offline=VeyraErrorMessages.isOffline(s.error!);
-            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
-              const SizedBox(height:160),
-              if(offline) VeyraOfflineBanner(onRetry:reload)
-              else VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload),
-            ]);
-          }
-          final items=s.data??[];
-          if(items.isEmpty){
-            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
-              SizedBox(height:160),
-              Icon(Icons.notifications_none,size:56),
-              Center(child:Text(t('Aucune notification pour le moment.'))),
-            ]);
-          }
-          return ListView.separated(physics:const AlwaysScrollableScrollPhysics(),
-            padding:const EdgeInsets.all(16),
-            itemCount:items.length,
-            separatorBuilder:(_,__)=>const SizedBox(height:8),
-            itemBuilder:(context,index){
-              final x=Map<String,dynamic>.from(items[index] as Map);
-              final rawData=x['data'];
-              final data=rawData is Map
-                ?Map<String,dynamic>.from(rawData)
-                :rawData is String&&rawData.isNotEmpty
-                  ?((){try{return Map<String,dynamic>.from(jsonDecode(rawData) as Map);}catch(_){return <String,dynamic>{};}})()
-                  :<String,dynamic>{};
-              final bookingId=data['bookingId']?.toString();
-              final template=(x['template_code']??'').toString();
-              final pickup=(x['pickup_address']??'').toString(),dropoff=(x['dropoff_address']??'').toString(),scheduled=x['scheduled_at'];
-              return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.notifications_active_outlined)),title:Text(VeyraStatusLabels.notificationTemplate(template),style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[if(pickup.isNotEmpty&&dropoff.isNotEmpty)Text(pickup+' → '+dropoff,style:const TextStyle(fontWeight:FontWeight.w600)),if(scheduled!=null)Text(VeyraDateFormatter.dateTime(scheduled),style:const TextStyle(color:VeyraColors.primaryDark)),Text(t('Reçue le')+' '+VeyraDateFormatter.dateTime(x['created_at']))]),isThreeLine:true,trailing:bookingId==null?null:const Icon(Icons.chevron_right),onTap:bookingId==null?null:()=>router.go(clientNotificationRoute(bookingId,template,data))));
-            },
-          );
-        },
-      ),
-    ),
-  );
+/// Refreshes the bell badge (board 16 P1).
+Future<void> refreshUnreadNotifications()async{
+  try{veyraUnreadNotifications.value=await api.unreadNotifications();}catch(_){}
 }

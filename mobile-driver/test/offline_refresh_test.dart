@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_driver/main.dart';
 import 'package:veyra_driver/core/widgets/state_views.dart';
+import 'package:veyra_driver/core/widgets/notifications_view.dart';
 
 void main() {
   tearDown(api.dio.interceptors.clear);
@@ -10,7 +11,7 @@ void main() {
     const OpportunitiesScreen(),
     const MesOffresScreen(),
     const AgendaScreen(),
-    const DriverNotificationsScreen()
+    VeyraNotificationsScreen(load: () => api.notifications(), markRead: api.markNotificationRead, markAllRead: api.markAllNotificationsRead, open: (_) {})
   ]) {
     testWidgets(
         '${screen.runtimeType} keeps failed refresh visible and retryable',

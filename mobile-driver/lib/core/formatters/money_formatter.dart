@@ -14,7 +14,10 @@ class VeyraMoneyFormatter {
     if (n == null) return '—';
     final euros = n / 100;
     final symbol = currency == 'EUR' ? '€' : currency;
-    final formatted = euros.toStringAsFixed(2).replaceAll('.', ',');
+    // French grouping as on the boards: « 1 250,00 € » (no-break space).
+    final fixed = euros.abs().toStringAsFixed(2);
+    final whole = fixed.substring(0, fixed.length - 3).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ' ');
+    final formatted = '${euros < 0 ? '-' : ''}$whole,${fixed.substring(fixed.length - 2)}';
     return '$formatted $symbol';
   }
 

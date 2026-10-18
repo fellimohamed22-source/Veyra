@@ -405,6 +405,13 @@ class Api {
 
   Future<List<dynamic>> notifications({int page=0}) async =>
       List<dynamic>.from((await dio.get('/api/v1/notifications',queryParameters:{'page':page})).data);
+  /// CL-18 read state (board 16): unread count for the bell badge.
+  Future<int> unreadNotifications() async =>
+      ((await dio.get('/api/v1/notifications/unread-count')).data['unread'] as num?)?.toInt()??0;
+  Future<int> markNotificationRead(String id) async =>
+      ((await dio.post('/api/v1/notifications/$id/read')).data['unread'] as num?)?.toInt()??0;
+  Future<int> markAllNotificationsRead() async =>
+      ((await dio.post('/api/v1/notifications/read-all')).data['unread'] as num?)?.toInt()??0;
 
   Future<List<dynamic>> chatMessages(String bookingId) async =>
       List<dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/chat/messages')).data);

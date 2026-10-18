@@ -14,7 +14,9 @@ void main() {
       handler.resolve(Response(
         requestOptions: request,
         statusCode: 200,
-        data: request.path.endsWith('transactions')
+        data: request.path.contains('/driver/bookings')
+            ? <dynamic>[]
+            : request.path.endsWith('transactions')
             ? [
                 {
                   'event_type': 'DRIVER_PAYABLE_PAID',
@@ -71,6 +73,9 @@ void main() {
     api.dio.interceptors.clear();
     addTearDown(api.dio.interceptors.clear);
     api.dio.interceptors.add(InterceptorsWrapper(onRequest: (request, handler) {
+      if (request.path.contains('/driver/bookings')) {
+        return handler.resolve(Response(requestOptions: request, statusCode: 200, data: <dynamic>[]));
+      }
       final history = request.path.endsWith('transactions');
       if (history) {
         historyRequests++;
@@ -95,7 +100,10 @@ void main() {
     expect(balanceRequests, 1);
     expect(historyRequests, 1);
 
-    await tester.tap(find.byTooltip('Actualiser'));
+    // Board 12 P9 has no refresh icon: pull to refresh.
+    final refreshed = tester.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh();
+    await tester.pumpAndSettle();
+    await refreshed;
     await tester.pumpAndSettle();
     expect(find.text('34,00 €'), findsOneWidget);
     expect(find.text('12,00 €'), findsNothing);

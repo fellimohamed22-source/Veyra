@@ -49,7 +49,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<TextButton>(find.widgetWithText(TextButton, 'Retirer')).onPressed,
         isNotNull);
-    expect(find.text('Nice → Cannes'), findsOneWidget);
+    expect(find.text('Nice'), findsOneWidget);
     await tester.tap(find.text('Retirer'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Retirer'));
@@ -58,7 +58,7 @@ void main() {
     withdrawn = true;
     pendingHandler!.resolve(Response(requestOptions: pendingRequest!, statusCode: 204));
     await tester.pumpAndSettle();
-    expect(find.text('Nice → Cannes'), findsNothing);
+    expect(find.text('Nice'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

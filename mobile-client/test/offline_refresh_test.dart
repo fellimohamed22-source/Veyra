@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_client/main.dart';
+import 'package:veyra_client/core/widgets/notifications_view.dart';
 import 'package:veyra_client/core/widgets/state_views.dart';
 
 void main() {
@@ -9,7 +10,7 @@ void main() {
   for (final screen in <Widget>[
     const HomeScreen(),
     const AccueilScreen(),
-    const NotificationsScreen()
+    VeyraNotificationsScreen(load: () => api.notifications(), markRead: api.markNotificationRead, markAllRead: api.markAllNotificationsRead, open: (_) {})
   ]) {
     testWidgets(
         '${screen.runtimeType} keeps failed refresh visible and retryable',

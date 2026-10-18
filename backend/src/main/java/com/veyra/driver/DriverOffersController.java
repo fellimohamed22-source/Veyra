@@ -61,8 +61,11 @@ public class DriverOffersController {
     // endpoints -- not remapped to camelCase here.
     return db.queryForList(
         "select o.id as offer_id,o.booking_id,o.proposed_amount_minor,o.currency,o.status,o.expires_at,o.created_at," +
-        "sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status as booking_status " +
+        "o.commission_minor,o.customer_total_minor," +
+        "sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status as booking_status,sb.passenger_count,sb.baggage_count," +
+        "v.brand as vehicle_brand,v.model as vehicle_model,vc.display_name as vehicle_category " +
         "from driver_offers o join scheduled_bookings sb on sb.id=o.booking_id " +
+        "left join vehicles v on v.id=o.vehicle_id left join vehicle_categories vc on vc.id=coalesce(v.category_id,sb.category_id) " +
         "where o.driver_id=? and "+statusFilter+" " +
         "order by o.created_at desc,o.id"+(page==null?"":" limit 10 offset "+(Math.max(0,Math.min(page,100000))*10)),
         driverId);

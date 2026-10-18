@@ -232,6 +232,13 @@ class Api {
 
   Future<List<dynamic>> notifications() async =>
       List<dynamic>.from((await dio.get('/api/v1/notifications')).data);
+  /// CL-18 read state (board 16): unread count for the bell badge.
+  Future<int> unreadNotifications() async =>
+      ((await dio.get('/api/v1/notifications/unread-count')).data['unread'] as num?)?.toInt()??0;
+  Future<int> markNotificationRead(String id) async =>
+      ((await dio.post('/api/v1/notifications/$id/read')).data['unread'] as num?)?.toInt()??0;
+  Future<int> markAllNotificationsRead() async =>
+      ((await dio.post('/api/v1/notifications/read-all')).data['unread'] as num?)?.toInt()??0;
 
   Future<Map<String,dynamic>> routeEstimate({
     required double fromLat,

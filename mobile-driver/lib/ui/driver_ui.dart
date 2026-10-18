@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../app/theme.dart';
 import '../app_locale.dart';
 import '../core/formatters/money_formatter.dart';
+import '../core/widgets/notifications_view.dart';
 import '../core/widgets/veyra_ui.dart';
 
 String _t(String s) => AppLocale.t(s);
@@ -63,10 +64,17 @@ class DriverTopBar extends StatelessWidget implements PreferredSizeWidget {
                 child: IconButton(
                   tooltip: _t('Notifications'),
                   onPressed: onNotifications,
-                  icon: Badge(
-                    isLabelVisible: unread > 0,
-                    label: Text(unread > 9 ? '9+' : '$unread'),
-                    child: const Icon(Icons.notifications_none_rounded, size: 28, color: VeyraColors.textPrimary),
+                  // Board 16 P1: unread count on the bell.
+                  icon: ValueListenableBuilder<int>(
+                    valueListenable: veyraUnreadNotifications,
+                    builder: (context, count, _) {
+                      final n = unread > 0 ? unread : count;
+                      return Badge(
+                        isLabelVisible: n > 0,
+                        label: Text(n > 9 ? '9+' : '$n'),
+                        child: const Icon(Icons.notifications_none_rounded, size: 28, color: VeyraColors.textPrimary),
+                      );
+                    },
                   ),
                 ),
               ),

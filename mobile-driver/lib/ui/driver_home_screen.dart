@@ -4,6 +4,7 @@ import '../app/theme.dart';
 import '../app_locale.dart';
 import '../core/formatters/error_messages.dart';
 import '../core/widgets/state_views.dart';
+import '../core/widgets/notifications_view.dart';
 import 'driver_ui.dart';
 
 String _t(String s) => AppLocale.t(s);
@@ -45,6 +46,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (mounted && !switching) setState(() => accepting = d['acceptingRequests'] != false);
       return d;
     });
+    widget.api.unreadNotifications().then((n) => veyraUnreadNotifications.value = n).catchError((_) => veyraUnreadNotifications.value);
     recent = widget.api.opportunities(sort: 'newest');
     recent.ignore();
   }

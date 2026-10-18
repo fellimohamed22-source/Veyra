@@ -59,6 +59,15 @@ public class FinanceController {
     result.put("cashWarningThresholdMinor", warningThreshold);
     result.put("cashRestrictedThresholdMinor", restrictedThreshold);
     result.put("cashBlockedThresholdMinor", blockedThreshold);
+    // Board 12 P9 « Mes revenus · Ce mois-ci »: net earnings of the rides
+    // completed this calendar month (Europe/Paris), from the frozen
+    // financial snapshots.
+    Long month=db.queryForObject(
+        "select coalesce(sum(bfs.driver_net_amount_minor),0) from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
+        "where sb.selected_driver_id=? and sb.status in ('COMPLETED','CLOSED') " +
+        "and sb.scheduled_at>=date_trunc('month',now() at time zone 'Europe/Paris') at time zone 'Europe/Paris'",
+        Long.class,driverId);
+    result.put("monthEarningsMinor", month == null ? 0 : month);
     return result;
   }
 

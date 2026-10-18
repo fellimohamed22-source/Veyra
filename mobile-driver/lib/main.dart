@@ -30,6 +30,8 @@ import 'core/widgets/veyra_button.dart';
 import 'core/widgets/welcome_hero.dart';
 import 'onboarding/driver_signup_flow.dart';
 import 'ui/driver_home_screen.dart';
+import 'ui/driver_profile.dart';
+import 'core/widgets/notifications_view.dart';
 import 'ui/driver_ui.dart';
 import 'core/widgets/veyra_ui.dart';
 import 'core/widgets/state_views.dart';
@@ -169,6 +171,8 @@ Future<void> main() async {
   // same lesson as the client app's Stripe fix. French remains correct
   // as the default until this background read resolves.
   unawaited(AppLocale.load());
+  // Bell badge follows every app refresh signal (push, offer sent…).
+  RefreshBus.tick.addListener(()=>unawaited(refreshUnreadNotifications()));
   runApp(const DriverApp());
 }
 
@@ -243,14 +247,23 @@ final router=GoRouter(
       StatefulShellBranch(routes:[GoRoute(path:'/requests',builder:(c,s)=>const OpportunitiesScreen())]),
       StatefulShellBranch(routes:[GoRoute(path:'/agenda',builder:(c,s)=>const AgendaScreen())]),
       StatefulShellBranch(routes:[GoRoute(path:'/wallet',builder:(c,s)=>const WalletScreen())]),
-      StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>const AccountScreen())]),
+      StatefulShellBranch(routes:[GoRoute(path:'/account',builder:(c,s)=>DriverProfileScreen(api:api,go:c.go,push:(r)=>c.push(r),logout:()=>driverLogout(c)))]),
     ],
   ),
+  GoRoute(path:'/settings',builder:(c,s)=>const AccountScreen()),
+  GoRoute(path:'/vehicles',builder:(c,s)=>DriverVehiclesScreen(api:api,push:(r)=>c.push(r))),
+
   GoRoute(path:'/request/:id',builder:(c,s)=>RequestScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/driver/offers',builder:(c,s)=>const MesOffresScreen()),
   GoRoute(path:'/ride/:id',builder:(c,s)=>RideScreen(bookingId:s.pathParameters['id']!)),
   GoRoute(path:'/chat/:id',builder:(c,s)=>DriverChatScreen(bookingId:s.pathParameters['id']!)),
-  GoRoute(path:'/notifications',builder:(c,s)=>const DriverNotificationsScreen()),
+  // Board 16: grouped list with read state (CL-18).
+  GoRoute(path:'/notifications',builder:(c,s)=>VeyraNotificationsScreen(
+    load:()=>api.notifications(),
+    markRead:api.markNotificationRead,
+    markAllRead:api.markAllNotificationsRead,
+    open:(n){if(n.bookingId!=null)c.go(driverNotificationRoute(n.bookingId!,n.template,n.data));},
+  )),
 ],
   observers:[routeObserver],
   errorBuilder:(c,s)=>Scaffold(
@@ -1378,47 +1391,79 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                 try{await api.withdrawOffer(offerId);if(mounted){setState(_load);ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Offre retirée.'))));}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
                 }finally{if(mounted)setState(()=>withdrawingOffers.remove(offerId));}
               }
-              return Card(
-                margin:const EdgeInsets.only(bottom:10),
-                child:InkWell(
-                  onTap:bookingId==null?null:(){
-                    if(isWon){
-                      context.push('/ride/'+bookingId);
-                    }else if(scope=='active'){
-                      context.push('/request/'+bookingId);
-                    }else{
-                      showDialog<void>(context:context,builder:(d)=>AlertDialog(
-                        title:Text(t('Détail de mon offre')),
-                        content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-                          Text(title),Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
-                          Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor'])),
-                          Text(VeyraStatusLabels.offerStatus(x['status']?.toString())),
-                        ])),
-                        actions:[TextButton(onPressed:()=>Navigator.pop(d),child:Text(t('Fermer')))],
-                      ));
-                    }
-                  },
-                  child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                    Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                      Expanded(child:Text(title,style:const TextStyle(fontWeight:FontWeight.w600))),
-                      const SizedBox(width:8),
-                      Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor']),style:const TextStyle(fontWeight:FontWeight.bold)),
-                    ]),
-                    const SizedBox(height:6),
-                    Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54)),
-                    const SizedBox(height:6),
-                    Wrap(spacing:8,runSpacing:6,children:[
-                      Chip(label:Text(VeyraStatusLabels.offerStatus(x['status']?.toString()))),
-                      if(bookingStatus!=null&&bookingStatus.isNotEmpty) VeyraStatusBadge(status:bookingStatus),
-                    ]),
-                    if(expires!=null)Padding(padding:const EdgeInsets.only(top:4),child:Text(t('Expiration')+' : '+VeyraDateFormatter.dateTime(expires),style:const TextStyle(fontSize:12,color:Colors.black54))),
-                    if(scope=='active')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
-                      Expanded(child:OutlinedButton.icon(onPressed:bookingId==null?null:()=>context.push('/request/'+bookingId),icon:const Icon(Icons.edit_outlined),label:Text(t('Modifier')))),
-                      const SizedBox(width:8),
-                      Expanded(child:TextButton.icon(onPressed:offerId==null||withdrawingOffers.contains(offerId)?null:withdraw,icon:const Icon(Icons.delete_outline),label:Text(t('Retirer')))),
+              final status=x['status']?.toString()??'';
+              final (pill,fg,bg,icon)=switch(status){
+                'ACTIVE'=>(t('En attente'),VeyraColors.warning,VeyraColors.warningBackground,Icons.schedule),
+                'ACCEPTED'=>(t('Acceptée'),VeyraColors.success,VeyraColors.successBackground,Icons.check_circle),
+                'REJECTED_BY_SELECTION'=>(t('Refusée'),VeyraColors.danger,VeyraColors.dangerBackground,Icons.cancel),
+                'EXPIRED'=>(t('Expirée'),VeyraColors.neutral,VeyraColors.neutralBackground,Icons.timer_off_outlined),
+                'WITHDRAWN'=>(t('Retirée'),VeyraColors.neutral,VeyraColors.neutralBackground,Icons.undo),
+                'SUPERSEDED'=>(t('Prix modifié'),VeyraColors.neutral,VeyraColors.neutralBackground,Icons.edit_outlined),
+                _=>(VeyraStatusLabels.offerStatus(status),VeyraColors.neutral,VeyraColors.neutralBackground,Icons.info_outline),
+              };
+              final vehicle='${x['vehicle_brand']??''} ${x['vehicle_model']??''}'.trim();
+              void open(){
+                if(bookingId==null)return;
+                if(isWon){
+                  context.push('/ride/'+bookingId);
+                }else if(scope=='active'){
+                  context.push('/request/'+bookingId);
+                }else{
+                  showDialog<void>(context:context,builder:(d)=>AlertDialog(
+                    title:Text(t('Détail de mon offre')),
+                    content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Text(title),Text(VeyraDateFormatter.dateTime(x['scheduled_at'])),
+                      Text(VeyraMoneyFormatter.fromMinor(x['proposed_amount_minor'])),
+                      Text(pill),
                     ])),
+                    actions:[TextButton(onPressed:()=>Navigator.pop(d),child:Text(t('Fermer')))],
+                  ));
+                }
+              }
+              Widget priceLine(String label,dynamic minor,{bool ttc=false})=>Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+                Flexible(child:Text(label,style:const TextStyle(color:VeyraColors.textSecondary))),
+                const SizedBox(width:8),
+                Text.rich(TextSpan(children:[
+                  TextSpan(text:VeyraMoneyFormatter.fromMinor(minor),style:const TextStyle(fontWeight:FontWeight.w700)),
+                  if(ttc)const TextSpan(text:' TTC',style:TextStyle(fontSize:11,color:VeyraColors.textSecondary)),
+                ])),
+              ]);
+              return DriverCard(
+                onTap:bookingId==null?null:open,
+                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Row(children:[
+                    DriverPill(pill,fg:fg,bg:bg,icon:icon),
+                    const Spacer(),
+                    if(status=='ACTIVE'&&expires!=null)Text(driverStartsIn(expires).replaceFirst(t('Dans')+' ',''),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
+                    const Icon(Icons.chevron_right,color:VeyraColors.textSecondary),
+                  ]),
+                  const SizedBox(height:8),
+                  Text(driverWhen(x['scheduled_at']),style:const TextStyle(color:VeyraColors.textSecondary)),
+                  const SizedBox(height:6),
+                  DriverMiniRoute((x['pickup_address']??'').toString(),(x['dropoff_address']??'').toString()),
+                  const SizedBox(height:6),
+                  DriverPaxBags(x['passenger_count'],x['baggage_count']),
+                  if(vehicle.isNotEmpty)...[
+                    const SizedBox(height:10),
+                    Row(children:[
+                      const VeyraVehicleThumb(width:72),
+                      const SizedBox(width:10),
+                      Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Text(vehicle,style:const TextStyle(fontWeight:FontWeight.w600)),
+                        if(x['vehicle_category']!=null)Text(x['vehicle_category'].toString(),style:const TextStyle(color:VeyraColors.accent,fontSize:13)),
+                      ])),
+                    ]),
+                  ],
+                  const SizedBox(height:10),
+                  priceLine(t('Votre prix'),x['proposed_amount_minor']),
+                  if(x['customer_total_minor']!=null)priceLine(t('Prix client'),x['customer_total_minor'],ttc:true),
+                  if(bookingStatus!=null&&bookingStatus.isNotEmpty&&isWon)...[const SizedBox(height:8),VeyraStatusBadge(status:bookingStatus)],
+                  if(scope=='active')Padding(padding:const EdgeInsets.only(top:10),child:Row(children:[
+                    Expanded(child:OutlinedButton.icon(onPressed:bookingId==null?null:()=>context.push('/request/'+bookingId),icon:const Icon(Icons.edit_outlined),label:Text(t('Modifier')))),
+                    const SizedBox(width:8),
+                    Expanded(child:TextButton.icon(onPressed:offerId==null||withdrawingOffers.contains(offerId)?null:withdraw,icon:const Icon(Icons.delete_outline),label:Text(t('Retirer')))),
                   ])),
-                ),
+                ]),
               );            },
           );
         },
@@ -1431,8 +1476,8 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
       title:Text(t('Mes offres')),
       bottom:TabBar(controller:tabController,tabs:[
         Tab(text:t('En attente')),
-        Tab(text:t('Retenues')),
-        Tab(text:t('Closes')),
+        Tab(text:t('Acceptées')),
+        Tab(text:t('Refusées')),
       ]),
     ),
     body:TabBarView(controller:tabController,children:[
@@ -2015,6 +2060,8 @@ class _OfferComposerScreenState extends State<OfferComposerScreen>{
   }
 }
 
+/// « Mes courses » (planche 12 P6) : courses confirmées à venir et
+/// historique, regroupées par jour.
 class AgendaScreen extends StatefulWidget{
   const AgendaScreen({super.key});
   @override State<AgendaScreen> createState()=>_AgendaScreenState();
@@ -2022,8 +2069,8 @@ class AgendaScreen extends StatefulWidget{
 class _AgendaScreenState extends State<AgendaScreen>{
   late Future<List<dynamic>> future;
   int page=0;
-  String status='ALL';
-  String sort='asc';
+  /// 'upcoming' (À venir) or 'history' (Historique).
+  String scope='upcoming';
 
   @override void initState(){
     super.initState();
@@ -2031,84 +2078,88 @@ class _AgendaScreenState extends State<AgendaScreen>{
     RefreshBus.tick.addListener(_refresh);
   }
 
-  Future<List<dynamic>> _load() async {
-    final rows=await api.bookings(scope:'all',page:page,status:status=='ALL'?null:status,sort:sort);
-    var filtered=rows;
-    if(status!='ALL'){
-      filtered=filtered.where((raw)=>(raw as Map)['status']?.toString().toUpperCase()==status).toList();
-    }
-    filtered.sort((a,b){
-      final ad=DateTime.tryParse(((a as Map)['scheduled_at']??'').toString());
-      final bd=DateTime.tryParse(((b as Map)['scheduled_at']??'').toString());
-      final cmp=(ad==null||bd==null)?0:ad.compareTo(bd);
-      return sort=='desc'?-cmp:cmp;
-    });
-    return filtered;
-  }
+  Future<List<dynamic>> _load()=>api.bookings(scope:scope,page:page,sort:scope=='history'?'desc':'asc');
   @override void dispose(){
     RefreshBus.tick.removeListener(_refresh);
     super.dispose();
   }
   void _refresh()=>setState((){future=_load();});
+  void _scope(String s){if(s==scope)return;setState((){scope=s;page=0;future=_load();});}
+
+  static String dayLabel(dynamic raw){
+    final d=DateTime.tryParse((raw??'').toString())?.toLocal();
+    if(d==null)return '';
+    final full=driverWhen(raw);
+    return full.substring(0,full.lastIndexOf(' · '));
+  }
+
+  static String hhmm(dynamic raw){
+    final d=DateTime.tryParse((raw??'').toString())?.toLocal();
+    return d==null?'':'${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}';
+  }
+
+  Widget tabs()=>Container(
+    padding:const EdgeInsets.all(4),
+    decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.pill)),
+    child:Row(children:[
+      for(final (key,label) in [('upcoming',t('À venir')),('history',t('Historique'))])
+        Expanded(child:Material(
+          color:scope==key?VeyraColors.primary:Colors.transparent,
+          borderRadius:BorderRadius.circular(VeyraRadius.pill),
+          child:InkWell(
+            borderRadius:BorderRadius.circular(VeyraRadius.pill),
+            onTap:()=>_scope(key),
+            child:Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(label,textAlign:TextAlign.center,style:TextStyle(fontWeight:FontWeight.w700,color:scope==key?Colors.white:VeyraColors.textPrimary))),
+          ),
+        )),
+    ]),
+  );
+
+  Widget rideCard(Map<String,dynamic> x){
+    final status=(x['status']??'').toString();
+    final live={'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status);
+    final (pill,fg,bg)=switch(status){
+      'CONFIRMED'=>(t('Confirmée'),VeyraColors.success,VeyraColors.successBackground),
+      'DRIVER_EN_ROUTE'||'DRIVER_ARRIVED'||'IN_PROGRESS'=>(t('En cours'),VeyraColors.accent,VeyraColors.infoBackground),
+      'COMPLETED'||'CLOSED'=>(t('Terminée'),VeyraColors.neutral,VeyraColors.neutralBackground),
+      _=>(VeyraStatusLabels.bookingStatus(status),VeyraColors.danger,VeyraColors.dangerBackground),
+    };
+    final net=x['driver_net_amount_minor'];
+    return DriverCard(
+      onTap:()=>context.push('/ride/'+x['id'].toString()),
+      child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Row(children:[
+          Text(hhmm(x['scheduled_at']),style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
+          const Spacer(),
+          DriverPill(pill,fg:fg,bg:bg),
+        ]),
+        const SizedBox(height:8),
+        DriverMiniRoute((x['pickup_address']??'').toString(),(x['dropoff_address']??'').toString()),
+        const SizedBox(height:6),
+        Row(children:[
+          Expanded(child:DriverPaxBags(x['passenger_count'],x['baggage_count'])),
+          if(net!=null)Text(VeyraMoneyFormatter.fromMinor(net),style:const TextStyle(fontWeight:FontWeight.w800)),
+        ]),
+        if(x['category_name']!=null)Padding(padding:const EdgeInsets.only(top:4),child:Text(x['category_name'].toString(),style:const TextStyle(color:VeyraColors.accent,fontSize:13,fontWeight:FontWeight.w600))),
+        const SizedBox(height:12),
+        if(scope=='upcoming')FilledButton(
+          style:live?null:FilledButton.styleFrom(backgroundColor:VeyraColors.primary),
+          onPressed:()=>context.push('/ride/'+x['id'].toString()),
+          child:Text(live?t('Voir le trajet'):t('Voir les détails')),
+        ),
+      ]),
+    );
+  }
 
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Mes courses'))),
+    backgroundColor:Colors.white,
+    appBar:DriverTopBar(onNotifications:()=>context.push('/notifications')),
     body:RefreshIndicator(
       onRefresh:()async{final refreshed=_load();setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
-      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
-        LayoutBuilder(builder:(context,constraints){
-          final w=constraints.maxWidth<520?constraints.maxWidth:(constraints.maxWidth-10)/2;
-          return Wrap(spacing:10,runSpacing:10,children:[
-            SizedBox(width:w,child:DropdownButtonFormField<String>(
-                key:ValueKey('booking-status-$status'),
-                initialValue:status,
-                isExpanded:true,
-                decoration:InputDecoration(labelText:t('État')),
-                items:[
-                  DropdownMenuItem(value:'ALL',child:Text(t('Tous les états'))),
-                  DropdownMenuItem(value:'CONFIRMED',child:Text(t('Confirmée'))),
-                  DropdownMenuItem(value:'DRIVER_EN_ROUTE',child:Text(t('En route'))),
-                  DropdownMenuItem(value:'DRIVER_ARRIVED',child:Text(t('Arrivé'))),
-                  DropdownMenuItem(value:'IN_PROGRESS',child:Text(t('En cours'))),
-                  DropdownMenuItem(value:'COMPLETED',child:Text(t('Terminée'))),
-                  DropdownMenuItem(value:'CLOSED',child:Text(t('Clôturée'))),
-                  DropdownMenuItem(value:'CANCELLED',child:Text(t('Annulée'))),
-                  DropdownMenuItem(value:'DRIVER_CANCELLED',child:Text(t('Annulée par le chauffeur'))),
-                  DropdownMenuItem(value:'CUSTOMER_NO_SHOW',child:Text(t('Client absent'))),
-                ],
-                onChanged:(v){
-                  if(v==null)return;
-                  setState((){
-                    status=v;
-                    page=0;
-                    future=_load();
-                  });
-                },
-              )),
-            SizedBox(width:w,child:DropdownButtonFormField<String>(
-                key:ValueKey('booking-sort-$sort'),
-                initialValue:sort,
-                isExpanded:true,
-                decoration:InputDecoration(labelText:t('Date')),
-                items:[
-                  DropdownMenuItem(value:'asc',child:Text(t('Plus proches'))),
-                  DropdownMenuItem(value:'desc',child:Text(t('Plus récentes'))),
-                ],
-                onChanged:(v){
-                  if(v==null)return;
-                  setState((){
-                    sort=v;
-                    page=0;
-                    future=_load();
-                  });
-                },
-              )),
-          ]);
-        }),
-        if(status!='ALL'||sort!='asc')Padding(padding:const EdgeInsets.only(top:8),child:Row(children:[
-          const Icon(Icons.filter_alt_outlined,size:18),const SizedBox(width:6),Expanded(child:Text(t('Filtres actifs'))),
-          TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser'))),
-        ])),
+      child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.fromLTRB(16,8,16,24),children:[
+        Text(t('Mes courses'),style:const TextStyle(fontSize:22,fontWeight:FontWeight.w800)),
+        const SizedBox(height:12),
+        tabs(),
         const SizedBox(height:14),
         FutureBuilder<List<dynamic>>(
           future:future,
@@ -2121,58 +2172,32 @@ class _AgendaScreenState extends State<AgendaScreen>{
                 ?VeyraOfflineBanner(onRetry:_refresh)
                 :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:_refresh);
             }
-            final items=s.data??[];
+            final items=(s.data??[]).whereType<Map>().map((m)=>Map<String,dynamic>.from(m)).toList();
             if(items.isEmpty){
               if(page>0)return TextButton(onPressed:()=>setState((){page--;future=_load();}),child:Text(t('Page précédente')));
-              return Center(child:Padding(
-                padding:const EdgeInsets.all(32),
-                child:Column(mainAxisSize:MainAxisSize.min,children:[Text(status=='ALL'?t('Aucune course pour le moment.'):t('Aucune course ne correspond aux filtres.')),if(status!='ALL'||sort!='asc')TextButton(onPressed:()=>setState((){status='ALL';sort='asc';page=0;future=_load();}),child:Text(t('Réinitialiser les filtres')))]),
-              ));
+              return DriverCard(child:Row(children:[
+                const Icon(Icons.event_available_outlined,color:VeyraColors.textSecondary),
+                const SizedBox(width:12),
+                Expanded(child:Text(scope=='upcoming'?t('Aucune course à venir pour le moment.'):t('Aucune course dans l’historique.'),style:const TextStyle(color:VeyraColors.textSecondary))),
+              ]));
             }
-            return Column(children:[
-              ...items.map((raw){
-                final x=Map<String,dynamic>.from(raw as Map);
-                return Card(child:Padding(
-                  padding:const EdgeInsets.all(12),
-                  child:InkWell(
-                    onTap:()=>context.push('/ride/'+x['id'].toString()),
-                    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                      Text(
-                        (x['pickup_address']??'Départ').toString()+' → '+(x['dropoff_address']??'Destination').toString(),
-                        style:const TextStyle(fontWeight:FontWeight.w600),
-                      ),
-                      const SizedBox(height:4),
-                      Text(VeyraDateFormatter.dateTime(x['scheduled_at']),style:const TextStyle(color:Colors.black54,fontSize:13)),
-                      Text((x['category_name']??'').toString()+' • '+(x['passenger_count']??1).toString()+' passager(s) • '+(x['baggage_count']??0).toString()+' bagage(s)'),
-                      const SizedBox(height:8),
-                      Row(children:[
-                        VeyraStatusBadge(status:(x['status']??'').toString()),
-                        const Spacer(),
-                        Flexible(child:Text((x['status']??'')=='CONFIRMED'?t('Démarrer l’approche'):(x['status']??'')=='DRIVER_EN_ROUTE'?t('Continuer vers le client'):(x['status']??'')=='DRIVER_ARRIVED'?t('Démarrer la course'):(x['status']??'')=='IN_PROGRESS'?t('Continuer la course'):t('Voir le détail'),textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w600,fontSize:12))),
-                        const SizedBox(width:4),
-                        const Icon(Icons.chevron_right,color:Colors.black38),
-                      ]),
-                    ]),
-                  ),
-                ));
-              }),
-              VeyraPaginationBar(
-                page:page,
-                hasNext:items.length==10,
-                onPrevious:(){
-                  setState((){
-                    page--;
-                    future=_load();
-                  });
-                },
-                onNext:(){
-                  setState((){
-                    page++;
-                    future=_load();
-                  });
-                },
-              ),
-            ]);
+            final children=<Widget>[];
+            String? day;
+            for(final x in items){
+              final label=dayLabel(x['scheduled_at']);
+              if(label!=day){
+                day=label;
+                children.add(Padding(padding:const EdgeInsets.only(top:4,bottom:8),child:Text(label,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16))));
+              }
+              children.add(rideCard(x));
+            }
+            children.add(VeyraPaginationBar(
+              page:page,
+              hasNext:items.length==10,
+              onPrevious:()=>setState((){page--;future=_load();}),
+              onNext:()=>setState((){page++;future=_load();}),
+            ));
+            return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:children);
           },
         ),
       ]),
@@ -2813,8 +2838,44 @@ class _WalletScreenState extends State<WalletScreen>{
     }
   }
 
+  late Future<List<dynamic>> history=api.bookings(scope:'history',sort:'desc');
+
+  Widget balance(IconData icon,Color color,String label,dynamic minor,{String? note})=>DriverCard(child:Row(children:[
+    Icon(icon,color:color,size:26),
+    const SizedBox(width:12),
+    Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(label,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+      const SizedBox(height:2),
+      Text(VeyraMoneyFormatter.fromMinor(minor),style:TextStyle(color:color,fontSize:20,fontWeight:FontWeight.w800)),
+      if(note!=null)Text(note,style:const TextStyle(fontSize:12,color:VeyraColors.textSecondary)),
+    ])),
+  ]));
+
+  Widget historyCard(Map<String,dynamic> x){
+    final cash=x['payment_method']=='CASH';
+    return DriverCard(
+      onTap:()=>context.push('/ride/'+x['id'].toString()),
+      padding:const EdgeInsets.symmetric(horizontal:14,vertical:12),
+      child:Row(children:[
+        const Icon(Icons.event_note_outlined,color:VeyraColors.textSecondary),
+        const SizedBox(width:12),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(driverWhen(x['scheduled_at']),style:const TextStyle(fontWeight:FontWeight.w600,fontSize:13)),
+          Text('${x['pickup_address']??''} → ${x['dropoff_address']??''}',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+        ])),
+        const SizedBox(width:8),
+        Column(crossAxisAlignment:CrossAxisAlignment.end,children:[
+          Text(VeyraMoneyFormatter.fromMinor(x['driver_net_amount_minor']),style:const TextStyle(fontWeight:FontWeight.w800)),
+          const SizedBox(height:2),
+          DriverPill(cash?t('Espèces'):t('En ligne'),fg:cash?VeyraColors.warning:VeyraColors.success,bg:cash?VeyraColors.warningBackground:VeyraColors.successBackground),
+        ]),
+      ]),
+    );
+  }
+
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Portefeuille')),actions:[IconButton(onPressed:refreshWallet,icon:const Icon(Icons.refresh),tooltip:t('Actualiser'))]),
+    backgroundColor:Colors.white,
+    appBar:DriverTopBar(onNotifications:()=>context.push('/notifications')),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
@@ -2823,50 +2884,43 @@ class _WalletScreenState extends State<WalletScreen>{
           ?VeyraOfflineBanner(onRetry:()=>setState((){future=api.wallet();}))
           :VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState((){future=api.wallet();}));
         final x=s.data??{};
-        return RefreshIndicator(onRefresh:refreshWallet,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(20),children:[
-          // Real gap fixed here, found during a UX/business audit: both
-          // summary cards used the exact same neutral ListTile styling,
-          // with no visual distinction between money coming TO the
-          // driver (good news) and money the driver OWES (bad news) --
-          // a driver glancing at this screen could not tell which
-          // figure was which at a glance. Worse, the transaction list
-          // further down was already color-coded (green/red per row),
-          // making the summary at the TOP of the screen -- meant to be
-          // the dominant, most important figures -- less informative
-          // than the detail underneath it. Reused the exact same colors
-          // already used by that transaction list (0xFF16A34A /
-          // 0xFFDC2626) rather than introducing new ones, so the whole
-          // screen now reads consistently.
-          Card(child:Padding(padding:const EdgeInsets.all(16),child:Row(children:[
-            const Icon(Icons.account_balance_wallet_outlined,color:Color(0xFF16A34A),size:28),
-            const SizedBox(width:14),
+        return RefreshIndicator(onRefresh:()async{setState((){history=api.bookings(scope:'history',sort:'desc');});await refreshWallet();},child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.fromLTRB(16,8,16,24),children:[
+          // Board 12 P9 header: this month's net earnings.
+          DriverCard(child:Row(children:[
             Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Solde à recevoir'),style:const TextStyle(color:Colors.black54,fontSize:13)),
-              const SizedBox(height:2),
-              Text(VeyraMoneyFormatter.fromMinor(x['onlinePayableMinor']),style:const TextStyle(color:Color(0xFF16A34A),fontSize:22,fontWeight:FontWeight.w900)),
-              Text(t('Montants dus par Veyra, en attente de versement.'),style:const TextStyle(fontSize:12)),
+              Text(t('Mes revenus'),style:const TextStyle(color:VeyraColors.textSecondary)),
+              const SizedBox(height:4),
+              Text(VeyraMoneyFormatter.fromMinor(x['monthEarningsMinor']??0),style:const TextStyle(fontSize:30,fontWeight:FontWeight.w800)),
+              Text(t('Ce mois-ci'),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
             ])),
-          ]))),
-          const SizedBox(height:10),
-          Card(child:Padding(padding:const EdgeInsets.all(16),child:Row(children:[
-            const Icon(Icons.warning_amber_rounded,color:Color(0xFFDC2626),size:28),
-            const SizedBox(width:14),
-            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(t('Commissions espèces à reverser'),style:const TextStyle(color:Colors.black54,fontSize:13)),
-              const SizedBox(height:2),
-              Text(VeyraMoneyFormatter.fromMinor(x['cashDebtMinor']),style:const TextStyle(color:Color(0xFFDC2626),fontSize:22,fontWeight:FontWeight.w900)),
-            ])),
-          ]))),
-          if(x['cashWarning']==true)Card(child:ListTile(
-            leading:const Icon(Icons.warning_amber),title:Text(t('Seuil de dette atteint')),
-            subtitle:Text(
-              t('Alerte')+' ${VeyraMoneyFormatter.fromMinor(x['cashWarningThresholdMinor'])}'
+            Container(
+              width:52,height:52,
+              decoration:BoxDecoration(color:VeyraColors.infoBackground,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+              child:const Icon(Icons.bar_chart_rounded,color:VeyraColors.accent,size:30),
+            ),
+          ])),
+          balance(Icons.account_balance_wallet_outlined,VeyraColors.success,t('Solde à recevoir'),x['onlinePayableMinor'],note:t('Montants dus par Veyra, en attente de versement.')),
+          balance(Icons.warning_amber_rounded,VeyraColors.danger,t('Commissions espèces à reverser'),x['cashDebtMinor']),
+          if(x['cashWarning']==true)Padding(padding:const EdgeInsets.only(bottom:14),child:VeyraBanner(
+            tone:VeyraTone.warning,
+            title:t('Seuil de dette atteint'),
+            text:t('Alerte')+' ${VeyraMoneyFormatter.fromMinor(x['cashWarningThresholdMinor'])}'
               ' • '+t('restriction CASH')+' ${VeyraMoneyFormatter.fromMinor(x['cashRestrictedThresholdMinor'])}'
               ' • '+t('blocage CASH')+' ${VeyraMoneyFormatter.fromMinor(x['cashBlockedThresholdMinor'])}',
-            ),
           )),
-          const SizedBox(height:20),
-          Text(t('Transactions'),style:const TextStyle(fontSize:16,fontWeight:FontWeight.w600)),
+          DriverSectionTitle(t('Historique des courses')),
+          FutureBuilder<List<dynamic>>(future:history,builder:(context,h){
+            if(h.connectionState!=ConnectionState.done)return const Padding(padding:EdgeInsets.all(16),child:Center(child:CircularProgressIndicator()));
+            final rides=(h.data??const[]).whereType<Map>().map((m)=>Map<String,dynamic>.from(m))
+              .where((r)=>{'COMPLETED','CLOSED'}.contains(r['status'])).take(4).toList();
+            if(h.hasError||rides.isEmpty)return Text(t('Aucune course terminée pour le moment.'),style:const TextStyle(color:VeyraColors.textSecondary));
+            return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              for(final r in rides)historyCard(r),
+              FilledButton(onPressed:()=>context.go('/agenda'),child:Text(t('Voir tout l’historique'))),
+            ]);
+          }),
+          const SizedBox(height:18),
+          DriverSectionTitle(t('Transactions')),
           OutlinedButton.icon(icon:const Icon(Icons.date_range),label:Text(transactionDates==null?t('Toutes les dates'):VeyraDateFormatter.dateTime(transactionDates!.start.toIso8601String())+' – '+VeyraDateFormatter.dateTime(transactionDates!.end.toIso8601String())),onPressed:()async{
             final chosen=await showDateRangePicker(context:context,firstDate:DateTime(2020),lastDate:DateTime.now(),initialDateRange:transactionDates);
             if(chosen!=null&&mounted)setState((){transactionDates=chosen;transactionsPage=0;transactionsFuture=loadTransactions();});
@@ -2988,7 +3042,7 @@ Future<void> edit(Map<String,dynamic> profile)async{
   catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));}
   finally{if(mounted)setState(()=>busy=false);}
 }
-Future<void> logout()async{await activeRideTracker.stop();await api.logout();try{await FirebaseAuth.instance.signOut();}catch(_){}if(mounted)context.go('/login');}@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Mon compte'))),body:FutureBuilder<Map<String,dynamic>>(future:future,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(loadAccount));final m=s.data??{},name=((m['first_name']??'').toString()+' '+(m['last_name']??'').toString()).trim(),rating=double.tryParse((m['rating_average']??0).toString())??0,count=m['rating_count']??0;return ListView(padding:const EdgeInsets.all(20),children:[Center(child:Stack(children:[CircleAvatar(radius:48,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:42):null),Positioned(right:0,bottom:0,child:IconButton.filled(onPressed:busy?null:photo,icon:const Icon(Icons.camera_alt_outlined)))])),Center(child:Text(name.isEmpty?t('Chauffeur Veyra'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold))),Center(child:Text((m['email']??'').toString())),Center(child:Text((m['phone']??'').toString())),Center(child:Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.star,color:Colors.amber),Text(' '+rating.toStringAsFixed(1)+' ('+count.toString()+' '+t('avis')+')')])),const SizedBox(height:12),FutureBuilder<Map<String,dynamic>>(future:kyc,builder:(context,ks){
+Future<void> logout()async{await activeRideTracker.stop();await api.logout();try{await FirebaseAuth.instance.signOut();}catch(_){}if(mounted)context.go('/login');}@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(t('Paramètres'))),body:FutureBuilder<Map<String,dynamic>>(future:future,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const VeyraLoadingView();if(s.hasError)return VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:()=>setState(loadAccount));final m=s.data??{},name=((m['first_name']??'').toString()+' '+(m['last_name']??'').toString()).trim(),rating=double.tryParse((m['rating_average']??0).toString())??0,count=m['rating_count']??0;return ListView(padding:const EdgeInsets.all(20),children:[Center(child:Stack(children:[CircleAvatar(radius:48,backgroundImage:avatar==null?null:MemoryImage(avatar!),child:avatar==null?const Icon(Icons.person,size:42):null),Positioned(right:0,bottom:0,child:IconButton.filled(onPressed:busy?null:photo,icon:const Icon(Icons.camera_alt_outlined)))])),Center(child:Text(name.isEmpty?t('Chauffeur Veyra'):name,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold))),Center(child:Text((m['email']??'').toString())),Center(child:Text((m['phone']??'').toString())),Center(child:Row(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.star,color:Colors.amber),Text(' '+rating.toStringAsFixed(1)+' ('+count.toString()+' '+t('avis')+')')])),const SizedBox(height:12),FutureBuilder<Map<String,dynamic>>(future:kyc,builder:(context,ks){
             // Real gap fixed here, found during a UX/business audit:
             // kyc_status is already fetched and displayed well on the
             // dedicated KYC screen (icon, label, per-document detail),
@@ -3278,85 +3332,6 @@ class _DriverChatScreenState extends State<DriverChatScreen>{
 }
 
 
-class DriverNotificationsScreen extends StatefulWidget{
-  const DriverNotificationsScreen({super.key});
-  @override State<DriverNotificationsScreen> createState()=>_DriverNotificationsScreenState();
-}
-
-class _DriverNotificationsScreenState extends State<DriverNotificationsScreen>{
-  late Future<List<dynamic>> future;
-  int page=0;
-  @override void initState(){super.initState();future=api.notifications(page:page);}
-  void reload()=>setState((){future=api.notifications(page:page);});
-
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Notifications'))),
-    body:RefreshIndicator(
-      onRefresh:()async{final refreshed=api.notifications(page:page);setState((){future=refreshed;});try{await refreshed;}catch(_){/* FutureBuilder displays the load error. */}},
-      child:FutureBuilder<List<dynamic>>(
-        future:future,
-        builder:(context,s){
-          if(s.connectionState!=ConnectionState.done){
-            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:const [SizedBox(height:220),Center(child:CircularProgressIndicator())]);
-          }
-          if(s.hasError){
-            final offline=VeyraErrorMessages.isOffline(s.error!);
-            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
-              const SizedBox(height:160),
-              if(offline) VeyraOfflineBanner(onRetry:reload)
-              else VeyraErrorView(customMessage:VeyraErrorMessages.forException(s.error!),onRetry:reload),
-            ]);
-          }
-          final items=s.data??[];
-          if(items.isEmpty){
-            return ListView(physics:const AlwaysScrollableScrollPhysics(),children:[
-              SizedBox(height:160),
-              Icon(Icons.notifications_none,size:56),
-              Center(child:Text(t('Aucune notification pour le moment.'))),
-            ]);
-          }
-          return ListView.separated(physics:const AlwaysScrollableScrollPhysics(),
-            padding:const EdgeInsets.all(16),
-            itemCount:items.length+1,
-            separatorBuilder:(_,__)=>const SizedBox(height:8),
-            itemBuilder:(context,index){
-              if(index==items.length){
-                return VeyraPaginationBar(
-                  page:page,
-                  hasNext:items.length==10,
-                  onPrevious:(){
-                    setState((){
-                      page--;
-                      future=api.notifications(page:page);
-                    });
-                  },
-                  onNext:(){
-                    setState((){
-                      page++;
-                      future=api.notifications(page:page);
-                    });
-                  },
-                );
-              }
-              final x=Map<String,dynamic>.from(items[index] as Map);
-              final rawData=x['data'];
-              final data=rawData is Map
-                ?Map<String,dynamic>.from(rawData)
-                :rawData is String&&rawData.isNotEmpty
-                  ?((){try{return Map<String,dynamic>.from(jsonDecode(rawData) as Map);}catch(_){return <String,dynamic>{};}})()
-                  :<String,dynamic>{};
-              final bookingId=data['bookingId']?.toString();
-              final template=(x['template_code']??'').toString();
-              final pickup=(x['pickup_address']??'').toString(),dropoff=(x['dropoff_address']??'').toString(),scheduled=x['scheduled_at'];
-              return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.notifications_active_outlined)),title:Text(VeyraStatusLabels.notificationTemplate(template),style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[if(pickup.isNotEmpty&&dropoff.isNotEmpty)Text(pickup+' → '+dropoff,style:const TextStyle(fontWeight:FontWeight.w600)),if(scheduled!=null)Text(VeyraDateFormatter.dateTime(scheduled)),Text(t('Reçue le')+' '+VeyraDateFormatter.dateTime(x['created_at']))]),isThreeLine:true,trailing:bookingId==null?null:const Icon(Icons.chevron_right),onTap:bookingId==null?null:()=>router.go(driverNotificationRoute(bookingId,template,data))));
-            },
-          );
-        },
-      ),
-    ),
-  );
-}
-
 /// Document or photo for the driver dossier (PDF, JPG, PNG).
 Future<String?> pickDriverFile({bool imageOnly=false})async{
   final r=await FilePicker.platform.pickFiles(
@@ -3364,4 +3339,17 @@ Future<String?> pickDriverFile({bool imageOnly=false})async{
     allowedExtensions:imageOnly?null:['pdf','jpg','jpeg','png'],
   );
   return r==null||r.files.isEmpty?null:r.files.single.path;
+}
+
+/// Sign-out from the profile menu (board 12 P10).
+Future<void> driverLogout(BuildContext context)async{
+  await activeRideTracker.stop();
+  await api.logout();
+  try{await FirebaseAuth.instance.signOut();}catch(_){}
+  if(context.mounted)context.go('/login');
+}
+
+/// Refreshes the bell badge (board 16 P1).
+Future<void> refreshUnreadNotifications()async{
+  try{veyraUnreadNotifications.value=await api.unreadNotifications();}catch(_){}
 }
