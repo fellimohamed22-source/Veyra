@@ -349,6 +349,17 @@ class Api {
   Future<Map<String,dynamic>> onboardingStatus() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/onboarding/status')).data);
 
+  // Affiliated driver (board 08 C, DR-AFF): VTC company attachment.
+  Future<Map<String,dynamic>> companyByCode(String code) async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/driver/company/lookup',queryParameters:{'code':code})).data);
+  Future<List<dynamic>> searchCompanies(String q) async =>
+      List<dynamic>.from((await dio.get('/api/v1/driver/company/search',queryParameters:{'q':q})).data);
+  Future<Map<String,dynamic>> joinCompany({String? code,String? companyId}) async =>
+      Map<String,dynamic>.from((await dio.post('/api/v1/driver/company/join',data:{'code':code,'companyId':companyId})).data);
+  Future<Map<String,dynamic>> myCompany() async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/driver/company')).data);
+  Future<void> leaveCompany() async => dio.delete('/api/v1/driver/company');
+
   Future<void> enRoute(String id) async => dio.post('/api/v1/bookings/$id/en-route');
   /// DEC-10: the server checks the driver is within the pickup radius;
   /// the current position is sent when available, otherwise the server

@@ -7,6 +7,7 @@ import '../core/formatters/error_messages.dart';
 import '../core/widgets/auth_ui.dart';
 import '../core/widgets/veyra_ui.dart' show VeyraStepTitle;
 import '../core/widgets/signup_consents.dart';
+import '../ui/driver_ui.dart' show DriverPill;
 
 String _t(String s) => AppLocale.t(s);
 
@@ -52,11 +53,30 @@ class _Page {
 }
 
 class DriverSignupFlowState extends State<DriverSignupFlow> {
-  static const independentSteps = 7;
+  // Step identifiers; the numbering shown follows the kind's sequence.
+  static const sInfo = 1, sIdentity = 2, sVtc = 3, sLicense = 4, sCompany = 5, sVehicle = 6, sSummary = 7, sJoin = 8, sExtraDocs = 9;
+  /// Board 08 B2-B9 (7 steps) and board 08 C2-C7 (6 steps).
+  static const independentStages = [sInfo, sIdentity, sVtc, sLicense, sCompany, sVehicle, sSummary];
+  static const affiliatedStages = [sInfo, sIdentity, sVtc, sJoin, sExtraDocs, sSummary];
 
   DriverKind? kind;
-  /// 0 = driver type (B2), 1..7 = steps, 8 = sent.
+  /// 0 = driver type (B2 / C1), then a step identifier.
   int step = 0;
+  /// Dossier sent (B9 / C8 status screen).
+  bool submitted = false;
+  List<int> get stages => kind == DriverKind.affiliated ? affiliatedStages : independentStages;
+  int get position => stages.indexOf(step) + 1;
+
+  // Board 08 C5: VTC company to join.
+  bool joinByCode = true;
+  final inviteCode = TextEditingController();
+  final companySearch = TextEditingController();
+  Map<String, dynamic>? selectedCompany;
+  /// Attachment already requested (pending or active).
+  Map<String, dynamic>? joinedCompany;
+  List<Map<String, dynamic>> searchResults = [];
+  bool lookingUp = false;
+  String? lookupError;
   bool accountCreated = false;
   bool busy = false;
   String? error;
@@ -130,7 +150,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
 
   @override
   void dispose() {
-    for (final c in [firstName, lastName, phone, email, password, vtcCard, licenseNumber, legalName, sirenSiret, address, revtc, brand, model, plate]) {
+    for (final c in [firstName, lastName, phone, email, password, vtcCard, licenseNumber, legalName, sirenSiret, address, revtc, brand, model, plate, inviteCode, companySearch]) {
       c.dispose();
     }
     super.dispose();
@@ -157,6 +177,13 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
       email.text = (me['email'] ?? '').toString();
       phone.text = (me['phone'] ?? '').toString();
       birthDate = DateTime.tryParse((s['birth_date'] ?? '').toString());
+      if (s['driver_type'] == 'AFFILIATED') {
+        kind = DriverKind.affiliated;
+        try {
+          final c = await widget.api.myCompany();
+          if (c['status'] == 'PENDING' || c['status'] == 'ACTIVE') joinedCompany = c;
+        } catch (_) {}
+      }
       for (final d in (s['documents'] as List? ?? const []).whereType<Map>()) {
         final type = d['type'].toString();
         page(type, d['side']?.toString()).sent = true;
@@ -204,13 +231,47 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
   }
 
   int _firstIncompleteStep() {
-    if (missing.contains('BIRTH_DATE')) return 1;
-    if (missing.contains('IDENTITY')) return 2;
-    if (missing.contains('VTC_CARD') || missing.contains('VTC')) return 3;
-    if (missing.contains('DRIVING_LICENSE') || missing.contains('LICENSE')) return 4;
-    if (missing.contains('COMPANY') || missing.contains('INSURANCE')) return 5;
-    if (missing.contains('VEHICLE') || missing.contains('VEHICLE_REGISTRATION')) return 6;
-    return 7;
+    if (missing.contains('BIRTH_DATE')) return sInfo;
+    if (missing.contains('IDENTITY')) return sIdentity;
+    if (missing.contains('VTC_CARD') || missing.contains('VTC')) return sVtc;
+    if (kind == DriverKind.affiliated) {
+      if (missing.contains('AFFILIATION')) return sJoin;
+      if (missing.contains('DRIVING_LICENSE') || missing.contains('LICENSE')) return sExtraDocs;
+      return sSummary;
+    }
+    if (missing.contains('DRIVING_LICENSE') || missing.contains('LICENSE')) return sLicense;
+    if (missing.contains('COMPANY') || missing.contains('INSURANCE')) return sCompany;
+    if (missing.contains('VEHICLE') || missing.contains('VEHICLE_REGISTRATION')) return sVehicle;
+    return sSummary;
+  }
+
+  /// Board 08 C5: company card for the typed invitation code.
+  Future<void> lookupCode() async {
+    final code = inviteCode.text.trim();
+    if (code.replaceAll('-', '').length < 8) {
+      setState(() { selectedCompany = null; lookupError = null; });
+      return;
+    }
+    setState(() { lookingUp = true; lookupError = null; });
+    try {
+      final c = await widget.api.companyByCode(code);
+      if (mounted) setState(() => selectedCompany = c);
+    } catch (e) {
+      if (mounted) setState(() { selectedCompany = null; lookupError = VeyraErrorMessages.forException(e); });
+    } finally {
+      if (mounted) setState(() => lookingUp = false);
+    }
+  }
+
+  Future<void> searchCompany(String q) async {
+    if (q.trim().length < 3) {
+      setState(() => searchResults = []);
+      return;
+    }
+    try {
+      final items = await widget.api.searchCompanies(q.trim());
+      if (mounted && companySearch.text == q) setState(() => searchResults = items.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList());
+    } catch (_) {}
   }
 
   Future<void> _loadCategories() async {
@@ -270,7 +331,25 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
             try { await widget.api.uploadAvatar(avatarPath!); } catch (_) {}
           }
         }
-        await widget.api.saveDriverProfile(birthDate: iso(birthDate!), driverType: 'INDEPENDENT');
+        await widget.api.saveDriverProfile(birthDate: iso(birthDate!), driverType: kind == DriverKind.affiliated ? 'AFFILIATED' : 'INDEPENDENT');
+        return true;
+      case sJoin:
+        if (joinedCompany != null) return true;
+        final target = selectedCompany;
+        if (target == null) return _fail(_t(joinByCode ? 'Saisissez le code d’invitation de votre société.' : 'Choisissez votre société.'));
+        try {
+          await widget.api.joinCompany(code: joinByCode ? inviteCode.text.trim() : null, companyId: joinByCode ? null : target['company_id']?.toString());
+        } on DioException catch (e) {
+          final body = e.response?.data;
+          if (!(body is Map && body['code'] == 'AFFILIATION_EXISTS')) rethrow;
+        }
+        joinedCompany = await widget.api.myCompany();
+        return true;
+      case sExtraDocs:
+        if (licenseNumber.text.trim().isEmpty) return _fail(_t('Numéro de permis requis.'));
+        if (licenseExpiry == null) return _fail(_t('Date de validité requise.'));
+        if (!page('DRIVING_LICENSE', 'FRONT').sent) return _fail(_t('Ajoutez une photo de votre permis.'));
+        await widget.api.saveLicense(licenseNumber: licenseNumber.text.trim(), category: licenseCategory, expiresAt: iso(licenseExpiry!));
         return true;
       case 2:
         if (!page('IDENTITY', 'FRONT').sent) return _fail(_t('Ajoutez le recto de votre pièce d’identité.'));
@@ -340,12 +419,12 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
       setState(() { step = 1; error = null; });
       return;
     }
-    if (step == independentSteps) return submit();
+    if (step == sSummary) return submit();
     setState(() { busy = true; error = null; });
     try {
       if (await saveStep() && mounted) {
-        setState(() => step++);
-        if (step == 6) _loadCategories();
+        setState(() => step = stages[position]);
+        if (step == sVehicle) _loadCategories();
       }
     } catch (e) {
       if (mounted) setState(() => error = VeyraErrorMessages.forException(e));
@@ -356,8 +435,8 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
 
   void back() {
     if (busy) return;
-    if (step == 0 || (step == 1 && widget.resume)) return widget.onExit();
-    setState(() { step--; error = null; });
+    if (step == 0 || (step == sInfo && widget.resume)) return widget.onExit();
+    setState(() { step = position > 1 ? stages[position - 2] : 0; error = null; });
   }
 
   Future<void> submit() async {
@@ -365,7 +444,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
     setState(() { busy = true; error = null; });
     try {
       await widget.api.submitDossier();
-      if (mounted) setState(() => step = independentSteps + 1);
+      if (mounted) setState(() => submitted = true);
     } on DioException catch (e) {
       final body = e.response?.data;
       if (body is Map && body['code'] == 'DOSSIER_INCOMPLETE') {
@@ -392,6 +471,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         'COMPANY' => 'entreprise',
         'VEHICLE' => 'véhicule',
         'VEHICLE_REGISTRATION' => 'carte grise',
+        'AFFILIATION' => 'société de rattachement',
         _ => code,
       });
 
@@ -493,6 +573,77 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         ),
       );
 
+  /// Board 08 C5 company card: name, address, SIREN, check.
+  Widget companyCard(Map<String, dynamic> c, {Key? key}) {
+    final siren = (c['siren'] ?? '').toString();
+    final grouped = siren.length == 9 ? '${siren.substring(0, 3)} ${siren.substring(3, 6)} ${siren.substring(6)}' : siren;
+    return Container(
+      key: key,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(VeyraRadius.md), border: Border.all(color: VeyraColors.border)),
+      child: Row(children: [
+        Container(
+          width: 48, height: 48,
+          decoration: BoxDecoration(color: VeyraColors.primary, borderRadius: BorderRadius.circular(12)),
+          child: const Icon(Icons.local_taxi_outlined, color: Colors.white),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text((c['legal_name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
+          if ((c['address'] ?? '').toString().isNotEmpty) Text(c['address'].toString(), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: VeyraColors.textSecondary, fontSize: 13)),
+          if (grouped.isNotEmpty) Text('SIREN : $grouped', style: const TextStyle(color: VeyraColors.textSecondary, fontSize: 13)),
+        ])),
+        const Icon(Icons.check_circle, color: VeyraColors.success),
+      ]),
+    );
+  }
+
+  /// Board 08 C6 row: document, then a check once sent or a « + » to add it.
+  Widget docRow(IconData icon, String title, _Page p, VoidCallback onTap, {Key? key}) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: InkWell(
+          key: key,
+          onTap: p.busy ? null : onTap,
+          borderRadius: BorderRadius.circular(VeyraRadius.md),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(VeyraRadius.md), border: Border.all(color: VeyraColors.border)),
+            child: Row(children: [
+              Icon(icon, color: VeyraColors.primary),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (p.error != null) Text(p.error!, style: const TextStyle(color: VeyraColors.danger, fontSize: 12)),
+              ])),
+              p.busy
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.2))
+                  : Icon(p.sent ? Icons.check_circle : Icons.add_circle, color: p.sent ? VeyraColors.success : VeyraColors.accent, size: 26),
+            ]),
+          ),
+        ),
+      );
+
+  _Page get avatarPage {
+    final p = page('AVATAR');
+    if (avatarPath != null) p.sent = true;
+    return p;
+  }
+
+  Future<void> uploadProfilePhoto() async {
+    final p = page('AVATAR');
+    final path = await widget.pickFile(imageOnly: true);
+    if (path == null) return;
+    setState(() { p.busy = true; p.error = null; });
+    try {
+      await widget.api.uploadAvatar(path);
+      if (mounted) setState(() => p.sent = true);
+    } catch (e) {
+      if (mounted) setState(() => p.error = VeyraErrorMessages.forException(e));
+    } finally {
+      if (mounted) setState(() => p.busy = false);
+    }
+  }
+
   Widget summaryRow(IconData icon, String title, String detail, int target, bool done) => Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: ListTile(
@@ -529,14 +680,69 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
             text: _t('Je suis rattaché à une société VTC.'),
             onTap: () => setState(() => kind = DriverKind.affiliated),
           ),
-          if (kind == DriverKind.affiliated)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _t('Le rattachement à une société se fait avec le code d’invitation de votre société. Cette inscription ouvrira avec les espaces société.'),
-                style: const TextStyle(color: VeyraColors.textSecondary),
+        ];
+      case sJoin:
+        final joined = joinedCompany;
+        return [
+          VeyraStepTitle(_t('Rejoindre une société VTC')),
+          const SizedBox(height: 16),
+          if (joined != null) ...[
+            companyCard(joined, key: const ValueKey('joined-company')),
+            const SizedBox(height: 8),
+            Text(_t('Demande envoyée : votre société doit valider votre rattachement.'), style: const TextStyle(color: VeyraColors.textSecondary)),
+          ] else ...[
+            choice(key: const ValueKey('join-code'), selected: joinByCode, icon: Icons.vpn_key_outlined, title: _t('Code d’invitation'),
+                onTap: () => setState(() { joinByCode = true; selectedCompany = null; })),
+            choice(key: const ValueKey('join-search'), selected: !joinByCode, icon: Icons.search, title: _t('Rechercher une société'),
+                onTap: () => setState(() { joinByCode = false; selectedCompany = null; })),
+            const SizedBox(height: 6),
+            if (joinByCode) ...[
+              VeyraFieldLabel(_t('Code d’invitation'), required: true),
+              TextField(
+                key: const ValueKey('invite-code'),
+                controller: inviteCode,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(hintText: 'PRST-7Q4K', suffixIcon: lookingUp ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))) : null),
+                onChanged: (_) => lookupCode(),
               ),
-            ),
+              if (lookupError != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(lookupError!, style: const TextStyle(color: VeyraColors.danger, fontSize: 13))),
+            ] else ...[
+              VeyraFieldLabel(_t('Nom ou SIREN de la société'), required: true),
+              TextField(key: const ValueKey('company-search'), controller: companySearch, decoration: const InputDecoration(prefixIcon: Icon(Icons.search)), onChanged: searchCompany),
+              for (final c in searchResults)
+                if (selectedCompany?['company_id'] != c['company_id'])
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.business_outlined),
+                    title: Text((c['legal_name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text((c['address'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    onTap: () => setState(() => selectedCompany = c),
+                  ),
+              if (companySearch.text.trim().length >= 3 && searchResults.isEmpty)
+                Padding(padding: const EdgeInsets.only(top: 8), child: Text(_t('Aucune société approuvée ne correspond. Demandez le code d’invitation à votre société.'), style: const TextStyle(color: VeyraColors.textSecondary))),
+            ],
+            if (selectedCompany != null) ...[const SizedBox(height: 16), companyCard(selectedCompany!, key: const ValueKey('selected-company'))],
+          ],
+        ];
+      case sExtraDocs:
+        return [
+          VeyraStepTitle(_t('Documents requis')),
+          const SizedBox(height: 16),
+          field(_t('Numéro de permis'), licenseNumber, key: const ValueKey('license-number')),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: dropdown<String>(_t('Catégorie'), licenseCategory, const {'B': 'B', 'BE': 'BE', 'C1': 'C1', 'D1': 'D1', 'D': 'D'}, (v) => setState(() => licenseCategory = v ?? 'B'))),
+            const SizedBox(width: 12),
+            Expanded(child: dateField(_t('Date de validité'), licenseExpiry, () async {
+              final now = DateTime.now();
+              final d = await pickDate(licenseExpiry, first: now, last: DateTime(now.year + 20), initial: DateTime(now.year + 5));
+              if (d != null) setState(() => licenseExpiry = d);
+            }, key: const ValueKey('license-expiry'))),
+          ]),
+          docRow(Icons.badge_outlined, _t('Permis de conduire'), page('DRIVING_LICENSE', 'FRONT'),
+              () => upload('DRIVING_LICENSE', side: 'FRONT', expiresAt: licenseExpiry), key: const ValueKey('doc-license')),
+          docRow(Icons.home_outlined, _t('Justificatif de domicile'), page('PROOF_OF_ADDRESS'),
+              () => upload('PROOF_OF_ADDRESS'), key: const ValueKey('doc-address')),
+          docRow(Icons.account_circle_outlined, _t('Photo de profil'), avatarPage, uploadProfilePhoto, key: const ValueKey('doc-photo')),
         ];
       case 1:
         return [
@@ -653,13 +859,27 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         ];
       default:
         final docsDone = page('IDENTITY', 'FRONT').sent && page('VTC_CARD', 'FRONT').sent && page('DRIVING_LICENSE', 'FRONT').sent;
+        final affiliated = kind == DriverKind.affiliated;
         return [
           VeyraStepTitle(_t('Vérifiez vos informations')),
           const SizedBox(height: 12),
-          summaryRow(Icons.person_outline, _t('Informations personnelles'), '${firstName.text} ${lastName.text} · ${display(birthDate)}', 1, birthDate != null),
-          summaryRow(Icons.badge_outlined, _t('Documents'), _t('Identité, carte VTC, permis'), 2, docsDone),
-          summaryRow(Icons.business_outlined, _t('Entreprise'), '${_t(legalForms[legalForm]!)} · ${sirenSiret.text}', 5, sirenSiret.text.isNotEmpty && page('INSURANCE').sent),
-          summaryRow(Icons.directions_car_outlined, _t('Véhicule'), '${brand.text} ${model.text} · ${plate.text}', 6, hasVehicle && page('VEHICLE_REGISTRATION').sent),
+          summaryRow(Icons.person_outline, _t('Informations personnelles'), '${firstName.text} ${lastName.text} · ${display(birthDate)}', sInfo, birthDate != null),
+          summaryRow(Icons.badge_outlined, _t('Documents'), _t('Identité, carte VTC, permis'), affiliated ? sExtraDocs : sIdentity, docsDone),
+          if (affiliated) ...[
+            summaryRow(Icons.business_outlined, _t('Société'), (joinedCompany?['legal_name'] ?? '—').toString(), sJoin, joinedCompany != null),
+            ListTile(
+              key: const ValueKey('affiliation-status'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.hourglass_top_rounded, color: VeyraColors.warning),
+              title: Text(_t('Statut'), style: const TextStyle(fontWeight: FontWeight.w700)),
+              trailing: joinedCompany?['status'] == 'ACTIVE'
+                  ? DriverPill(_t('Rattachement validé'), fg: VeyraColors.success, bg: VeyraColors.successBackground)
+                  : DriverPill(_t('En attente de validation'), fg: VeyraColors.warning, bg: VeyraColors.warningBackground),
+            ),
+          ] else ...[
+            summaryRow(Icons.business_outlined, _t('Entreprise'), '${_t(legalForms[legalForm]!)} · ${sirenSiret.text}', sCompany, sirenSiret.text.isNotEmpty && page('INSURANCE').sent),
+            summaryRow(Icons.directions_car_outlined, _t('Véhicule'), '${brand.text} ${model.text} · ${plate.text}', sVehicle, hasVehicle && page('VEHICLE_REGISTRATION').sent),
+          ],
           const SizedBox(height: 8),
           CheckboxListTile(
             key: const ValueKey('charter'),
@@ -675,7 +895,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
 
   @override
   Widget build(BuildContext context) {
-    if (step > independentSteps) {
+    if (submitted) {
       return Scaffold(
         body: VeyraSuccessView(
           icon: Icons.hourglass_top_rounded,
@@ -689,17 +909,17 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
     }
     final label = step == 0
         ? _t('Continuer')
-        : step == independentSteps
+        : step == sSummary
             ? _t('Envoyer mon dossier')
             : _t('Continuer');
-    final blocked = step == 0 && kind != DriverKind.independent;
+    final blocked = step == 0 && kind == null;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) { if (!didPop) back(); },
       child: Scaffold(
         appBar: step == 0
             ? AppBar(leading: IconButton(tooltip: _t('Retour'), icon: const Icon(Icons.chevron_left, size: 30), onPressed: back))
-            : VeyraStepProgress(step: step, total: independentSteps, onBack: back),
+            : VeyraStepProgress(step: position, total: stages.length, onBack: back),
         body: busy && step == 1 && widget.resume && firstName.text.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : ListView(padding: const EdgeInsets.fromLTRB(24, 12, 24, 24), children: [

@@ -178,4 +178,115 @@ void main() {
     expect(submitted, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('affiliated driver joins a company with its code (board 08 C, 6 steps)', (tester) async {
+    tester.view.physicalSize = const Size(420, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    FlutterSecureStorage.setMockInitialValues({});
+    final calls = <String, dynamic>{};
+    final uploads = <String>[];
+    var joined = false;
+    api.dio.interceptors.clear();
+    addTearDown(api.dio.interceptors.clear);
+    const card = {'company_id': 'co-1', 'legal_name': 'Transports Prestige', 'address': 'Paris, France', 'siren': '987654321'};
+    api.dio.interceptors.add(InterceptorsWrapper(onRequest: (r, h) {
+      final path = r.path;
+      if (path.endsWith('/driver/documents')) {
+        final form = r.data as FormData;
+        final f = {for (final e in form.fields) e.key: e.value};
+        uploads.add('${f['type']}/${f['side'] ?? ''}');
+      } else if (r.data is Map) {
+        calls[path] = r.data;
+      }
+      if (path.endsWith('/driver/company/lookup')) {
+        return r.queryParameters['code'] == 'PRST-7Q4K'
+            ? h.resolve(Response(requestOptions: r, statusCode: 200, data: card))
+            : h.reject(DioException(requestOptions: r, response: Response(requestOptions: r, statusCode: 404, data: {'code': 'INVITE_CODE_INVALID'})));
+      }
+      if (path.endsWith('/driver/company/join')) joined = true;
+      if (path.endsWith('/driver/company') && r.method == 'GET') {
+        return h.resolve(Response(requestOptions: r, statusCode: 200, data: {...card, 'status': 'PENDING', 'vehicles': []}));
+      }
+      h.resolve(Response(requestOptions: r, statusCode: 200, data: {'accessToken': 'a', 'refreshToken': 'r', 'kycStatus': 'SUBMITTED'}));
+    }));
+
+    var submitted = false;
+    await tester.pumpWidget(MaterialApp(theme: veyraTheme(), home: DriverSignupFlow(
+      api: api,
+      pickFile: ({bool imageOnly = false}) async => file,
+      onAccountCreated: () async {},
+      onSubmitted: () => submitted = true,
+      onExit: () {},
+    )));
+    await tester.pumpAndSettle();
+
+    // C1: affiliated type.
+    await tester.tap(find.byKey(const ValueKey('kind-affiliated')));
+    await tester.pumpAndSettle();
+    await tapNext(tester);
+    expect(find.text('1/6'), findsOneWidget);
+
+    // C2: personal information.
+    await tester.enterText(find.byKey(const ValueKey('first-name')), 'Sophie');
+    await tester.enterText(find.byKey(const ValueKey('last-name')), 'Dubois');
+    await pickDate(tester, 'birth-date');
+    await tester.enterText(find.byKey(const ValueKey('phone')), '06 12 34 56 78');
+    await tester.enterText(find.byKey(const ValueKey('email')), 'sophie@example.com');
+    await tester.enterText(find.byKey(const ValueKey('password')), 'Chauffeur2026!');
+    await tester.ensureVisible(find.text("J'accepte les conditions générales d'utilisation"));
+    await tester.tap(find.text("J'accepte les conditions générales d'utilisation"));
+    await tester.tap(find.text("J'accepte la politique de confidentialité"));
+    await tester.pumpAndSettle();
+    await tapNext(tester);
+    expect((calls['/api/v1/driver/onboarding/profile'] as Map)['driverType'], 'AFFILIATED');
+
+    // C3, C4: identity and VTC card.
+    await tapTile(tester, 'IDENTITY-front');
+    await tapTile(tester, 'IDENTITY-back');
+    await tapNext(tester);
+    await tester.enterText(find.byKey(const ValueKey('vtc-card')), '9876543210');
+    await pickDate(tester, 'vtc-expiry');
+    await tapTile(tester, 'VTC_CARD-front');
+    await tapTile(tester, 'VTC_CARD-back');
+    await tapNext(tester);
+    expect(find.text('4/6'), findsOneWidget);
+
+    // C5: invitation code, company card, join request.
+    await tapNext(tester);
+    expect(find.text('4/6'), findsOneWidget, reason: 'a company is required');
+    await tester.enterText(find.byKey(const ValueKey('invite-code')), 'ZZZZ-9999');
+    await tester.pumpAndSettle();
+    expect(find.text('Code d’invitation invalide.'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('invite-code')), 'PRST-7Q4K');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('selected-company')), findsOneWidget);
+    expect(find.text('SIREN : 987 654 321'), findsOneWidget);
+    await tapNext(tester);
+    expect(joined, isTrue);
+    expect((calls['/api/v1/driver/company/join'] as Map)['code'], 'PRST-7Q4K');
+    expect(find.text('5/6'), findsOneWidget);
+
+    // C6: licence and extra documents.
+    await tester.enterText(find.byKey(const ValueKey('license-number')), '12AB34567');
+    await pickDate(tester, 'license-expiry');
+    await tapTile(tester, 'doc-license');
+    await tapTile(tester, 'doc-address');
+    await tapNext(tester);
+    expect(uploads, containsAll(['DRIVING_LICENSE/FRONT', 'PROOF_OF_ADDRESS/']));
+    expect(find.text('6/6'), findsOneWidget);
+
+    // C7: summary with the company awaiting validation, then C8.
+    expect(find.text('Transports Prestige'), findsOneWidget);
+    expect(find.text('En attente de validation'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('charter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Envoyer mon dossier'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dossier envoyé !'), findsOneWidget);
+    await tester.tap(find.text('Voir mon statut'));
+    expect(submitted, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 }

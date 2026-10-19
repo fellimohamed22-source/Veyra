@@ -147,10 +147,10 @@ class CompanyDatabaseTest {
     String code = (String) company.overview(c).get("invite_code");
 
     as(driverUser);
-    var joined = driverSide.join(new DriverCompanyController.Join(code.toLowerCase().replace("-", "")));
+    var joined = driverSide.join(new DriverCompanyController.Join(code.toLowerCase().replace("-", ""), null));
     assertEquals("PENDING", joined.getBody().get("status"));
     assertEquals("AFFILIATED", db.queryForObject("select driver_type from drivers where id=?", String.class, driver));
-    assertEquals("AFFILIATION_EXISTS", assertThrows(ApiException.class, () -> driverSide.join(new DriverCompanyController.Join(code))).code());
+    assertEquals("AFFILIATION_EXISTS", assertThrows(ApiException.class, () -> driverSide.join(new DriverCompanyController.Join(code, null))).code());
 
     as(owner);
     UUID affiliation = (UUID) company.drivers(c).getFirst().get("affiliation_id");
@@ -169,9 +169,22 @@ class CompanyDatabaseTest {
     assertNull(db.queryForObject("select driver_id from vehicles where id=?", UUID.class, vehicle), "vehicle taken back");
   }
 
+  @Test void codeLookupShowsTheCompanyCardAndSearchListsOnlyApprovedCompanies() {
+    UUID c = createCompany();
+    String code = (String) company.overview(c).get("invite_code");
+    as(driverUser);
+    assertEquals("Transports Prestige", driverSide.lookup(code.toLowerCase()).get("legal_name"));
+    assertTrue(driverSide.search("Transports Prest").stream().noneMatch(r -> c.equals(r.get("company_id"))), "draft company hidden from search");
+    assertEquals("COMPANY_NOT_FOUND", assertThrows(ApiException.class, () -> driverSide.join(new DriverCompanyController.Join(null, c))).code());
+    db.update("update vtc_companies set status='APPROVED' where id=?", c);
+    assertTrue(driverSide.search("Transports Prest").stream().anyMatch(r -> c.equals(r.get("company_id"))));
+    assertTrue(driverSide.search("Tr").isEmpty(), "three characters minimum");
+    assertEquals("PENDING", driverSide.join(new DriverCompanyController.Join(null, c)).getBody().get("status"));
+  }
+
   @Test void unknownCodeIsRefused() {
     as(driverUser);
-    assertEquals("INVITE_CODE_INVALID", assertThrows(ApiException.class, () -> driverSide.join(new DriverCompanyController.Join("ZZZZ-9999"))).code());
+    assertEquals("INVITE_CODE_INVALID", assertThrows(ApiException.class, () -> driverSide.join(new DriverCompanyController.Join("ZZZZ-9999", null))).code());
   }
 
   @Test void fleetVehicleIsUsableOnlyWhileTheCompanyIsApprovedAndItsPapersAreValid() {

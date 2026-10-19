@@ -22,14 +22,41 @@ public class DriverCompanyController {
 
   public DriverCompanyController(JdbcTemplate db) { this.db = db; }
 
-  public record Join(String code) {}
+  public record Join(String code, UUID companyId) {}
+
+  private static final String PUBLIC_FIELDS = "select id as company_id,legal_name,address,siren from vtc_companies ";
+
+  /** Board 08 C5: company card shown before joining with an invitation code. */
+  @GetMapping("/lookup")
+  public Map<String, Object> lookup(@RequestParam String code) {
+    driver();
+    List<Map<String, Object>> c = db.queryForList(PUBLIC_FIELDS + "where invite_code=? and status in ('DRAFT','SUBMITTED','APPROVED')", normalize(code));
+    if (c.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "INVITE_CODE_INVALID");
+    return c.getFirst();
+  }
+
+  /** Board 08 C5 « Rechercher une société »: VEYRA-approved companies only. */
+  @GetMapping("/search")
+  public List<Map<String, Object>> search(@RequestParam String q) {
+    driver();
+    String term = q == null ? "" : q.trim();
+    if (term.length() < 3) return List.of();
+    String like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+    return db.queryForList(PUBLIC_FIELDS + "where status='APPROVED' and (legal_name ilike ? or siren=?) order by legal_name limit 10", like, term.replaceAll("\\s", ""));
+  }
+
+  static String normalize(String raw) {
+    String code = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT).replaceAll("\\s", "");
+    if (!code.matches("[A-Z0-9]{4}-?[A-Z0-9]{4}")) throw new ApiException(HttpStatus.BAD_REQUEST, "INVITE_CODE_INVALID");
+    return code.length() == 8 ? code.substring(0, 4) + "-" + code.substring(4) : code;
+  }
 
   /** Current attachment (pending or active), or an empty object. */
   @GetMapping
   public Map<String, Object> current() {
     UUID d = driver();
     List<Map<String, Object>> rows = db.queryForList(
-        "select a.id as affiliation_id,a.status,a.requested_at,a.decided_at,c.id as company_id,c.legal_name,c.status as company_status " +
+        "select a.id as affiliation_id,a.status,a.requested_at,a.decided_at,c.id as company_id,c.legal_name,c.address,c.siren,c.status as company_status " +
         "from company_affiliations a join vtc_companies c on c.id=a.company_id where a.driver_id=? " +
         "order by case when a.status in ('PENDING','ACTIVE') then 0 else 1 end,coalesce(a.decided_at,a.requested_at) desc limit 1", d);
     if (rows.isEmpty()) return Map.of();
@@ -45,12 +72,14 @@ public class DriverCompanyController {
   @Transactional
   public ResponseEntity<Map<String, Object>> join(@RequestBody Join j) {
     UUID d = driver();
-    String code = j == null || j.code() == null ? "" : j.code().trim().toUpperCase(Locale.ROOT).replaceAll("\\s", "");
-    if (!code.matches("[A-Z0-9]{4}-?[A-Z0-9]{4}")) throw new ApiException(HttpStatus.BAD_REQUEST, "INVITE_CODE_INVALID");
-    if (code.length() == 8) code = code.substring(0, 4) + "-" + code.substring(4);
-    List<Map<String, Object>> c = db.queryForList(
-        "select id,legal_name from vtc_companies where invite_code=? and status in ('DRAFT','SUBMITTED','APPROVED')", code);
-    if (c.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "INVITE_CODE_INVALID");
+    if (j == null) throw new ApiException(HttpStatus.BAD_REQUEST, "INVITE_CODE_INVALID");
+    // With the invitation code, or by search (approved companies only).
+    List<Map<String, Object>> c = j.code() != null && !j.code().isBlank()
+        ? db.queryForList("select id,legal_name from vtc_companies where invite_code=? and status in ('DRAFT','SUBMITTED','APPROVED')", normalize(j.code()))
+        : j.companyId() != null
+            ? db.queryForList("select id,legal_name from vtc_companies where id=? and status='APPROVED'", j.companyId())
+            : List.of();
+    if (c.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, j.code() != null ? "INVITE_CODE_INVALID" : "COMPANY_NOT_FOUND");
     UUID company = (UUID) c.getFirst().get("id");
     UUID id = UUID.randomUUID();
     try {

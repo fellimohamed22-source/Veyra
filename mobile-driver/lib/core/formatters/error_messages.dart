@@ -21,6 +21,10 @@ class VeyraErrorMessages {
   VeyraErrorMessages._();
 
   static const Map<String, String> _fr = {
+    'INVITE_CODE_INVALID': 'Code d’invitation invalide.',
+    'AFFILIATION_EXISTS': 'Vous êtes déjà rattaché à une société.',
+    'COMPANY_NOT_FOUND': 'Société introuvable.',
+    'DRIVER_DOCUMENT_EXPIRED': 'Un de vos documents a expiré : renouvelez-le pour proposer des offres.',
     'CURRENT_PASSWORD_INVALID': 'Mot de passe actuel incorrect.',
     'LEAD_TIME_TOO_SHORT': "Choisissez un départ au moins 2 heures à l'avance.",
     'PICKUP_OUTSIDE_SERVICE_ZONE': "Cette adresse de départ est hors de la zone pilote actuelle (Sud de la France, Marseille - Menton).",
@@ -57,6 +61,10 @@ class VeyraErrorMessages {
   };
 
   static const Map<String, String> _en = {
+    'INVITE_CODE_INVALID': 'Invalid invitation code.',
+    'AFFILIATION_EXISTS': 'You are already attached to a company.',
+    'COMPANY_NOT_FOUND': 'Company not found.',
+    'DRIVER_DOCUMENT_EXPIRED': 'One of your documents has expired: renew it to make offers.',
     'CURRENT_PASSWORD_INVALID': 'Current password is incorrect.',
     'LEAD_TIME_TOO_SHORT': 'Choose a pickup time at least 2 hours from now.',
     'PICKUP_OUTSIDE_SERVICE_ZONE': "This pickup address is outside the current pilot zone (South of France, Marseille-Menton).",
