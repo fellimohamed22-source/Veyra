@@ -333,7 +333,7 @@ import java.util.*;
         // prevent two concurrent acceptances for overlapping rides.
         Map<String,Object>driverState=one("select status,kyc_status,marketplace_enabled from drivers where id=? for update",d);
         if(!"ACTIVE".equals(driverState.get("status"))||!"APPROVED".equals(driverState.get("kyc_status"))||!Boolean.TRUE.equals(driverState.get("marketplace_enabled")))throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
-        Integer vehicles=db.queryForObject("select count(*) from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED'",Integer.class,bookingId,d);
+        Integer vehicles=db.queryForObject("select count(*) from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED' and "+com.veyra.company.FleetRules.usable("v"),Integer.class,bookingId,d);
         if(vehicles==null||vehicles==0)throw new ApiException(HttpStatus.GONE,"OFFER_CLOSED");
         conflict(d,DbTime.toOffsetDateTime(b.get("scheduled_at")));
         // The client confirms exactly the price displayed: the commission
@@ -471,7 +471,7 @@ import java.util.*;
     /** Driver (first ?) owns an approved vehicle of the booking's category. */
     /** Driver (?) has an approved vehicle of the category with enough declared seats and luggage space (undeclared = not checked). */
     public static final String ELIGIBLE_VEHICLE_SQL="exists(select 1 from vehicles ev where ev.driver_id=? and ev.status='APPROVED' and ev.category_id=sb.category_id"+
-        " and (ev.seats is null or ev.seats>=sb.passenger_count) and (ev.baggage_capacity is null or ev.baggage_capacity>=sb.baggage_count))";
+        " and (ev.seats is null or ev.seats>=sb.passenger_count) and (ev.baggage_capacity is null or ev.baggage_capacity>=sb.baggage_count) and "+com.veyra.company.FleetRules.usable("ev")+")";
     /** Driver (first ?) is a real favorite of the booking's creator (customer_favorite_drivers), not a client-supplied flag. */
     /**
      * Lowest active net price among the OTHER drivers (first ?), shown only
@@ -497,6 +497,8 @@ import java.util.*;
     private void eligible(UUID d){
         Integer n=db.queryForObject("select count(*) from drivers where id=? and status='ACTIVE' and kyc_status='APPROVED' and marketplace_enabled=true",Integer.class,d);
         if(n==0)throw new ApiException(HttpStatus.FORBIDDEN,"DRIVER_NOT_ELIGIBLE");
+        Integer expired=db.queryForObject(com.veyra.company.FleetRules.DRIVER_DOCUMENT_EXPIRED_SQL,Integer.class,d);
+        if(expired!=null&&expired>0)throw new ApiException(HttpStatus.FORBIDDEN,"DRIVER_DOCUMENT_EXPIRED");
     }
     private void conflict(UUID d,OffsetDateTime t){
         Integer n=db.queryForObject("select count(*) from scheduled_bookings where selected_driver_id=? and status in ('CONFIRMED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS') and scheduled_at between ? and ?",Integer.class,d,t.minusMinutes(90),t.plusMinutes(90));
@@ -531,7 +533,7 @@ import java.util.*;
      * one by default.
      */
     UUID offerVehicle(UUID bookingId,UUID d,UUID requested){
-        List<UUID> eligible=db.queryForList("select v.id from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED' and (v.seats is null or v.seats>=sb.passenger_count) and (v.baggage_capacity is null or v.baggage_capacity>=sb.baggage_count) order by v.id",UUID.class,bookingId,d);
+        List<UUID> eligible=db.queryForList("select v.id from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED' and (v.seats is null or v.seats>=sb.passenger_count) and (v.baggage_capacity is null or v.baggage_capacity>=sb.baggage_count) and "+com.veyra.company.FleetRules.usable("v")+" order by v.id",UUID.class,bookingId,d);
         if(requested==null)return eligible.isEmpty()?null:eligible.getFirst();
         if(!eligible.contains(requested))throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"VEHICLE_NOT_ELIGIBLE");
         return requested;

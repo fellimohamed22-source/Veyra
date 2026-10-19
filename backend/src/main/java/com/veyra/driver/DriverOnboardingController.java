@@ -34,6 +34,7 @@ public class DriverOnboardingController {
 
   static final Set<String> LICENSE_CATEGORIES = Set.of("B", "BE", "C1", "D1", "D");
   static final List<String> REQUIRED_DOCUMENTS = List.of("IDENTITY", "VTC_CARD", "DRIVING_LICENSE", "INSURANCE", "VEHICLE_REGISTRATION");
+  static final Set<String> AFFILIATED_EXEMPT_DOCUMENTS = Set.of("INSURANCE", "VEHICLE_REGISTRATION");
 
   @PutMapping("/company")
   void company(@RequestBody Company c) {
@@ -84,12 +85,20 @@ public class DriverOnboardingController {
   List<String> missing(UUID d) {
     List<String> missing = new ArrayList<>();
     if (count("select count(*) from drivers where id=? and birth_date is not null", d) == 0) missing.add("BIRTH_DATE");
+    // Affiliated drivers (board 08 C): the company holds the vehicle, its
+    // papers and the operating documents; the driver joins it instead.
+    boolean affiliated = count("select count(*) from drivers where id=? and driver_type='AFFILIATED'", d) > 0;
     Set<String> docs = new HashSet<>(db.queryForList("select distinct type from driver_documents where driver_id=? and status<>'SUPERSEDED'", String.class, d));
     for (String type : REQUIRED_DOCUMENTS) {
+      if (affiliated && AFFILIATED_EXEMPT_DOCUMENTS.contains(type)) continue;
       if (!docs.contains(type)) missing.add(type);
     }
     if (count("select count(*) from driver_licenses where driver_id=?", d) == 0) missing.add("LICENSE");
     if (count("select count(*) from driver_vtc_registrations where driver_id=?", d) == 0) missing.add("VTC");
+    if (affiliated) {
+      if (count("select count(*) from company_affiliations where driver_id=? and status in ('PENDING','ACTIVE')", d) == 0) missing.add("AFFILIATION");
+      return missing;
+    }
     if (count("select count(*) from driver_companies where driver_id=? and coalesce(siren,siret) is not null", d) == 0) missing.add("COMPANY");
     if (count("select count(*) from vehicles where driver_id=?", d) == 0) missing.add("VEHICLE");
     return missing;

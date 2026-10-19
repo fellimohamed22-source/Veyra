@@ -76,6 +76,7 @@ class BookingControllerUpdateOfferTest {
 
   private void stubEligibleDriverWithVehicle() {
     when(db.queryForObject(contains("from drivers where id=? and status='ACTIVE'"), eq(Integer.class), eq(driverId))).thenReturn(1);
+    when(db.queryForObject(contains("from driver_documents where driver_id=?"), eq(Integer.class), eq(driverId))).thenReturn(0);
     when(db.queryForObject(contains("from scheduled_bookings sb where sb.id=? and exists"), eq(Integer.class), eq(bookingId), eq(driverId))).thenReturn(1);
   }
 
@@ -149,6 +150,7 @@ class BookingControllerUpdateOfferTest {
     stubBooking("OFFERS_RECEIVED", OffsetDateTime.now().plusHours(2));
     when(db.queryForList(contains("from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'"), eq(UUID.class), eq(bookingId), eq(driverId)))
         .thenReturn(List.of(UUID.randomUUID()));
+    when(db.queryForObject(contains("from driver_documents where driver_id=?"), eq(Integer.class), eq(driverId))).thenReturn(0);
     when(db.queryForObject(contains("from drivers where id=? and status='ACTIVE'"), eq(Integer.class), eq(driverId))).thenReturn(1);
     when(db.queryForObject(contains("from scheduled_bookings sb where sb.id=? and exists"), eq(Integer.class), eq(bookingId), eq(driverId))).thenReturn(0);
 

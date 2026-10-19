@@ -53,7 +53,7 @@ public class AdminController {
       "update drivers set kyc_status='APPROVED',status='ACTIVE',marketplace_enabled=true where id=?",
       id);
     db.update("update driver_documents set status='APPROVED' where driver_id=? and status='SUBMITTED'",id);
-    db.update("update vehicles set status='APPROVED' where driver_id=? and status='PENDING'",id);
+    db.update("update vehicles set status='APPROVED' where driver_id=? and company_id is null and status='PENDING'",id);
     audit("DRIVER_KYC_APPROVED","DRIVER",id);
   }
 
