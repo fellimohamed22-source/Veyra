@@ -1738,12 +1738,13 @@ class _RequestScreenState extends State<RequestScreen>{
             text:t('Ce client vous a ajouté à ses chauffeurs préférés.'),
           )),
           Row(children:[
-            Flexible(child:DriverPill(x['hasActiveOffer']==true?t('Offre envoyée'):t('Nouvelle demande'),fg:VeyraColors.warning,bg:VeyraColors.warningBackground,icon:Icons.schedule)),
+            Flexible(flex:6,child:DriverPill(x['hasActiveOffer']==true?t('Offre envoyée'):t('Nouvelle demande'),fg:VeyraColors.warning,bg:VeyraColors.warningBackground,icon:Icons.schedule)),
             const SizedBox(width:8),
             const Spacer(),
             Text('#'+(id.length>8?id.substring(0,8):id).toUpperCase(),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
           ]),
           const SizedBox(height:12),
+          if((x['customer_display_name']??'').toString().isNotEmpty)section(child:DriverClientLine(name:x['customer_display_name'].toString(),rating:x['customer_rating'],count:x['customer_rating_count'],radius:26)),
           section(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
             const SizedBox(height:12),

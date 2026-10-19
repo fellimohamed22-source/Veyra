@@ -59,14 +59,13 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 
 | Lot bloqué | Ce qui manque |
 |---|---|
-| Portails partenaire, société VTC et admin | Validation des écrans conçus dans le style des maquettes (DEC-13, DEC-15) |
+| Portails partenaire, société VTC et admin | En cours (DEC-13 validée le 19/10) ; permissions fines des rôles partenaires à confirmer (DEC-15) |
 | Inscription chauffeur rattaché (planche 08 C : code d'invitation, société, statut) | Espaces société, donc DEC-13 |
 | Appels masqués (bouton « Appeler » désactivé dans les deux apps) | Identifiants Twilio Proxy (DEC-06) |
 | SMS du lien de suivi passager | Identifiants Twilio, `VEYRA_GUEST_BASE_URL` |
 | Photos d'accueil client et chauffeur, logo vectoriel | Originaux sans texte ni interface, droits (voir l'audit des images ci-dessous) |
 | « Lire les documents » à l'inscription, charte chauffeur | Textes juridiques |
 | Connexion Apple (iOS) | Décision |
-| Nom et note du client sur les demandes côté chauffeur (planches 12/13) | Décision vie privée / produit |
 | Cartes Google dans les apps (L13b) | Clé Google Maps pour mobile |
 
 ## Décisions prises (17/10/2026)
@@ -87,6 +86,8 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 | DEC-16 | Index corrigé des maquettes **validé** |
 | DEC-18 | Pas de contre-offre ; prix conseillé via une grille en base (fournie par le propriétaire) ; validité liée à la fenêtre d'offres |
 | DEC-21 | Capacité bagages non fixée pour l'instant (évolution ultérieure) |
+| DEC-13 (19/10) | Maquettes des portails partenaire, société VTC et admin **validées** (navigation, réservation partenaire en 5 étapes avec choix du payeur, offres comme côté client, écrans Commissions et Paramètres) |
+| Client visible du chauffeur (19/10) | **Oui** : prénom + initiale du nom (« Sophie M. ») et note moyenne donnée par les chauffeurs ; nom du passager pour une réservation partenaire ; jamais le nom complet ni le téléphone |
 
 ## Audit des images du pack « TOTAL » (18/10/2026)
 

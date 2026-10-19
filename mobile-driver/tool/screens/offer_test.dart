@@ -14,6 +14,7 @@ final _request = {
   'passenger_count': 2, 'baggage_count': 3, 'category_id': 'cat', 'category_name': 'Confort',
   'customer_notes': 'Je serai devant l’entrée principale de l’hôtel, avec deux grandes valises.',
   'customer_favorite': true, 'currentBestOtherOfferMinor': 5200, 'has_eligible_vehicle': true,
+  'customer_display_name': 'Claire D.', 'customer_rating': 4.9, 'customer_rating_count': 28,
 };
 
 Object? _responses(String path, String method, Object? data) {

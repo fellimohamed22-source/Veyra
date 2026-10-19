@@ -215,6 +215,10 @@ class DriverRequestCard extends StatelessWidget {
             Text(driverWhen(x['scheduled_at']), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
             if (x['customer_favorite'] == true) const DriverPill.favorite(),
           ]),
+          if ((x['customer_display_name'] ?? '').toString().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            DriverClientLine(name: x['customer_display_name'].toString(), rating: x['customer_rating'], count: x['customer_rating_count']),
+          ],
           const SizedBox(height: 10),
           Row(children: [
             Expanded(child: DriverMiniRoute((x['pickup_address'] ?? '').toString(), (x['dropoff_address'] ?? '').toString())),
@@ -249,5 +253,35 @@ class DriverRequestCard extends StatelessWidget {
         ]),
       ),
     );
+  }
+}
+
+/// Client shown to the driver (boards 12/13): initials, « Prénom I. »,
+/// rating given by drivers (« Nouveau client » without ratings).
+class DriverClientLine extends StatelessWidget {
+  final String name;
+  final dynamic rating;
+  final dynamic count;
+  final double radius;
+  const DriverClientLine({required this.name, this.rating, this.count, this.radius = 20, super.key});
+  @override
+  Widget build(BuildContext context) {
+    final r = (rating is num) ? (rating as num).toDouble() : double.tryParse('${rating ?? ''}');
+    final n = (count as num?)?.toInt() ?? 0;
+    final initials = name.split(' ').where((p) => p.isNotEmpty).take(2).map((p) => p[0].toUpperCase()).join();
+    return Row(children: [
+      CircleAvatar(radius: radius, backgroundColor: VeyraColors.surfaceMuted,
+          child: Text(initials, style: TextStyle(fontWeight: FontWeight.w800, color: VeyraColors.primary, fontSize: radius * .7))),
+      const SizedBox(width: 10),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+        Row(children: [
+          const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF5A623)),
+          const SizedBox(width: 2),
+          Flexible(child: Text(r == null || n == 0 ? _t('Nouveau client') : '${r.toStringAsFixed(1).replaceAll('.', ',')} ($n)',
+              style: const TextStyle(color: VeyraColors.textSecondary, fontSize: 13))),
+        ]),
+      ])),
+    ]);
   }
 }

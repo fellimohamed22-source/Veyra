@@ -12,7 +12,7 @@ void main() {
   final detail = <String, dynamic>{'id': 'b1', 'scheduled_at': inH(30), 'offer_window_ends_at': inH(20), 'category_id': 'c', 'category_name': 'Berline – Confort',
     'pickup_address': 'Paris, 16e arrondissement, avenue Victor Hugo, 75116 Paris', 'dropoff_address': 'Aéroport d’Orly (ORY), Terminal 4, 94390 Orly',
     'pickup_lat': 48.86, 'pickup_lng': 2.28, 'dropoff_lat': 48.72, 'dropoff_lng': 2.36, 'passenger_count': 3, 'baggage_count': 2,
-    'customer_notes': 'Nous serons avec deux grandes valises et un siège enfant, merci.', 'customer_favorite': true, 'currentBestOtherOfferMinor': 123456,
+    'customer_notes': 'Nous serons avec deux grandes valises et un siège enfant, merci.', 'customer_favorite': true, 'customer_display_name': 'Marie-Antoinette D.', 'customer_rating': 4.9, 'customer_rating_count': 1210, 'currentBestOtherOfferMinor': 123456,
     'hasActiveOffer': true, 'ownActiveOfferAmountMinor': 129900, 'has_eligible_vehicle': true};
   Object? respond(RequestOptions r) {
     final p = r.path;
@@ -44,7 +44,7 @@ void main() {
     if (p.contains('vehicle-categories')) return [];
     return [
       {'id': 'b1', 'scheduled_at': inH(4), 'pickup_address': 'Paris, 16e arrondissement, avenue Victor Hugo', 'dropoff_address': 'Aéroport d’Orly (ORY), Terminal 4',
-        'passenger_count': 3, 'baggage_count': 2, 'customer_favorite': true, 'best_other_offer_minor': 123456, 'category_name': 'Berline – Confort', 'own_offer_amount_minor': 99900},
+        'passenger_count': 3, 'baggage_count': 2, 'customer_favorite': true, 'best_other_offer_minor': 123456, 'category_name': 'Berline – Confort', 'own_offer_amount_minor': 99900, 'customer_display_name': 'Marie-Antoinette D.', 'customer_rating': 4.9, 'customer_rating_count': 1210},
     ];
   }
 

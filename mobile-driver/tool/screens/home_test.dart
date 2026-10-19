@@ -10,9 +10,9 @@ String _in(Duration d) => DateTime.now().add(d).toUtc().toIso8601String();
 
 final _requests = [
   {'id': 'b1', 'scheduled_at': _in(const Duration(hours: 3)), 'pickup_address': 'Paris, 16e arrondissement', 'dropoff_address': 'Aéroport d’Orly (ORY)',
-    'passenger_count': 3, 'baggage_count': 2, 'customer_favorite': true, 'best_other_offer_minor': 4800, 'category_name': 'Berline – Confort'},
+    'passenger_count': 3, 'baggage_count': 2, 'customer_favorite': true, 'best_other_offer_minor': 4800, 'category_name': 'Berline – Confort', 'customer_display_name': 'Sophie M.', 'customer_rating': 4.9, 'customer_rating_count': 210},
   {'id': 'b2', 'scheduled_at': _in(const Duration(days: 1, hours: 2)), 'pickup_address': 'Paris, 8e arrondissement', 'dropoff_address': 'Aéroport CDG (Terminal 2E)',
-    'passenger_count': 2, 'baggage_count': 3, 'best_other_offer_minor': 5200, 'category_name': 'Berline – Confort'},
+    'passenger_count': 2, 'baggage_count': 3, 'best_other_offer_minor': 5200, 'category_name': 'Berline – Confort', 'customer_display_name': 'Ahmed T.', 'customer_rating': 4.7, 'customer_rating_count': 86},
   {'id': 'b3', 'scheduled_at': _in(const Duration(days: 2, hours: 5)), 'pickup_address': 'Neuilly-sur-Seine', 'dropoff_address': 'Paris Expo Porte de Versailles',
     'passenger_count': 4, 'baggage_count': 4, 'category_name': 'Van – Confort'},
 ];

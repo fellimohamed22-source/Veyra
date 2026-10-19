@@ -270,6 +270,8 @@ class BookingDatabaseTest {
     var visible=controller.opportunities("date",category,null,null,null,pickup,null,null);
     assertEquals(1,visible.size());
     assertEquals(created,visible.getFirst().get("id"));
+    // Drivers see « Prénom I. » only, never the full name (owner decision 19/10/2026).
+    assertTrue(String.valueOf(visible.getFirst().get("customer_display_name")).matches("[^ ]+( [A-Z]\\.)?"),String.valueOf(visible.getFirst().get("customer_display_name")));
     // Declared seats / luggage must fit the request (2 passengers, 1 bag).
     db.update("update vehicles set seats=1,baggage_capacity=4 where driver_id=?",driver);
     assertTrue(controller.opportunities("date",category,null,null,null,pickup,null,null).isEmpty());

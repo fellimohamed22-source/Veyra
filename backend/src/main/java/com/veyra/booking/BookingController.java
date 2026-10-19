@@ -104,6 +104,8 @@ import java.util.*;
             offerVisibilityMode=r.offerVisibilityMode();
         }
         db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,partner_id,beneficiary_name_snapshot,beneficiary_phone_snapshot,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,passenger_count,baggage_count,customer_notes,status,offer_window_ends_at,offer_visibility_mode) values (?,?,?,?,?,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,ST_SetSRID(ST_MakePoint(?,?),4326)::geography,?,?,?,?,?,?,?,?,'OPEN_FOR_OFFERS',?,?)",id,r.partnerId()==null?"CLIENT":"PARTNER",u,r.partnerId(),r.beneficiaryName(),r.beneficiaryPhone(),r.pickup().lng(),r.pickup().lat(),r.pickup().address(),r.dropoff().lng(),r.dropoff().lat(),r.dropoff().address(),r.scheduledAt(),r.categoryId(),r.paymentMethod(),r.payerType(),passengerCount,baggageCount,r.customerNotes(),close,offerVisibilityMode);
+        // Partner's internal reference (validated portal mock-up), never shown to drivers.
+        if(r.partnerId()!=null&&r.partnerReference()!=null&&!r.partnerReference().isBlank())db.update("update scheduled_bookings set partner_reference=? where id=?",r.partnerReference().strip(),id);
         if(r.preferredDriverId()!=null){
             Integer favorite=db.queryForObject("select count(*) from customer_favorite_drivers where user_id=? and driver_id=?",Integer.class,u,r.preferredDriverId());
             if(favorite==null||favorite==0)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"FAVORITE_DRIVER_REQUIRED");
@@ -140,7 +142,7 @@ import java.util.*;
             default->"scheduled_at asc";
         }
         ;
-        StringBuilder sql=new StringBuilder("select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.category_id,sb.passenger_count,sb.baggage_count,sb.status,sb.offer_window_ends_at,vc.display_name as category_name,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,(select proposed_amount_minor from driver_offers o where o.booking_id=sb.id and o.driver_id=? and o.status='ACTIVE' limit 1) as own_offer_amount_minor,"+BEST_OTHER_OFFER_SQL+" as best_other_offer_minor,"+CUSTOMER_FAVORITE_SQL+" as customer_favorite from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id where sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now() and "+ELIGIBLE_VEHICLE_SQL);
+        StringBuilder sql=new StringBuilder("select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.category_id,sb.passenger_count,sb.baggage_count,sb.status,sb.offer_window_ends_at,vc.display_name as category_name,ST_Y(sb.pickup::geometry) as pickup_lat,ST_X(sb.pickup::geometry) as pickup_lng,ST_Y(sb.dropoff::geometry) as dropoff_lat,ST_X(sb.dropoff::geometry) as dropoff_lng,(select proposed_amount_minor from driver_offers o where o.booking_id=sb.id and o.driver_id=? and o.status='ACTIVE' limit 1) as own_offer_amount_minor,"+BEST_OTHER_OFFER_SQL+" as best_other_offer_minor,"+CUSTOMER_DISPLAY_NAME_SQL+" as customer_display_name,"+CUSTOMER_RATING_SQL+" as customer_rating,"+CUSTOMER_RATING_COUNT_SQL+" as customer_rating_count,"+CUSTOMER_FAVORITE_SQL+" as customer_favorite from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id where sb.status in ('OPEN_FOR_OFFERS','OFFERS_RECEIVED') and offer_window_ends_at>now() and "+ELIGIBLE_VEHICLE_SQL);
         List<Object> params=new ArrayList<>();params.add(d);params.add(d);params.add(d);params.add(d);
         if(categoryId!=null){
             sql.append(" and category_id=?");
@@ -476,6 +478,17 @@ import java.util.*;
      * when the booking allows it (BEST_VISIBLE); never an identity.
      */
     public static final String BEST_OTHER_OFFER_SQL="case when sb.offer_visibility_mode='BEST_VISIBLE' then (select min(bo.proposed_amount_minor) from driver_offers bo where bo.booking_id=sb.id and bo.status='ACTIVE' and bo.expires_at>now() and bo.driver_id<>?) end";
+    /**
+     * Client shown to drivers (boards 12/13, owner decision 19/10/2026):
+     * first name + last initial only (« Sophie M. »); the passenger's name
+     * for partner bookings. Never the full name nor a phone (CL-15).
+     */
+    public static final String CUSTOMER_DISPLAY_NAME_SQL="(select case when sb.beneficiary_name_snapshot is not null and sb.beneficiary_name_snapshot<>'' "+
+        "then split_part(sb.beneficiary_name_snapshot,' ',1)||coalesce(' '||upper(left(nullif(split_part(sb.beneficiary_name_snapshot,' ',2),''),1))||'.','') "+
+        "else cu.first_name||coalesce(' '||upper(left(nullif(cu.last_name,''),1))||'.','') end from users cu where cu.id=sb.creator_user_id)";
+    /** Average rating drivers gave this client (own bookings only; null for partner bookings). */
+    public static final String CUSTOMER_RATING_SQL="(case when sb.partner_id is null then (select round(avg(rr.score)::numeric,1) from ride_ratings rr where rr.rated_user_id=sb.creator_user_id) end)";
+    public static final String CUSTOMER_RATING_COUNT_SQL="(case when sb.partner_id is null then (select count(*) from ride_ratings rr where rr.rated_user_id=sb.creator_user_id) else 0 end)";
     public static final String CUSTOMER_FAVORITE_SQL="exists(select 1 from customer_favorite_drivers cf where cf.user_id=sb.creator_user_id and cf.driver_id=?)";
     private void eligibleVehicle(UUID bookingId,UUID d){
         Integer n=db.queryForObject("select count(*) from scheduled_bookings sb where sb.id=? and "+ELIGIBLE_VEHICLE_SQL,Integer.class,bookingId,d);
