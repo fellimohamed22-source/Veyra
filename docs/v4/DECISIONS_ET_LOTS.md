@@ -59,7 +59,7 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 
 | Lot bloqué | Ce qui manque |
 |---|---|
-| Portails partenaire, société VTC et admin | En cours (DEC-13 validée le 19/10) ; permissions fines des rôles partenaires à confirmer (DEC-15) |
+| Portails partenaire, société VTC et admin | Partenaire et admin livrés (DEC-13 validée le 19/10) ; portail société VTC à faire (nouveau back-end : flotte, affiliation des chauffeurs) ; permissions fines des rôles partenaires à confirmer (DEC-15) |
 | Inscription chauffeur rattaché (planche 08 C : code d'invitation, société, statut) | Espaces société, donc DEC-13 |
 | Appels masqués (bouton « Appeler » désactivé dans les deux apps) | Identifiants Twilio Proxy (DEC-06) |
 | SMS du lien de suivi passager | Identifiants Twilio, `VEYRA_GUEST_BASE_URL` |
