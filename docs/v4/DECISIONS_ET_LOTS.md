@@ -32,6 +32,8 @@
 | UI-7 | Chauffeur : détail de la demande, créer une offre → récapitulatif → offre envoyée, véhicule et message joints à l'offre (planche 14) | V049 |
 | UI-8 | Chauffeur : Mes offres, Mes courses, Revenus du mois, Profil, Mes véhicules ; notifications lu/non lu dans les deux apps (planche 16, CL-18) | V050 |
 | UI-9 | Chauffeur : détail de course et course en cours (planche 12 P7/P8) ; détail de notification ; statut du compte | — |
+| UI-11 | Portail partenaire et portail admin (Vérifications, Réservations, Commissions avec simulation, Paramètres, Partenaires) selon les maquettes validées DEC-13 | — |
+| L15 | **Sociétés VTC et chauffeurs affiliés** (SOC-01..10, DR-AFF-01..07) : société (SIREN contrôlé), documents d'exploitation et de véhicule, flotte, code d'invitation et invitations e-mail, validation du rattachement et attribution de véhicule, échéances, activité du mois ; revue VEYRA de la société et de chaque véhicule. Un véhicule de flotte ne porte d'offres que si la société est approuvée et ses pièces valides ; un document chauffeur expiré bloque les nouvelles offres. Portail web /societe, inscription professionnelle web, parcours chauffeur affilié (planche 08 C) | V053 | Base PostgreSQL (création, code, rattachement, règles de flotte, échéances), parcours affilié complet |
 | UI-10 | Tous les écrans à 320 px avec texte agrandi ×1,5 (tests automatiques), montants « 1 250,00 € » | — |
 
 Rollback : chaque migration documente son `DROP` dans son en-tête.
@@ -59,7 +61,8 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 
 | Lot bloqué | Ce qui manque |
 |---|---|
-| Portails partenaire, société VTC et admin | Partenaire et admin livrés (DEC-13 validée le 19/10) ; portail société VTC à faire (nouveau back-end : flotte, affiliation des chauffeurs) ; permissions fines des rôles partenaires à confirmer (DEC-15) |
+| Portails partenaire, société VTC et admin | Livrés (DEC-13 validée le 19/10) ; permissions fines des rôles partenaires à confirmer (DEC-15) |
+| Pièces exigées des sociétés VTC et des chauffeurs affiliés | À confirmer juridiquement (le pack le demande). En place : Kbis, attestation REVTC et assurance RC pro pour la société ; carte grise, assurance RC circulation, contrôle technique par véhicule ; justificatif de domicile facultatif pour l'affilié |
 | Inscription chauffeur rattaché (planche 08 C : code d'invitation, société, statut) | Espaces société, donc DEC-13 |
 | Appels masqués (bouton « Appeler » désactivé dans les deux apps) | Identifiants Twilio Proxy (DEC-06) |
 | SMS du lien de suivi passager | Identifiants Twilio, `VEYRA_GUEST_BASE_URL` |
