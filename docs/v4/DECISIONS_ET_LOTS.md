@@ -45,6 +45,7 @@ Rollback : chaque migration documente son `DROP` dans son en-tête.
 - Décider pour `VEYRA_TEST_ACCOUNTS_ENABLED` (DEC-19).
 - Restreindre les clés API Firebase Android (nom du package et SHA) dans la console GCP.
 - Décider de la visibilité du dépôt (actuellement public).
+- Sur Render, définir `STRIPE_PUBLISHABLE_KEY` (clé publique `pk_…`, même compte que `STRIPE_SECRET_KEY`) : sans elle, le paiement par carte du portail web et du lien passager reste désactivé.
 
 ## Décisions ouvertes (propriétaire produit)
 
