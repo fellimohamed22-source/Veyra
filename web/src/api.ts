@@ -168,6 +168,11 @@ export class Api {
   changePartnerMemberRole(id:string,memberId:string,role:string){return this.request('/partner/'+id+'/team/'+memberId,{method:'PATCH',body:JSON.stringify({role})});}
   removePartnerMember(id:string,memberId:string){return this.request('/partner/'+id+'/team/'+memberId,{method:'DELETE'});}
   guestLink(partnerId:string,bookingId:string,sendSms:boolean){return this.request('/partner/'+partnerId+'/bookings/'+bookingId+'/guest-link',{method:'POST',body:JSON.stringify({sendSms})});}
+  // Online payment of a booking (DEC-04): Stripe key and PaymentIntent.
+  paymentConfig(){return this.request('/guest/payment-config');}
+  bookingPaymentIntent(bookingId:string){return this.request('/payments/bookings/'+bookingId+'/intent',{method:'POST',headers:{'Idempotency-Key':'web-'+bookingId+'-'+Date.now()}});}
+  bookingPayments(bookingId:string){return this.request('/payments/bookings/'+bookingId);}
+  guestPayment(token:string){return this.request('/guest/bookings/'+encodeURIComponent(token)+'/payment',{method:'POST'});}
   // Administration (DEC-13): commission rules engine (L6), platform settings (L8).
   commissionRules(){return this.request('/admin/commission-rules');}
   createCommissionRule(body:any){return this.request('/admin/commission-rules',{method:'POST',body:JSON.stringify(body)});}

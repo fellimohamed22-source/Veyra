@@ -2,16 +2,19 @@ import {CommonModule} from '@angular/common';
 import {Component,OnDestroy,OnInit} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import {Api} from '../api';
+import {CardPayment} from '../portal/card-payment';
+import {errorMessage, money} from '../formatters';
 
 /**
  * PART-13 / PART-03: public tracking page opened from the passenger's SMS.
- * No account, no phone number, no price: only what the passenger needs to
+ * No account, no phone number; the price only when the passenger pays it
+ * through this link (PART-10). Otherwise only what the passenger needs to
  * find the car. Refreshed every 30 s; an unknown, expired or revoked link
  * shows the same message.
  */
 @Component({
   standalone:true,
-  imports:[CommonModule],
+  imports:[CommonModule,CardPayment],
   template:`
     <div class="card" style="max-width:520px;margin:24px auto">
       <h1 style="margin-top:0">VEYRA · Votre trajet</h1>
@@ -31,11 +34,38 @@ import {Api} from '../api';
         <p *ngIf="trip.driverLocation">
           <a [href]="mapUrl(trip.driverLocation)" target="_blank" rel="noopener">Voir la position du chauffeur</a>
         </p>
+        <div class="stack" *ngIf="trip.payment as pay" style="border-top:1px solid var(--line);padding-top:12px">
+          <h3>Paiement de votre course</h3>
+          <div class="okbox" *ngIf="pay.paid || paidNow">Course réglée : {{money(pay.amountMinor)}}. Merci !</div>
+          <ng-container *ngIf="!pay.paid && !paidNow">
+            <p class="sub" style="margin:0">L'établissement vous demande de régler {{money(pay.amountMinor)}} TTC par carte.</p>
+            <p class="sub" style="margin:0" *ngIf="!pay.payable">Le paiement s'ouvre dès que votre chauffeur est confirmé.</p>
+            <button class="gold" *ngIf="pay.payable && !intent" (click)="startPayment()" [disabled]="starting">{{starting ? 'Préparation…' : 'Payer ma course'}}</button>
+            <card-payment *ngIf="intent" [publishableKey]="intent.publishableKey" [clientSecret]="intent.clientSecret" [amountMinor]="pay.amountMinor" (paid)="paidNow = true; intent = null"></card-payment>
+            <div class="errbox" *ngIf="payError">{{payError}}</div>
+          </ng-container>
+        </div>
       </ng-container>
     </div>`
 })
 export class Guest implements OnInit,OnDestroy{
+  money=money;
   trip:any=null;loading=true;invalid=false;offline=false;
+  intent:any=null;starting=false;paidNow=false;payError='';
+
+  /** PART-10: the passenger pays with this link; the token is the only credential. */
+  async startPayment(){
+    this.starting=true;this.payError='';
+    const token=this.route.snapshot.paramMap.get('token')||'';
+    try{
+      const r=await this.api.guestPayment(token);
+      if(!r?.publishableKey){this.payError='Le paiement en ligne est momentanément indisponible.';return;}
+      this.intent=r;
+    }catch(e:any){
+      if(e?.code==='ALREADY_PAID'){this.paidNow=true;return;}
+      this.payError=errorMessage(e?.code);
+    }finally{this.starting=false;}
+  }
   private timer:any;
   constructor(private route:ActivatedRoute,private api:Api){}
 

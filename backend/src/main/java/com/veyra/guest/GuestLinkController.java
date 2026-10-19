@@ -89,9 +89,11 @@ public class GuestLinkController {
   public ResponseEntity<Map<String,Object>> view(@PathVariable String token){
     if(!TOKEN.matcher(token).matches())throw invalid();
     List<Map<String,Object>> rows=db.queryForList(
-        "select sb.id,sb.status,sb.scheduled_at,sb.pickup_address,sb.dropoff_address,sb.beneficiary_name_snapshot," +
+        "select sb.id,sb.status,sb.scheduled_at,sb.pickup_address,sb.dropoff_address,sb.beneficiary_name_snapshot,sb.payer_type,sb.payment_method," +
+        "bfs.customer_total_amount_minor,bfs.currency,exists(select 1 from payments p where p.booking_id=sb.id and p.status='CAPTURED') as paid," +
         "u.first_name as driver_first_name,v.brand,v.model,v.color,v.plate_number " +
         "from guest_access_links g join scheduled_bookings sb on sb.id=g.booking_id " +
+        "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
         "left join drivers d on d.id=sb.selected_driver_id left join users u on u.id=d.user_id " +
         "left join lateral (select v.* from vehicles v where v.driver_id=d.id and v.status='APPROVED' and v.category_id=sb.category_id order by v.id limit 1) v on true " +
         "where g.token_hash=? and g.revoked_at is null and g.expires_at>now()",sha256(token));
@@ -104,6 +106,15 @@ public class GuestLinkController {
     view.put("pickupAddress",r.get("pickup_address"));
     view.put("dropoffAddress",r.get("dropoff_address"));
     view.put("passengerFirstName",firstName((String)r.get("beneficiary_name_snapshot")));
+    // PART-10: the passenger pays through this link when the establishment chose so.
+    if("GUEST".equals(r.get("payer_type"))&&"ONLINE".equals(r.get("payment_method"))&&r.get("customer_total_amount_minor")!=null){
+      Map<String,Object> payment=new LinkedHashMap<>();
+      payment.put("amountMinor",r.get("customer_total_amount_minor"));
+      payment.put("currency",r.get("currency"));
+      payment.put("paid",Boolean.TRUE.equals(r.get("paid")));
+      payment.put("payable",Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED").contains(status));
+      view.put("payment",payment);
+    }
     boolean assigned=Set.of("CONFIRMED","DRIVER_EN_ROUTE","DRIVER_ARRIVED","IN_PROGRESS","COMPLETED").contains(status);
     if(assigned&&r.get("driver_first_name")!=null){
       view.put("driverFirstName",r.get("driver_first_name"));

@@ -261,9 +261,51 @@ class StripePaymentControllerTest {
     verifyNoInteractions(stripe);
   }
 
+  private void stubPartnerBooking(String payerType) {
+    when(db.queryForList(contains("from scheduled_bookings sb join booking_financial_snapshots"), eq(bookingId)))
+        .thenReturn(List.of(Map.of(
+            "creator_user_id", UUID.randomUUID(), // booked by a colleague
+            "partner_id", partnerId,
+            "payer_type", payerType,
+            "payment_method", "ONLINE",
+            "status", "CONFIRMED",
+            "customer_total_amount_minor", 5280L,
+            "currency", "EUR")));
+  }
+
+  private final UUID partnerId = UUID.randomUUID();
+
+  @Test
+  void receptionColleagueMayPayAnEstablishmentPaidBooking() throws Exception {
+    stubPartnerBooking("PARTNER");
+    when(db.queryForObject(contains("partner_role in ('PARTNER_OWNER','PARTNER_STAFF')"), eq(Integer.class), eq(partnerId), eq(userId))).thenReturn(1);
+    when(db.queryForList(contains("where idempotency_key=?"), eq("key-1"))).thenReturn(List.of());
+    when(db.queryForList(contains("where booking_id=? order by created_at desc limit 1"), eq(bookingId))).thenReturn(List.of());
+    when(stripe.create(eq(5280L), eq("EUR"), eq(bookingId.toString()), anyString(), any())).thenReturn(paymentIntent);
+    when(paymentIntent.getId()).thenReturn("pi_team");
+    when(paymentIntent.getClientSecret()).thenReturn("secret_team");
+
+    assertEquals("secret_team", controller().createIntent(bookingId, "key-1").get("clientSecret"));
+  }
+
+  @Test
+  void accountingMemberOrPassengerPaidBookingIsNotPayableByTheTeam() {
+    stubPartnerBooking("PARTNER");
+    when(db.queryForObject(contains("partner_role in ('PARTNER_OWNER','PARTNER_STAFF')"), eq(Integer.class), eq(partnerId), eq(userId))).thenReturn(0);
+    assertEquals("FORBIDDEN", assertThrows(ApiException.class, () -> controller().createIntent(bookingId, "key-1")).code());
+  }
+
+  @Test
+  void passengerPaidBookingStaysWithThePassengerLink() {
+    stubPartnerBooking("GUEST");
+    assertEquals("FORBIDDEN", assertThrows(ApiException.class, () -> controller().createIntent(bookingId, "key-1")).code());
+    verifyNoInteractions(stripe);
+  }
+
   @Test
   void listingPaymentsForSomeoneElsesBookingIsForbidden() {
-    when(db.queryForObject(anyString(), eq(Integer.class), eq(bookingId), eq(userId))).thenReturn(0);
+    // Neither the creator nor an active member of the booking's establishment.
+    when(db.queryForObject(anyString(), eq(Integer.class), eq(bookingId), eq(userId), eq(userId))).thenReturn(0);
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().bookingPayments(bookingId));
 

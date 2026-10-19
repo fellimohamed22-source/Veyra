@@ -5,6 +5,7 @@ import {Api} from '../api';
 import {PartnerContext} from './context';
 import {dateTime, errorMessage, money, statusLabel, when} from '../formatters';
 import {bookingPill} from './pills';
+import {CardPayment} from '../portal/card-payment';
 
 /**
  * Détail d'une réservation partenaire : comparer et choisir une offre
@@ -13,7 +14,7 @@ import {bookingPill} from './pills';
  */
 @Component({
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, CardPayment],
   template: `
     <p class="sub"><a routerLink="/partner/reservations">← Réservations</a></p>
     <div class="okbox" *ngIf="justPublished">Demande publiée. Les chauffeurs vérifiés de la catégorie vont proposer leur prix.</div>
@@ -82,6 +83,23 @@ import {bookingPill} from './pills';
         </div>
       </div>
 
+      <div class="card" *ngIf="b.payment_method === 'ONLINE' && b.customer_total_amount_minor">
+        <div class="mhead"><h3>Paiement</h3>
+          <span class="pill" [ngClass]="paid ? 'p-ok' : 'p-warn'">{{paid ? 'Payée' : 'À régler'}}</span></div>
+        <ng-container *ngIf="b.payer_type === 'GUEST'">
+          <div class="sub">Le passager règle {{money(b.customer_total_amount_minor)}} avec son lien de suivi sécurisé. La réception ne saisit jamais sa carte.</div>
+        </ng-container>
+        <ng-container *ngIf="b.payer_type !== 'GUEST' && !paid">
+          <div class="sub" *ngIf="!payable">Le paiement s'ouvre dès qu'un chauffeur est confirmé.</div>
+          <ng-container *ngIf="payable">
+            <div class="sub">Réglez {{money(b.customer_total_amount_minor)}} TTC par carte. La carte peut être enregistrée pour les prochaines courses.</div>
+            <button class="gold" style="justify-self:start" *ngIf="!intent && ctx.books" (click)="startPayment()" [disabled]="startingPayment">{{startingPayment ? 'Préparation…' : 'Payer maintenant'}}</button>
+            <card-payment *ngIf="intent" [publishableKey]="intent.publishableKey" [clientSecret]="intent.clientSecret" [amountMinor]="b.customer_total_amount_minor" (paid)="onPaid()"></card-payment>
+          </ng-container>
+        </ng-container>
+        <div class="okbox" *ngIf="paidNow">Paiement accepté. Merci !</div>
+      </div>
+
       <div class="card">
         <h3>Historique</h3>
         <p class="empty" *ngIf="!timeline.length">Aucun évènement pour le moment.</p>
@@ -100,6 +118,7 @@ export class PartnerBookingDetail implements OnInit {
   @Input() publiee = '';
   b: any = null; offers: any[] = []; timeline: any[] = []; location: any = null;
   error = ''; message = ''; accepting = ''; cancelling = false; linking = false; guestUrl = ''; smsSent = false;
+  paid = false; paidNow = false; intent: any = null; startingPayment = false;
 
   constructor(public ctx: PartnerContext, private api: Api) {}
 
@@ -117,8 +136,29 @@ export class PartnerBookingDetail implements OnInit {
       this.b = await this.api.bookingDetail(this.id);
       try { this.timeline = await this.api.bookingTimeline(this.id); } catch { this.timeline = []; }
       if (this.offerPhase) await this.loadOffers();
+      if (this.b.payment_method === 'ONLINE') {
+        try { this.paid = (await this.api.bookingPayments(this.id)).some((p: any) => p.status === 'CAPTURED'); } catch { this.paid = false; }
+      }
     } catch (e: any) { this.error = errorMessage(e?.code); }
   }
+
+  get payable() { return this.b && ['CONFIRMED', 'DRIVER_EN_ROUTE', 'DRIVER_ARRIVED'].includes(this.b.status); }
+
+  /** DEC-04: the establishment pays by card once the driver is confirmed. */
+  async startPayment() {
+    this.startingPayment = true; this.error = '';
+    try {
+      const config = await this.api.paymentConfig();
+      if (!config?.enabled) { this.error = 'Le paiement en ligne n’est pas encore activé. Contactez VEYRA.'; return; }
+      const intent = await this.api.bookingPaymentIntent(this.id);
+      this.intent = {...intent, publishableKey: config.publishableKey};
+    } catch (e: any) {
+      if (e?.code === 'ALREADY_PAID') { this.paid = true; return; }
+      this.error = errorMessage(e?.code);
+    } finally { this.startingPayment = false; }
+  }
+
+  onPaid() { this.paid = true; this.paidNow = true; this.intent = null; }
 
   async loadOffers() {
     try { this.offers = await this.api.bookingOffers(this.id); } catch { this.offers = []; }

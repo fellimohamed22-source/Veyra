@@ -32,7 +32,7 @@ public class StripePaymentController {
     }
 
     List<Map<String, Object>> rows = db.queryForList(
-        "select sb.creator_user_id,sb.payment_method,sb.status,bfs.customer_total_amount_minor,bfs.currency " +
+        "select sb.creator_user_id,sb.partner_id,sb.payer_type,sb.payment_method,sb.status,bfs.customer_total_amount_minor,bfs.currency " +
         "from scheduled_bookings sb join booking_financial_snapshots bfs on bfs.booking_id=sb.id where sb.id=? for update of sb",
         bookingId);
     if (rows.isEmpty()) {
@@ -40,7 +40,11 @@ public class StripePaymentController {
     }
 
     Map<String, Object> booking = rows.getFirst();
-    if (!CurrentUser.id().equals(booking.get("creator_user_id"))) {
+    // The creator pays, or for an establishment-paid booking any team
+    // member allowed to book (owner, reception).
+    boolean teamPays = booking.get("partner_id") != null && "PARTNER".equals(booking.get("payer_type"))
+        && partnerMember((UUID) booking.get("partner_id"), true);
+    if (!CurrentUser.id().equals(booking.get("creator_user_id")) && !teamPays) {
       throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN");
     }
     if (!"ONLINE".equals(booking.get("payment_method"))) {
@@ -159,6 +163,15 @@ public class StripePaymentController {
     return db.queryForObject("select provider_customer_id from payment_customers where user_id=?", String.class, user);
   }
 
+  /** Active member of the establishment; with {@code books}, owner or reception only. */
+  private boolean partnerMember(UUID partnerId, boolean books) {
+    Integer n = db.queryForObject(
+        "select count(*) from partner_users where partner_id=? and user_id=? and status='ACTIVE'" +
+        (books ? " and partner_role in ('PARTNER_OWNER','PARTNER_STAFF')" : ""),
+        Integer.class, partnerId, CurrentUser.id());
+    return n != null && n > 0;
+  }
+
   /** Adds what the PaymentSheet needs to list and save the user's cards. */
   private Map<String, Object> withCustomer(Map<String, Object> intent) throws Exception {
     Map<String, Object> result = new LinkedHashMap<>(intent);
@@ -192,8 +205,9 @@ public class StripePaymentController {
   @GetMapping("/bookings/{bookingId}")
   public List<Map<String, Object>> bookingPayments(@PathVariable UUID bookingId) {
     Integer allowed = db.queryForObject(
-        "select count(*) from scheduled_bookings where id=? and creator_user_id=?",
-        Integer.class, bookingId, CurrentUser.id());
+        "select count(*) from scheduled_bookings sb where sb.id=? and (sb.creator_user_id=? or exists(select 1 from partner_users pu " +
+        "where pu.partner_id=sb.partner_id and pu.user_id=? and pu.status='ACTIVE'))",
+        Integer.class, bookingId, CurrentUser.id(), CurrentUser.id());
     if (allowed == null || allowed == 0) {
       throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN");
     }

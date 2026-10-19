@@ -82,6 +82,12 @@ const DOCUMENT_TYPE_FR: Record<string,string> = {
 // plus les codes réels rencontrés en pratique et vérifiés dans le backend.
 const ERROR_MESSAGES_FR: Record<string,string> = {
   EMAIL_INVALID: 'Adresse e-mail invalide.',
+  ALREADY_PAID: 'Cette course est déjà réglée.',
+  BOOKING_NOT_PAYABLE: 'Le paiement s’ouvre dès que le chauffeur est confirmé.',
+  PAYMENT_NOT_EXPECTED: 'Cette course n’est pas à régler en ligne par le passager.',
+  GUEST_LINK_INVALID: 'Ce lien n’est plus valide. Contactez l’établissement.',
+  PAYMENT_METHOD_NOT_ONLINE: 'Cette course n’est pas réglée en ligne.',
+  PAYMENT_CANCELED: 'Le paiement a été annulé. Réessayez.',
   COMPANY_ALREADY_EXISTS: 'Ce compte gère déjà une société.',
   SIREN_INVALID: 'Numéro SIREN invalide (9 chiffres).',
   SIREN_ALREADY_REGISTERED: 'Cette société est déjà inscrite sur VEYRA.',

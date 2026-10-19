@@ -43,6 +43,8 @@ veyra:
   stripe:
     secret-key: ${STRIPE_SECRET_KEY:}
     webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    # Clé publique Stripe (pk_...) du formulaire de carte web ; variable Render.
+    publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
 
   firebase:
     enabled: ${FIREBASE_ENABLED:false}
