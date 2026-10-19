@@ -19,6 +19,21 @@
 | L12 | **Lien de suivi passager et SMS** (PART-13, PART-03, DEC-07) : lien à jeton aléatoire (seul le hash est stocké), expiration et révocation, un lien actif par réservation ; vue publique minimale sans téléphone ni prix, 404 identique pour lien inconnu/expiré/révoqué, `noindex`, limitation par IP sur tous les jetons ; envoi SMS via Twilio (inactif sans identifiants) ; page web publique `/suivi/:jeton` | V046 `guest_access_links` | PART-03, isolation inter-organisations, normalisation E.164 |
 | L13a | **Google Maps côté serveur** (DEC-08) : Places (recherche d'adresse), Geocoding (adresse d'un point), Routes (distance, durée, tracé) dès que `GOOGLE_MAPS_API_KEY` est défini ; sinon OSM actuel inchangé. Cartes Flutter : en attente de la clé (lot L13b) | — | Lecture des réponses Google, décodage polyline, repli sans clé |
 
+### Refonte UI écran par écran (planches 01 à 17, DEC-12)
+
+| Lot | Contenu | Migrations |
+|---|---|---|
+| UI-1 | Système de design (couleurs relevées sur les maquettes, police Plus Jakarta Sans), parcours de réservation client en 7 étapes (planches 01/09/11/17) | — |
+| UI-2 | Client : Accueil, Mes demandes, Mes réservations, Profil (planches 05/15/03/04) | — |
+| UI-3 | Client : offres, détail d'offre, confirmation, « Ma réservation » (planches 05/10) ; numéros de téléphone retirés des API (CL-15) | — |
+| UI-4 | Client : bienvenue, inscription en 3 étapes, vérification SMS, compte créé (planche 08 A) ; emplacements photo d'accueil (pack TOTAL) | — |
+| UI-5 | Chauffeur : inscription indépendant en 7 étapes, recto/verso, dossier repris là où il s'est arrêté, envoi explicite du dossier (planche 08 B) | V047 |
+| UI-6 | Chauffeur : accueil, bouton « Disponible », demandes disponibles avec « Offre la plus basse » (planches 02/12/13) | V048 |
+| UI-7 | Chauffeur : détail de la demande, créer une offre → récapitulatif → offre envoyée, véhicule et message joints à l'offre (planche 14) | V049 |
+| UI-8 | Chauffeur : Mes offres, Mes courses, Revenus du mois, Profil, Mes véhicules ; notifications lu/non lu dans les deux apps (planche 16, CL-18) | V050 |
+| UI-9 | Chauffeur : détail de course et course en cours (planche 12 P7/P8) ; détail de notification ; statut du compte | — |
+| UI-10 | Tous les écrans à 320 px avec texte agrandi ×1,5 (tests automatiques), montants « 1 250,00 € » | — |
+
 Rollback : chaque migration documente son `DROP` dans son en-tête.
 
 ## Actions d'exploitation requises (hors code)
@@ -38,9 +53,21 @@ Rollback : chaque migration documente son `DROP` dans son en-tête.
 - **DEC-19** : suspendre les comptes de test en production ?
 - **DEC-21** : capacités bagages par catégorie (valeurs à fournir).
 
-## Lots non démarrés (bloqués par une décision)
+## Lots non démarrés (bloqués) — mise à jour du 19/10/2026
 
-Moteur de commission V4 avec portées client, catégorie et profil, et simulation admin (DEC-01 à 03) · contrôle GPS à l'arrivée et au démarrage (DEC-10) · flux Stripe définitif (DEC-04) · OTP SMS et appels masqués (DEC-06, 07) · connexion Apple et refonte UI écran par écran (DEC-12) · portails partenaire, société VTC et admin (DEC-13, 15).
+Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OTP SMS (L11), refonte UI (UI-1 à UI-10).
+
+| Lot bloqué | Ce qui manque |
+|---|---|
+| Portails partenaire, société VTC et admin | Validation des écrans conçus dans le style des maquettes (DEC-13, DEC-15) |
+| Inscription chauffeur rattaché (planche 08 C : code d'invitation, société, statut) | Espaces société, donc DEC-13 |
+| Appels masqués (bouton « Appeler » désactivé dans les deux apps) | Identifiants Twilio Proxy (DEC-06) |
+| SMS du lien de suivi passager | Identifiants Twilio, `VEYRA_GUEST_BASE_URL` |
+| Photos d'accueil client et chauffeur, logo vectoriel | Originaux sans texte ni interface, droits (voir l'audit des images ci-dessous) |
+| « Lire les documents » à l'inscription, charte chauffeur | Textes juridiques |
+| Connexion Apple (iOS) | Décision |
+| Nom et note du client sur les demandes côté chauffeur (planches 12/13) | Décision vie privée / produit |
+| Cartes Google dans les apps (L13b) | Clé Google Maps pour mobile |
 
 ## Décisions prises (17/10/2026)
 
