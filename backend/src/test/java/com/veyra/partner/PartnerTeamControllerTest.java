@@ -44,7 +44,7 @@ class PartnerTeamControllerTest {
   }
 
   private PartnerTeamController controller() {
-    return new PartnerTeamController(db);
+    return new PartnerTeamController(db, new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(org.springframework.mail.javamail.JavaMailSender.class));
   }
 
   private void stubOwner(int count) {
@@ -84,7 +84,7 @@ class PartnerTeamControllerTest {
   void anInvalidRoleIsRejectedEvenForAnOwner() {
     stubOwner(1);
 
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(com.veyra.shared.ApiException.class,
         () -> controller().add(partnerId, new PartnerTeamController.Add(UUID.randomUUID(), "SUPER_ADMIN")));
 
     verify(db, never()).update(anyString(), any(Object[].class));
@@ -98,5 +98,45 @@ class PartnerTeamControllerTest {
     controller().add(partnerId, new PartnerTeamController.Add(newUserId, "PARTNER_FINANCE"));
 
     verify(db).update(contains("on conflict(partner_id,user_id) do update"), eq(partnerId), eq(newUserId), eq("PARTNER_FINANCE"));
+  }
+
+  @Test
+  void invitingAnExistingAccountAttachesItWithTheRole() {
+    stubOwner(1);
+    UUID invited = UUID.randomUUID();
+    when(db.queryForList(contains("from users where lower(email::text)=?"), eq(UUID.class), eq("compta@lemarceau.fr"))).thenReturn(List.of(invited));
+
+    assertEquals(Map.of("status", "ACTIVE"), controller().invite(partnerId, new PartnerTeamController.Invite(" Compta@LeMarceau.fr ", "PARTNER_FINANCE")));
+
+    verify(db).update(contains("insert into partner_users"), eq(partnerId), eq(invited), eq("PARTNER_FINANCE"));
+    verify(db, never()).update(contains("insert into partner_invitations"), any(Object[].class));
+  }
+
+  @Test
+  void invitingAnUnknownAddressKeepsAPendingInvitation() {
+    stubOwner(1);
+    when(db.queryForList(contains("from users where lower(email::text)=?"), eq(UUID.class), eq("nouveau@lemarceau.fr"))).thenReturn(List.of());
+
+    assertEquals(Map.of("status", "INVITED"), controller().invite(partnerId, new PartnerTeamController.Invite("nouveau@lemarceau.fr", "PARTNER_STAFF")));
+
+    verify(db).update(contains("insert into partner_invitations"), eq(partnerId), eq("nouveau@lemarceau.fr"), eq("PARTNER_STAFF"), eq(userId));
+  }
+
+  @Test
+  void anInvalidEmailIsRefused() {
+    stubOwner(1);
+    assertEquals("EMAIL_INVALID", assertThrows(com.veyra.shared.ApiException.class,
+        () -> controller().invite(partnerId, new PartnerTeamController.Invite("pas-un-email", "PARTNER_STAFF"))).code());
+  }
+
+  @Test
+  void anOwnerCannotDeactivateThemselves() {
+    stubOwner(1);
+    UUID self = UUID.randomUUID();
+    when(db.queryForObject(contains("where id=? and partner_id=? and user_id=?"), eq(Integer.class), eq(self), eq(partnerId), eq(userId))).thenReturn(1);
+
+    assertEquals("CANNOT_CHANGE_OWN_MEMBERSHIP", assertThrows(com.veyra.shared.ApiException.class,
+        () -> controller().deactivate(partnerId, self)).code());
+    verify(db, never()).update(contains("set status='INACTIVE'"), any(Object[].class));
   }
 }

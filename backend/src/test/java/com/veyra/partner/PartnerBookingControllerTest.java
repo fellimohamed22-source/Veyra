@@ -61,7 +61,7 @@ class PartnerBookingControllerTest {
   @Test
   void anActiveMemberSeesThePartnersBookings() {
     when(db.queryForObject(anyString(), eq(Integer.class), eq(partnerId), eq(userId))).thenReturn(1);
-    when(db.queryForList(contains("from scheduled_bookings where partner_id=?"), eq(partnerId)))
+    when(db.queryForList(contains("where sb.partner_id=?"), eq(partnerId)))
         .thenReturn(List.of(Map.of("id", UUID.randomUUID(), "status", "CONFIRMED")));
 
     List<Map<String, Object>> bookings = controller().list(partnerId);

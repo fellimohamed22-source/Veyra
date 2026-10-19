@@ -54,6 +54,9 @@ jobs:
         run: |
           cd mobile-client
           flutter create . --platforms=android --project-name veyra_client
+          # App icon approved by the owner (19/10/2026): replaces Flutter's default.
+          for d in branding/android/mipmap-*; do cp "$d/ic_launcher.png" "android/app/src/main/res/$(basename $d)/ic_launcher.png"; done
+          cmp branding/android/mipmap-xxxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
           grep -q 'compileSdk = 36' android/app/build.gradle.kts
           # REAL, EVIDENCE-BASED CANDIDATE for the persistently-reported
@@ -224,6 +227,9 @@ jobs:
         run: |
           cd mobile-driver
           flutter create . --platforms=android --project-name veyra_driver
+          # App icon approved by the owner (19/10/2026): replaces Flutter's default.
+          for d in branding/android/mipmap-*; do cp "$d/ic_launcher.png" "android/app/src/main/res/$(basename $d)/ic_launcher.png"; done
+          cmp branding/android/mipmap-xxxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           # REAL BUG FOUND AND FIXED: file_picker's own dependency
           # (flutter_plugin_android_lifecycle) requires compiling against
           # API 36+, but flutter.compileSdkVersion (the value Flutter's own

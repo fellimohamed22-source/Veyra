@@ -162,4 +162,10 @@ export class Api {
   bookingLocation(id:string){return this.request('/bookings/'+id+'/location');}
   bookingOffers(id:string){return this.request('/scheduled-bookings/'+id+'/offers');}
   acceptOffer(bookingId:string,offerId:string){return this.request('/scheduled-bookings/'+bookingId+'/offers/'+offerId+'/accept',{method:'POST'});}
+  // Partner portal (DEC-13): team, passenger tracking link.
+  partnerTeam(id:string){return this.request('/partner/'+id+'/team');}
+  invitePartnerMember(id:string,email:string,role:string){return this.request('/partner/'+id+'/team/invitations',{method:'POST',body:JSON.stringify({email,role})});}
+  changePartnerMemberRole(id:string,memberId:string,role:string){return this.request('/partner/'+id+'/team/'+memberId,{method:'PATCH',body:JSON.stringify({role})});}
+  removePartnerMember(id:string,memberId:string){return this.request('/partner/'+id+'/team/'+memberId,{method:'DELETE'});}
+  guestLink(partnerId:string,bookingId:string,sendSms:boolean){return this.request('/partner/'+partnerId+'/bookings/'+bookingId+'/guest-link',{method:'POST',body:JSON.stringify({sendSms})});}
 }

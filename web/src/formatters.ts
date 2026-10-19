@@ -123,12 +123,30 @@ export function documentTypeLabel(code: string|null|undefined): string {
   return DOCUMENT_TYPE_FR[code] ?? code;
 }
 
-/** [minor] en centimes -> "195,00 €". Jamais de calcul, affichage seul. */
+/** [minor] en centimes -> "1 284,60 €" (groupement français). Affichage seul. */
 export function money(minor: number|null|undefined, currency = 'EUR'): string {
   if (minor === null || minor === undefined || isNaN(minor)) return '—';
-  const euros = minor / 100;
   const symbol = currency === 'EUR' ? '€' : currency;
-  return euros.toFixed(2).replace('.', ',') + ' ' + symbol;
+  const fixed = Math.abs(minor / 100).toFixed(2);
+  const whole = fixed.slice(0, -3).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (minor < 0 ? '-' : '') + whole + ',' + fixed.slice(-2) + ' ' + symbol;
+}
+
+/** "Auj. 15:30", "Dem. 08:00", "Sam. 18 oct. 09:15" (maquettes portails). */
+export function when(raw: string|null|undefined): string {
+  if (!raw) return '—';
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return '—';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const diff = Math.round((day.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return 'Auj. ' + hm;
+  if (diff === 1) return 'Dem. ' + hm;
+  const days = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
+  const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${hm}`;
 }
 
 /** Date ISO brute -> "23/09/2026 21:36" (format FR lisible). */

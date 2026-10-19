@@ -57,6 +57,8 @@ public class PartnerController {
 
   @GetMapping("/organizations")
   public List<Map<String,Object>> organizations(){
+    // First sign-in after an e-mail invitation (PART-16): join the team.
+    PartnerTeamController.claimInvitations(db,CurrentUser.id());
     return db.queryForList(
       "select po.id,po.name,po.partner_type,po.status,po.billing_email,po.credit_status,po.credit_limit_minor,po.currency,pu.partner_role " +
       "from partner_organizations po join partner_users pu on pu.partner_id=po.id " +

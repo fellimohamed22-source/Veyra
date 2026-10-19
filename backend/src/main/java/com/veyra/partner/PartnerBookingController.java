@@ -21,8 +21,13 @@ public class PartnerBookingController {
   public List<Map<String,Object>> list(@PathVariable UUID partnerId){
     assertMember(partnerId);
     return db.queryForList(
-        "select id,pickup_address,dropoff_address,scheduled_at,status,payment_method,selected_driver_id,beneficiary_name_snapshot,passenger_count,baggage_count,customer_notes " +
-        "from scheduled_bookings where partner_id=? order by scheduled_at desc limit 500",
+        "select sb.id,sb.pickup_address,sb.dropoff_address,sb.scheduled_at,sb.status,sb.payment_method,sb.payer_type,sb.selected_driver_id,sb.beneficiary_name_snapshot,sb.partner_reference," +
+        "sb.passenger_count,sb.baggage_count,sb.customer_notes,sb.offer_window_ends_at,vc.display_name as category_name," +
+        "bfs.customer_total_amount_minor,bfs.currency," +
+        com.veyra.booking.AvailableOfferQuery.COUNT_SQL+" as offer_count,"+com.veyra.booking.AvailableOfferQuery.BEST_TOTAL_SQL+" as best_offer_total_minor " +
+        "from scheduled_bookings sb join vehicle_categories vc on vc.id=sb.category_id " +
+        "left join booking_financial_snapshots bfs on bfs.booking_id=sb.id " +
+        "where sb.partner_id=? order by sb.scheduled_at desc limit 500",
         partnerId);
   }
 
