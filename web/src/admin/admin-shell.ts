@@ -23,7 +23,13 @@ export class AdminShell implements OnInit {
   private buildItems(): NavItem[] {
     const admin = this.roles.includes('ADMIN');
     const items: NavItem[] = [];
-    if (admin) items.push({label: 'Tableau de bord', link: '/admin', exact: true});
+    if (admin) items.push(
+      {label: 'Tableau de bord', link: '/admin', exact: true},
+      {label: 'Vérifications', link: '/admin/verifications'},
+      {label: 'Réservations', link: '/admin/reservations'},
+      {label: 'Commissions', link: '/admin/commissions'},
+      {label: 'Partenaires', link: '/admin/partenaires'},
+      {label: 'Paramètres', link: '/admin/parametres'});
     if (admin || this.roles.includes('FINANCE')) items.push({label: 'Finance', link: '/admin/finance'});
     if (admin || this.roles.includes('SUPPORT')) items.push({label: 'Support', link: '/admin/support'});
     return items;

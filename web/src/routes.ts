@@ -1,6 +1,6 @@
 import {Routes} from '@angular/router';
 import {Login} from './views/login';
-import {Admin} from './views/admin';
+import {AdminBookings, AdminCommissions, AdminDashboard, AdminDriverReview, AdminPartners, AdminSettings, AdminVerifications} from './admin/pages';
 import {Finance} from './views/finance';
 import {Support} from './views/support';
 import {authGuard} from './auth.guard';
@@ -33,7 +33,13 @@ export const routes: Routes = [
   // Administration portal.
   {
     path: 'admin', component: AdminShell, canActivate: [authGuard], children: [
-      {path: '', component: Admin},
+      {path: '', component: AdminDashboard},
+      {path: 'verifications', component: AdminVerifications},
+      {path: 'verifications/:id', component: AdminDriverReview},
+      {path: 'reservations', component: AdminBookings},
+      {path: 'commissions', component: AdminCommissions},
+      {path: 'partenaires', component: AdminPartners},
+      {path: 'parametres', component: AdminSettings},
       {path: 'finance', component: Finance},
       {path: 'support', component: Support},
     ]

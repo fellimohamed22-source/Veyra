@@ -168,4 +168,11 @@ export class Api {
   changePartnerMemberRole(id:string,memberId:string,role:string){return this.request('/partner/'+id+'/team/'+memberId,{method:'PATCH',body:JSON.stringify({role})});}
   removePartnerMember(id:string,memberId:string){return this.request('/partner/'+id+'/team/'+memberId,{method:'DELETE'});}
   guestLink(partnerId:string,bookingId:string,sendSms:boolean){return this.request('/partner/'+partnerId+'/bookings/'+bookingId+'/guest-link',{method:'POST',body:JSON.stringify({sendSms})});}
+  // Administration (DEC-13): commission rules engine (L6), platform settings (L8).
+  commissionRules(){return this.request('/admin/commission-rules');}
+  createCommissionRule(body:any){return this.request('/admin/commission-rules',{method:'POST',body:JSON.stringify(body)});}
+  deactivateCommissionRule(id:string,justification:string){return this.request('/admin/commission-rules/'+id+'/deactivate',{method:'POST',body:JSON.stringify({justification})});}
+  simulateCommission(body:any){return this.request('/admin/commission-rules/simulate',{method:'POST',body:JSON.stringify(body)});}
+  platformSettings(){return this.request('/admin/settings');}
+  updatePlatformSetting(key:string,value:number,justification:string){return this.request('/admin/settings/'+encodeURIComponent(key),{method:'PUT',body:JSON.stringify({value,justification})});}
 }
