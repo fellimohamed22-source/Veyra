@@ -270,6 +270,13 @@ class BookingDatabaseTest {
     var visible=controller.opportunities("date",category,null,null,null,pickup,null,null);
     assertEquals(1,visible.size());
     assertEquals(created,visible.getFirst().get("id"));
+    // Declared seats / luggage must fit the request (2 passengers, 1 bag).
+    db.update("update vehicles set seats=1,baggage_capacity=4 where driver_id=?",driver);
+    assertTrue(controller.opportunities("date",category,null,null,null,pickup,null,null).isEmpty());
+    db.update("update vehicles set seats=4,baggage_capacity=0 where driver_id=?",driver);
+    assertTrue(controller.opportunities("date",category,null,null,null,pickup,null,null).isEmpty());
+    db.update("update vehicles set seats=4,baggage_capacity=3 where driver_id=?",driver);
+    assertEquals(1,controller.opportunities("date",category,null,null,null,pickup,null,null).size());
     assertEquals(created,controller.createIdempotently(request,key).getBody().get("id"));
     db.update("update drivers set marketplace_enabled=false where id=?",driver);
     assertEquals("DRIVER_NOT_ELIGIBLE",assertThrows(ApiException.class,

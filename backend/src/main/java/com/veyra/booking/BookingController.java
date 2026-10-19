@@ -467,7 +467,9 @@ import java.util.*;
         return x.getFirst();
     }
     /** Driver (first ?) owns an approved vehicle of the booking's category. */
-    public static final String ELIGIBLE_VEHICLE_SQL="exists(select 1 from vehicles ev where ev.driver_id=? and ev.status='APPROVED' and ev.category_id=sb.category_id)";
+    /** Driver (?) has an approved vehicle of the category with enough declared seats and luggage space (undeclared = not checked). */
+    public static final String ELIGIBLE_VEHICLE_SQL="exists(select 1 from vehicles ev where ev.driver_id=? and ev.status='APPROVED' and ev.category_id=sb.category_id"+
+        " and (ev.seats is null or ev.seats>=sb.passenger_count) and (ev.baggage_capacity is null or ev.baggage_capacity>=sb.baggage_count))";
     /** Driver (first ?) is a real favorite of the booking's creator (customer_favorite_drivers), not a client-supplied flag. */
     /**
      * Lowest active net price among the OTHER drivers (first ?), shown only
@@ -516,7 +518,7 @@ import java.util.*;
      * one by default.
      */
     UUID offerVehicle(UUID bookingId,UUID d,UUID requested){
-        List<UUID> eligible=db.queryForList("select v.id from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED' order by v.id",UUID.class,bookingId,d);
+        List<UUID> eligible=db.queryForList("select v.id from vehicles v join scheduled_bookings sb on sb.category_id=v.category_id where sb.id=? and v.driver_id=? and v.status='APPROVED' and (v.seats is null or v.seats>=sb.passenger_count) and (v.baggage_capacity is null or v.baggage_capacity>=sb.baggage_count) order by v.id",UUID.class,bookingId,d);
         if(requested==null)return eligible.isEmpty()?null:eligible.getFirst();
         if(!eligible.contains(requested))throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"VEHICLE_NOT_ELIGIBLE");
         return requested;
