@@ -12,9 +12,14 @@ import {PartnerBookings} from './partner/bookings';
 import {PartnerBookingDetail} from './partner/booking-detail';
 import {PartnerEstablishment, PartnerInvoices, PartnerPassengers, PartnerTeam} from './partner/people';
 import {AdminShell} from './admin/admin-shell';
+import {AdminCompanies, AdminCompanyReview} from './admin/companies';
+import {CompanyShell} from './company/shell';
+import {CompanyActivity, CompanyDashboard, CompanyDocuments, CompanyDrivers, CompanyVehicles} from './company/pages';
+import {Signup} from './views/signup';
 
 export const routes: Routes = [
   {path: 'login', component: Login},
+  {path: 'inscription', component: Signup},
   // Public passenger tracking link (PART-13); authorised by its token only.
   {path: 'suivi/:token', component: Guest},
   // Partner portal (validated mock-up DEC-13).
@@ -30,6 +35,16 @@ export const routes: Routes = [
       {path: 'etablissement', component: PartnerEstablishment},
     ]
   },
+  // VTC company portal (validated mock-up DEC-13, SOC-01..10).
+  {
+    path: 'societe', component: CompanyShell, canActivate: [authGuard], children: [
+      {path: '', component: CompanyDashboard},
+      {path: 'vehicules', component: CompanyVehicles},
+      {path: 'chauffeurs', component: CompanyDrivers},
+      {path: 'documents', component: CompanyDocuments},
+      {path: 'activite', component: CompanyActivity},
+    ]
+  },
   // Administration portal.
   {
     path: 'admin', component: AdminShell, canActivate: [authGuard], children: [
@@ -39,6 +54,8 @@ export const routes: Routes = [
       {path: 'reservations', component: AdminBookings},
       {path: 'commissions', component: AdminCommissions},
       {path: 'partenaires', component: AdminPartners},
+      {path: 'societes', component: AdminCompanies},
+      {path: 'societes/:id', component: AdminCompanyReview},
       {path: 'parametres', component: AdminSettings},
       {path: 'finance', component: Finance},
       {path: 'support', component: Support},

@@ -23,7 +23,7 @@ export class Api {
   async request(path:string,init:RequestInit={},retried=false):Promise<any>{
     const token=localStorage.getItem('accessToken');
     const headers=new Headers(init.headers);
-    if(init.body)headers.set('Content-Type','application/json');
+    if(init.body&&!(init.body instanceof FormData))headers.set('Content-Type','application/json');
     if(token)headers.set('Authorization','Bearer '+token);
     const response=await fetch(this.base+path,{...init,headers});
 
@@ -175,4 +175,45 @@ export class Api {
   simulateCommission(body:any){return this.request('/admin/commission-rules/simulate',{method:'POST',body:JSON.stringify(body)});}
   platformSettings(){return this.request('/admin/settings');}
   updatePlatformSetting(key:string,value:number,justification:string){return this.request('/admin/settings/'+encodeURIComponent(key),{method:'PUT',body:JSON.stringify({value,justification})});}
+  // Professional account (web sign-up for partner and VTC company managers).
+  async register(body:any){
+    const result=await this.request('/auth/register',{method:'POST',body:JSON.stringify(body)});
+    localStorage.setItem('accessToken',result.accessToken);
+    localStorage.setItem('refreshToken',result.refreshToken);
+    return result;
+  }
+  // VTC company portal (SOC-01..10).
+  myCompanies(){return this.request('/company/mine');}
+  createCompany(body:any){return this.request('/company',{method:'POST',body:JSON.stringify(body)});}
+  updateCompany(id:string,body:any){return this.request('/company/'+id,{method:'PUT',body:JSON.stringify(body)});}
+  companyOverview(id:string){return this.request('/company/'+id);}
+  submitCompany(id:string){return this.request('/company/'+id+'/submit',{method:'POST'});}
+  rotateCompanyCode(id:string){return this.request('/company/'+id+'/invite-code',{method:'POST'});}
+  companyDocuments(id:string){return this.request('/company/'+id+'/documents');}
+  uploadCompanyDocument(id:string,type:string,file:File,vehicleId?:string|null,expiresAt?:string|null){
+    const form=new FormData();form.append('type',type);form.append('file',file);
+    if(vehicleId)form.append('vehicleId',vehicleId);
+    if(expiresAt)form.append('expiresAt',expiresAt);
+    return this.request('/company/'+id+'/documents',{method:'POST',body:form});
+  }
+  companyExpiries(id:string){return this.request('/company/'+id+'/expiries');}
+  companyVehicles(id:string){return this.request('/company/'+id+'/vehicles');}
+  addCompanyVehicle(id:string,body:any){return this.request('/company/'+id+'/vehicles',{method:'POST',body:JSON.stringify(body)});}
+  assignCompanyVehicle(id:string,vehicleId:string,driverId:string|null){return this.request('/company/'+id+'/vehicles/'+vehicleId+'/driver',{method:'PUT',body:JSON.stringify({driverId})});}
+  companyDrivers(id:string){return this.request('/company/'+id+'/drivers');}
+  approveAffiliation(id:string,affiliationId:string,vehicleId:string|null){return this.request('/company/'+id+'/drivers/'+affiliationId+'/approve',{method:'POST',body:JSON.stringify({vehicleId})});}
+  rejectAffiliation(id:string,affiliationId:string){return this.request('/company/'+id+'/drivers/'+affiliationId+'/reject',{method:'POST'});}
+  endAffiliation(id:string,affiliationId:string){return this.request('/company/'+id+'/drivers/'+affiliationId+'/end',{method:'POST'});}
+  companyInvitations(id:string){return this.request('/company/'+id+'/invitations');}
+  inviteCompanyDriver(id:string,email:string){return this.request('/company/'+id+'/invitations',{method:'POST',body:JSON.stringify({email})});}
+  revokeCompanyInvitation(id:string,invitationId:string){return this.request('/company/'+id+'/invitations/'+invitationId,{method:'DELETE'});}
+  companyActivity(id:string){return this.request('/company/'+id+'/activity');}
+  // Admin review of VTC companies.
+  adminCompanies(){return this.request('/admin/companies');}
+  adminCompany(id:string){return this.request('/admin/companies/'+id);}
+  approveCompany(id:string){return this.request('/admin/companies/'+id+'/approve',{method:'POST'});}
+  rejectCompany(id:string,reasonCode:string){return this.request('/admin/companies/'+id+'/reject',{method:'POST',body:JSON.stringify({reasonCode})});}
+  suspendCompany(id:string){return this.request('/admin/companies/'+id+'/suspend',{method:'POST'});}
+  approveCompanyVehicle(id:string,vehicleId:string){return this.request('/admin/companies/'+id+'/vehicles/'+vehicleId+'/approve',{method:'POST'});}
+  rejectCompanyVehicle(id:string,vehicleId:string,reasonCode:string){return this.request('/admin/companies/'+id+'/vehicles/'+vehicleId+'/reject',{method:'POST',body:JSON.stringify({reasonCode})});}
 }

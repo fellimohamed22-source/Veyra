@@ -29,6 +29,7 @@ export class AdminShell implements OnInit {
       {label: 'Réservations', link: '/admin/reservations'},
       {label: 'Commissions', link: '/admin/commissions'},
       {label: 'Partenaires', link: '/admin/partenaires'},
+      {label: 'Sociétés VTC', link: '/admin/societes'},
       {label: 'Paramètres', link: '/admin/parametres'});
     if (admin || this.roles.includes('FINANCE')) items.push({label: 'Finance', link: '/admin/finance'});
     if (admin || this.roles.includes('SUPPORT')) items.push({label: 'Support', link: '/admin/support'});
