@@ -554,6 +554,32 @@ class _LoginScreenState extends State<LoginScreen>{
     }
   }
 
+  /// Owner decision 20/10/2026: « Continuer avec Apple » (board 08 A1),
+  /// through Firebase's Apple provider and the same /auth/firebase endpoint.
+  Future<void> _appleLogin() async {
+    setState((){loading=true;error=null;offline=false;});
+    try{
+      if(Firebase.apps.isEmpty)await Firebase.initializeApp();
+      final provider=AppleAuthProvider()..addScope('email')..addScope('name');
+      final userCredential=await FirebaseAuth.instance.signInWithProvider(provider);
+      final token=await userCredential.user?.getIdToken();
+      if(token==null||token.isEmpty)throw StateError('FIREBASE_ID_TOKEN_MISSING');
+      await api.loginWithFirebase(token);
+      if(!mounted)return;
+      context.go('/home');
+      await configurePush();
+    }on FirebaseAuthException catch(e){
+      if(e.code=='canceled'||e.code=='web-context-canceled')return;
+      debugPrint('APPLE_LOGIN_FAILED: ${e.code}');
+      if(mounted)setState(()=>error=t('Connexion Apple impossible. Vérifiez la configuration Firebase et réessayez.'));
+    }catch(e){
+      debugPrint('APPLE_LOGIN_FAILED: $e');
+      if(mounted)setState(()=>error=e is DioException?VeyraErrorMessages.forException(e):t('Connexion Apple impossible. Vérifiez la configuration Firebase et réessayez.'));
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
   /// Board 08 A1 shows the welcome actions; « Se connecter » opens the
   /// e-mail form on the same screen.
   bool showForm=false;
@@ -581,7 +607,8 @@ class _LoginScreenState extends State<LoginScreen>{
     },
   );
 
-  Widget socialButton(String label,Widget icon,VoidCallback? onPressed)=>OutlinedButton(
+  Widget socialButton(String label,Widget icon,VoidCallback? onPressed,{Key? key})=>OutlinedButton(
+    key:key,
     onPressed:onPressed,
     style:OutlinedButton.styleFrom(foregroundColor:VeyraColors.textPrimary,minimumSize:const Size.fromHeight(52)),
     child:Row(children:[icon,const SizedBox(width:12),Expanded(child:Text(label,textAlign:TextAlign.center)),const SizedBox(width:28)]),
@@ -603,6 +630,8 @@ class _LoginScreenState extends State<LoginScreen>{
     ]),
     const SizedBox(height:16),
     socialButton(t('Continuer avec Google'),const Text('G',style:TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:Color(0xFF4285F4))),loading?null:_googleLogin),
+    const SizedBox(height:10),
+    socialButton(t('Continuer avec Apple'),const Icon(Icons.apple,size:26,color:Colors.black),loading?null:_appleLogin,key:const ValueKey('apple-login')),
   ];
 
   List<Widget> loginForm()=>[
