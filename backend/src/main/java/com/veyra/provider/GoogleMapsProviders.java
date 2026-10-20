@@ -93,7 +93,7 @@ public final class GoogleMapsProviders {
       body.put("languageCode","fr");
       Map<?,?> response=routes.post().uri("/directions/v2:computeRoutes")
           .header("X-Goog-Api-Key",key)
-          .header("X-Goog-FieldMask","routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline")
+          .header("X-Goog-FieldMask","routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.distanceMeters,routes.legs.steps.navigationInstruction,routes.legs.steps.startLocation")
           .contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(Map.class);
       return parseRoute(response);
     }
@@ -129,7 +129,32 @@ public final class GoogleMapsProviders {
     String rawDuration=Objects.toString(r.get("duration"),"0s");
     int seconds=(int)Math.round(Double.parseDouble(rawDuration.replace("s","")));
     String encoded=r.get("polyline") instanceof Map<?,?> pl?Objects.toString(pl.get("encodedPolyline"),""):"";
-    return new RoutingProvider.Route(distance,seconds,decodePolyline(encoded));
+    return new RoutingProvider.Route(distance,seconds,decodePolyline(encoded),parseSteps(r));
+  }
+
+  /** Turn-by-turn steps of the first route (instruction text in French, maneuver code). */
+  static List<Map<String,Object>> parseSteps(Map<?,?> route){
+    List<Map<String,Object>> out=new ArrayList<>();
+    if(!(route.get("legs") instanceof List<?> legs))return out;
+    for(Object l:legs){
+      if(!(l instanceof Map<?,?> leg)||!(leg.get("steps") instanceof List<?> steps))continue;
+      for(Object s:steps){
+        if(!(s instanceof Map<?,?> step))continue;
+        Map<String,Object> m=new LinkedHashMap<>();
+        if(step.get("navigationInstruction") instanceof Map<?,?> ni){
+          m.put("instruction",Objects.toString(ni.get("instructions"),""));
+          m.put("maneuver",Objects.toString(ni.get("maneuver"),""));
+        }
+        m.put("distanceMeters",step.get("distanceMeters") instanceof Number n?n.intValue():0);
+        if(step.get("startLocation") instanceof Map<?,?> sl&&sl.get("latLng") instanceof Map<?,?> ll
+            &&ll.get("latitude") instanceof Number la&&ll.get("longitude") instanceof Number lo){
+          m.put("lat",la.doubleValue());
+          m.put("lng",lo.doubleValue());
+        }
+        out.add(m);
+      }
+    }
+    return out;
   }
 
   /** Google encoded polyline algorithm (precision 1e-5). */

@@ -1,10 +1,10 @@
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../widgets/veyra_ui.dart' show veyraMapTilesEnabled;
+import 'veyra_map_marks.dart';
+import 'veyra_tiles.dart';
 import 'map_motion.dart';
 import 'route_geometry.dart';
 
@@ -25,6 +25,12 @@ class VeyraMap extends StatefulWidget {
   final bool showRecenter;
   final bool followDriver;
   final String userAgentPackageName;
+  /// Place names next to the marks (boards 10 P4, 12 P8).
+  final String? pickupLabel;
+  final String? dropoffLabel;
+  /// Distance from the bottom edge for the map buttons and the attribution
+  /// (a bottom panel may cover the map).
+  final double controlsBottom;
 
   const VeyraMap({
     super.key,
@@ -38,6 +44,9 @@ class VeyraMap extends StatefulWidget {
     this.showRecenter=true,
     this.followDriver=true,
     required this.userAgentPackageName,
+    this.pickupLabel,
+    this.dropoffLabel,
+    this.controlsBottom=24,
   });
 
   @override
@@ -58,7 +67,6 @@ class _VeyraMapState extends State<VeyraMap>
   bool _fitted=false;
   bool _follow=true;
   bool _mapReady=false;
-  bool _lightMap=true;
 
   LatLng get _fallback =>
       widget.driver ?? widget.pickup ?? widget.dropoff ?? const LatLng(43.2965,5.3698);
@@ -174,7 +182,7 @@ class _VeyraMapState extends State<VeyraMap>
       }else{
         _controller.fitCamera(CameraFit.bounds(
           bounds:LatLngBounds.fromPoints(points),
-          padding:const EdgeInsets.fromLTRB(54,90,54,210),
+          padding:EdgeInsets.fromLTRB(54,widget.controlsBottom>24?170:90,64,widget.controlsBottom>24?widget.controlsBottom+40:60),
           maxZoom:16,
         ));
       }
@@ -231,14 +239,7 @@ class _VeyraMapState extends State<VeyraMap>
           },
         ),
         children:[
-          // No network tiles under flutter test (same rule as veyra_ui).
-          if(veyraMapTilesEnabled)TileLayer(
-            urlTemplate:_lightMap
-              ?'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
-              :'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            subdomains:_lightMap?const ['a','b','c','d']:const [],
-            userAgentPackageName:widget.userAgentPackageName,
-          ),
+          VeyraTiles.layer(widget.userAgentPackageName),
           if(widget.secondaryRoute.points.length>=2)
             PolylineLayer(polylines:[
               Polyline(
@@ -252,210 +253,38 @@ class _VeyraMapState extends State<VeyraMap>
                 color:const Color(0xFF94A3B8),
               ),
             ]),
-          if(widget.route.points.length>=2)
-            PolylineLayer(polylines:[
-              Polyline(
-                points:widget.route.points,
-                strokeWidth:11,
-                color:Colors.white.withValues(alpha:.98),
-              ),
-              Polyline(
-                points:widget.route.points,
-                strokeWidth:6,
-                color:const Color(0xFF2563EB),
-              ),
-            ]),
+          if(widget.route.points.length>=2)VeyraMapMarks.route(widget.route.points),
           MarkerLayer(markers:[
-            if(widget.pickup!=null)
-              Marker(
-                point:widget.pickup!,
-                width:34,
-                height:34,
-                child:const _PickupMarker(),
-              ),
-            if(widget.dropoff!=null)
-              Marker(
-                point:widget.dropoff!,
-                width:38,
-                height:48,
-                alignment:Alignment.topCenter,
-                child:const _DestinationMarker(),
-              ),
-            if(driver!=null)
-              Marker(
-                point:driver,
-                width:58,
-                height:58,
-                child:Transform.rotate(
-                  angle:_displayedHeading*math.pi/180,
-                  child:const _VehicleMarker(),
-                ),
-              ),
+            if(widget.pickup!=null)VeyraMapMarks.origin(widget.pickup!,label:widget.pickupLabel),
+            if(widget.dropoff!=null)VeyraMapMarks.destination(widget.dropoff!,label:widget.dropoffLabel),
+            if(driver!=null)VeyraMapMarks.car(driver,heading:_displayedHeading),
           ]),
         ],
       ),
       Positioned(
-        top:76,
-        right:12,
-        child:_MapControl(
-          icon:_lightMap?Icons.map_outlined:Icons.layers_outlined,
-          tooltip:'Changer le fond de carte',
-          onPressed:()=>setState(()=>_lightMap=!_lightMap),
-          enabled:true,
-        ),
-      ),
-      Positioned(
-        top:132,
-        right:12,
-        child:_MapControl(
+        right:14,
+        bottom:widget.controlsBottom+(widget.showRecenter?60:0),
+        child:VeyraMapButton(
           icon:Icons.route_rounded,
           tooltip:'Voir tout le trajet',
           onPressed:_showOverview,
-          enabled:true,
         ),
       ),
       if(widget.showRecenter)
         Positioned(
           right:14,
-          bottom:82,
-          child:_MapControl(
+          bottom:widget.controlsBottom,
+          child:VeyraMapButton(
             icon:_follow?Icons.navigation:Icons.my_location,
             tooltip:'Recentrer',
             onPressed:_recenter,
-            enabled:true,
           ),
         ),
-      Positioned(
-        right:8,
-        bottom:6,
-        child:Container(
-          padding:const EdgeInsets.symmetric(horizontal:6,vertical:2),
-          decoration:BoxDecoration(
-            color:Colors.white.withValues(alpha:.90),
-            borderRadius:BorderRadius.circular(4),
-          ),
-          child:Text(
-            _lightMap?'© OpenStreetMap © CARTO':'© OpenStreetMap',
-            style:const TextStyle(fontSize:8,color:Color(0xFF6B7280)),
-          ),
-        ),
-      ),
+      Positioned.fill(child:Padding(
+        padding:EdgeInsets.only(bottom:widget.controlsBottom>24?widget.controlsBottom-18:0),
+        child:Stack(children:[VeyraTiles.attribution()]),
+      )),
     ]);
   }
 }
 
-class _MapControl extends StatelessWidget{
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-  final bool enabled;
-  const _MapControl({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-    required this.enabled,
-  });
-
-  @override
-  Widget build(BuildContext context)=>Material(
-    color:Colors.white,
-    elevation:3,
-    shadowColor:Colors.black26,
-    shape:const CircleBorder(),
-    child:IconButton(
-      tooltip:tooltip,
-      onPressed:enabled?onPressed:null,
-      icon:Icon(icon,color:const Color(0xFF171717),size:22),
-    ),
-  );
-}
-
-class _PickupMarker extends StatelessWidget{
-  const _PickupMarker();
-  @override
-  Widget build(BuildContext context)=>Center(
-    child:Container(
-      width:18,
-      height:18,
-      decoration:BoxDecoration(
-        color:const Color(0xFF171717),
-        shape:BoxShape.circle,
-        border:Border.all(color:Colors.white,width:4),
-        boxShadow:const [BoxShadow(color:Colors.black26,blurRadius:7,offset:Offset(0,2))],
-      ),
-    ),
-  );
-}
-
-class _DestinationMarker extends StatelessWidget{
-  const _DestinationMarker();
-  @override
-  Widget build(BuildContext context)=>Column(
-    mainAxisSize:MainAxisSize.min,
-    children:[
-      Container(
-        width:28,
-        height:28,
-        decoration:BoxDecoration(
-          color:const Color(0xFF171717),
-          borderRadius:BorderRadius.circular(8),
-          border:Border.all(color:Colors.white,width:3),
-          boxShadow:const [BoxShadow(color:Colors.black26,blurRadius:8,offset:Offset(0,2))],
-        ),
-        child:const Icon(Icons.stop_rounded,color:Colors.white,size:14),
-      ),
-      Container(width:2,height:8,color:const Color(0xFF171717)),
-    ],
-  );
-}
-
-/// Compact top-down car. The painter is north-facing; the marker rotates by
-/// the GPS heading (0° north, 90° east), so visual orientation is correct.
-class _VehicleMarker extends StatelessWidget{
-  const _VehicleMarker();
-  @override
-  Widget build(BuildContext context)=>Container(
-    decoration:const BoxDecoration(
-      shape:BoxShape.circle,
-      color:Colors.white,
-      boxShadow:[
-        BoxShadow(color:Colors.black26,blurRadius:12,spreadRadius:1,offset:Offset(0,4)),
-      ],
-    ),
-    padding:const EdgeInsets.all(9),
-    child:CustomPaint(painter:_VehiclePainter()),
-  );
-}
-
-class _VehiclePainter extends CustomPainter{
-  @override
-  void paint(Canvas canvas,Size size){
-    final body=Paint()..color=const Color(0xFF171717);
-    final glass=Paint()..color=const Color(0xFF9ED0F6);
-    final light=Paint()..color=Colors.white;
-
-    final rect=RRect.fromRectAndRadius(
-      Rect.fromLTWH(size.width*.22,size.height*.05,size.width*.56,size.height*.90),
-      Radius.circular(size.width*.18),
-    );
-    canvas.drawRRect(rect,body);
-
-    final windshield=RRect.fromRectAndRadius(
-      Rect.fromLTWH(size.width*.31,size.height*.20,size.width*.38,size.height*.20),
-      Radius.circular(size.width*.08),
-    );
-    canvas.drawRRect(windshield,glass);
-
-    final rearGlass=RRect.fromRectAndRadius(
-      Rect.fromLTWH(size.width*.31,size.height*.58,size.width*.38,size.height*.17),
-      Radius.circular(size.width*.07),
-    );
-    canvas.drawRRect(rearGlass,glass);
-
-    canvas.drawCircle(Offset(size.width*.34,size.height*.10),size.width*.045,light);
-    canvas.drawCircle(Offset(size.width*.66,size.height*.10),size.width*.045,light);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate)=>false;
-}

@@ -1,9 +1,12 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import '../../app/theme.dart';
 import '../../app_locale.dart';
+import '../maps/veyra_map_marks.dart';
+import '../maps/veyra_tiles.dart';
 
 /// Composants visuels communs reproduisant les planches de maquettes
 /// (en-tête « VEYRA », pied « Retour / Suivant », cartes, compteurs,
@@ -12,17 +15,20 @@ import '../../app_locale.dart';
 
 String _t(String fr) => AppLocale.t(fr);
 
-/// Logotype texte « VEYRA » (planches 01, 09, 11, 17).
+/// Logotype « VEYRA » vectoriel (planches 01, 09, 11, 17), fichier SVG du
+/// pack d'assets ; [size] garde l'encombrement de l'ancien logotype texte.
+/// Indépendant de la taille de texte choisie par l'utilisateur.
 class VeyraWordmark extends StatelessWidget {
   final double size;
   final Color color;
   const VeyraWordmark({this.size = 22, this.color = VeyraColors.primary, super.key});
   @override
-  Widget build(BuildContext context) => Text('VEYRA',
-      semanticsLabel: 'Veyra',
-      // A logo keeps its size whatever the user's text scale.
-      textScaler: TextScaler.noScaling,
-      style: TextStyle(fontSize: size, fontWeight: FontWeight.w700, letterSpacing: size * 0.22, color: color));
+  Widget build(BuildContext context) => Semantics(
+        label: 'Veyra',
+        image: true,
+        child: SvgPicture.asset('assets/branding/veyra_wordmark_navy.svg',
+            height: size * 0.78, colorFilter: ColorFilter.mode(color, BlendMode.srcIn), excludeFromSemantics: true),
+      );
 }
 
 /// En-tête des parcours : retour à gauche, logotype centré.
@@ -388,14 +394,24 @@ class VeyraRouteMap extends StatelessWidget {
   final double height;
   final bool interactive;
   final void Function(LatLng point)? onTap;
-  const VeyraRouteMap({this.pickup, this.dropoff, this.route = const [], this.height = 180, this.interactive = false, this.onTap, super.key});
+  /// Place names written next to the marks (boards 01 P5, 04, 12 P3).
+  final String? pickupLabel;
+  final String? dropoffLabel;
+  /// Car on the route (board 01 P5 recap) and duration bubble.
+  final LatLng? car;
+  final double carHeading;
+  final String? etaText;
+  final double radius;
+  const VeyraRouteMap({this.pickup, this.dropoff, this.route = const [], this.height = 180, this.interactive = false, this.onTap,
+      this.pickupLabel, this.dropoffLabel, this.car, this.carHeading = 0, this.etaText, this.radius = VeyraRadius.lg, super.key});
   @override
   Widget build(BuildContext context) {
     final points = [if (pickup != null) pickup!, if (dropoff != null) dropoff!, ...route];
     final center = points.isEmpty ? const LatLng(48.8566, 2.3522) : points.first;
-    final fit = points.length >= 2 ? CameraFit.coordinates(coordinates: points, padding: const EdgeInsets.all(36)) : null;
+    final fit = points.length >= 2 ? CameraFit.coordinates(coordinates: points, padding: const EdgeInsets.fromLTRB(40, 48, 96, 28)) : null;
+    final bubble = etaText == null ? null : VeyraMapMarks.midpoint(route.length >= 2 ? route : [if (pickup != null) pickup!, if (dropoff != null) dropoff!]);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(VeyraRadius.lg),
+      borderRadius: BorderRadius.circular(radius),
       child: SizedBox(
         height: height,
         child: Stack(children: [
@@ -409,16 +425,17 @@ class VeyraRouteMap extends StatelessWidget {
               onTap: onTap == null ? null : (_, p) => onTap!(p),
             ),
             children: [
-              if (veyraMapTilesEnabled) TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.veyra.client'),
-              if (route.length >= 2) PolylineLayer(polylines: [Polyline(points: route, strokeWidth: 4, color: VeyraColors.accent)]),
+              VeyraTiles.layer('com.veyra.client'),
+              if (route.length >= 2) VeyraMapMarks.route(route),
               MarkerLayer(markers: [
-                if (pickup != null)
-                  Marker(point: pickup!, width: 28, height: 28, child: Container(decoration: BoxDecoration(shape: BoxShape.circle, color: VeyraColors.accent, border: Border.all(color: Colors.white, width: 4), boxShadow: VeyraShadows.card))),
-                if (dropoff != null)
-                  Marker(point: dropoff!, width: 40, height: 40, alignment: Alignment.topCenter, child: const Icon(Icons.location_on, color: VeyraColors.pinRed, size: 40)),
+                if (pickup != null) VeyraMapMarks.origin(pickup!, label: pickupLabel),
+                if (dropoff != null) VeyraMapMarks.destination(dropoff!, label: dropoffLabel),
+                if (bubble != null) VeyraMapMarks.eta(bubble, etaText!),
+                if (car != null) VeyraMapMarks.car(car!, heading: carHeading),
               ]),
             ],
           ),
+          VeyraTiles.attribution(),
         ]),
       ),
     );

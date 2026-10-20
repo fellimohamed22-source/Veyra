@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+import 'core/maps/veyra_map_marks.dart';
 import 'core/widgets/profile_dialog.dart';
 import 'dart:async';
 import 'core/active_booking.dart';
@@ -18,7 +20,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'api.dart';
 import 'app_locale.dart';
@@ -1691,6 +1692,7 @@ class _AddressScreenState extends State<AddressScreen>{
     // Board 09 step 2 shows the destination pin only.
     VeyraRouteMap(
       dropoff:point(dropoffPlace),
+      dropoffLabel:dropoffPlace==null?null:splitLabel(dropoffPlace!['label']?.toString()??'').$1,
       height:pickOnMap?320:190,
       interactive:pickOnMap,
       onTap:pickOnMap?pickDestinationOnMap:null,
@@ -1822,6 +1824,23 @@ class _AddressScreenState extends State<AddressScreen>{
     ),
   );
 
+  /// Short name written on the map (« Paris », « CDG »): airport code when
+  /// present, otherwise the first part of the place title.
+  static String shortPlace(String title){
+    final code=RegExp(r'\(([A-Z]{3})\)').firstMatch(title);
+    if(code!=null)return code.group(1)!;
+    final first=title.split(',').first.trim();
+    final city=RegExp(r'^(Paris|Marseille|Lyon|Nice|Cannes|Monaco|Menton|Antibes)\b').firstMatch(first);
+    return city?.group(1)??first;
+  }
+
+  /// Initial compass bearing (degrees) from a to b, for the car mark.
+  static double bearing(LatLng a,LatLng b){
+    final p1=a.latitude*math.pi/180,p2=b.latitude*math.pi/180,dl=(b.longitude-a.longitude)*math.pi/180;
+    final y=math.sin(dl)*math.cos(p2),x=math.cos(p1)*math.sin(p2)-math.sin(p1)*math.cos(p2)*math.cos(dl);
+    return (math.atan2(y,x)*180/math.pi+360)%360;
+  }
+
   Widget stepRecap(){
     final (pTitle,pSub)=splitLabel(pickupPlace?['label']?.toString()??'');
     final (dTitle,dSub)=splitLabel(dropoffPlace?['label']?.toString()??'');
@@ -1875,9 +1894,8 @@ class _AddressScreenState extends State<AddressScreen>{
         VeyraBanner(tone:VeyraTone.warning,text:t('Votre chauffeur favori sera indiqué comme préférence. Son attribution dépend de sa disponibilité et de votre choix parmi les offres.')),
       ],
       const SizedBox(height:12),
-      VeyraRouteMap(pickup:point(pickupPlace),dropoff:point(dropoffPlace),route:points,height:150),
+      // Board 01 P5: estimate, then the map with both place names and the car at the start.
       if(km!=null&&min!=null)...[
-        const SizedBox(height:10),
         Row(children:[
           const Icon(Icons.directions_car_outlined,color:VeyraColors.textPrimary),
           const SizedBox(width:10),
@@ -1886,7 +1904,11 @@ class _AddressScreenState extends State<AddressScreen>{
             Text('$km km · $min min',style:const TextStyle(color:VeyraColors.textSecondary)),
           ]),
         ]),
+        const SizedBox(height:10),
       ],
+      VeyraRouteMap(pickup:point(pickupPlace),dropoff:point(dropoffPlace),route:points,height:170,
+        pickupLabel:shortPlace(pTitle),dropoffLabel:shortPlace(dTitle),car:point(pickupPlace),
+        carHeading:points.length>=2?bearing(points.first,points[1]):45),
     ]);
   }
 
@@ -3187,75 +3209,209 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
     }catch(_){if(mounted&&revision==etaRevision)setState(()=>etaInfo=null);}
   }
 
+  /// Whole trip pickup → destination, drawn once (board 10 P4).
+  List<LatLng> tripRoute=const [];
+  bool tripRouteRequested=false;
+  bool detailsOpen=false;
+
+  Future<void> loadTripRoute()async{
+    final b=bookingMap;
+    if(tripRouteRequested||b==null)return;
+    final pLat=(b['pickup_lat'] as num?)?.toDouble(),pLng=(b['pickup_lng'] as num?)?.toDouble();
+    final dLat=(b['dropoff_lat'] as num?)?.toDouble(),dLng=(b['dropoff_lng'] as num?)?.toDouble();
+    if(pLat==null||pLng==null||dLat==null||dLng==null)return;
+    tripRouteRequested=true;
+    try{
+      final r=await api.routeEstimate(fromLat:pLat,fromLng:pLng,toLat:dLat,toLng:dLng);
+      final pts=((r['points'] as List?)??[]).whereType<Map>().map((m)=>LatLng((m['lat'] as num).toDouble(),(m['lng'] as num).toDouble())).toList();
+      if(mounted)setState(()=>tripRoute=pts);
+    }catch(_){}
+  }
+
+  Future<void> reportProblem()async{
+    String category='DRIVER_LATE';
+    final note=TextEditingController();
+    final sent=await showModalBottomSheet<bool>(
+      context:context,
+      isScrollControlled:true,
+      builder:(sheet)=>StatefulBuilder(builder:(sheet,setSheet)=>Padding(
+        padding:EdgeInsets.fromLTRB(20,20,20,20+MediaQuery.of(sheet).viewInsets.bottom),
+        child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          Text(t('Signaler un problème'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w800)),
+          const SizedBox(height:12),
+          for(final (code,label) in [('DRIVER_LATE','Chauffeur en retard'),('DRIVER_NOT_FOUND','Je ne trouve pas mon chauffeur'),('VEHICLE','Problème avec le véhicule'),('SAFETY','Sécurité'),('OTHER','Autre')])
+            RadioListTile<String>(contentPadding:EdgeInsets.zero,dense:true,value:code,groupValue:category,title:Text(t(label)),onChanged:(v)=>setSheet(()=>category=v??category)),
+          TextField(controller:note,maxLength:1000,maxLines:3,decoration:InputDecoration(hintText:t('Précisez si besoin (facultatif)'))),
+          const SizedBox(height:8),
+          FilledButton(onPressed:()=>Navigator.pop(sheet,true),child:Text(t('Envoyer au support'))),
+        ]),
+      )),
+    );
+    if(sent!=true)return;
+    try{
+      await api.reportProblem(widget.bookingId,category,message:note.text.trim().isEmpty?null:note.text.trim());
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Signalement envoyé. Le support VEYRA vous recontacte.'))));
+    }catch(e){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(VeyraErrorMessages.forException(e))));
+    }
+  }
+
+  /// Board 10 P4 « Course en cours »: status banner with the arrival
+  /// estimate, live map, driver, contact, trip details, report a problem.
   @override Widget build(BuildContext context){
+    final b=bookingMap??const <String,dynamic>{};
+    final status=(b['status']??'').toString();
     final available=location?['available']==true;
-    final pickupLat=(bookingMap?['pickup_lat'] as num?)?.toDouble();
-    final pickupLng=(bookingMap?['pickup_lng'] as num?)?.toDouble();
-    final dropoffLat=(bookingMap?['dropoff_lat'] as num?)?.toDouble();
-    final dropoffLng=(bookingMap?['dropoff_lng'] as num?)?.toDouble();
-    final lat=available?((location!['lat'] as num).toDouble()):(pickupLat??43.2965);
-    final lng=available?((location!['lng'] as num).toDouble()):(pickupLng??5.3698);
+    LatLng? at(String lat,String lng){final a=(b[lat] as num?)?.toDouble(),o=(b[lng] as num?)?.toDouble();return a==null||o==null?null:LatLng(a,o);}
+    final pickup=at('pickup_lat','pickup_lng');
+    final dropoff=at('dropoff_lat','dropoff_lng');
+    final driver=available?LatLng((location!['lat'] as num).toDouble(),(location!['lng'] as num).toDouble()):null;
+    final eta=etaInfo!=null&&canEstimateTrackingEta(bookingMap,location,DateTime.now())?etaInfo:null;
+    final etaMin=eta==null?null:((eta['durationSeconds'] as num)/60).ceil();
+    final livePts=((eta?['points'] as List?)??[]).whereType<Map>().map((m)=>LatLng((m['lat'] as num).toDouble(),(m['lng'] as num).toDouble())).toList();
+    final id=(b['id']??widget.bookingId).toString();
+    final ref='#'+(id.length>8?id.substring(0,8):id).toUpperCase();
+    final (pTitle,pSub)=_AddressScreenState.splitLabel((b['pickup_address']??'').toString());
+    final (dTitle,dSub)=_AddressScreenState.splitLabel((b['dropoff_address']??'').toString());
+    final notes=(b['customer_notes']??'').toString();
+    final (title,sub)=switch(status){
+      'DRIVER_ARRIVED'=>(t('Votre chauffeur est arrivé'),t('Il vous attend au point de départ.')),
+      'IN_PROGRESS'=>(t('Course en cours'),etaMin==null?t('Bon trajet avec VEYRA.'):t('Arrivée à destination dans ')+'$etaMin min'),
+      _=>(t('Votre chauffeur est en route'),etaMin==null?t('Suivez son arrivée en temps réel.'):t('Arrivée estimée dans ')+'$etaMin min'),
+    };
+    final name='${b['driver_first_name']??''} ${b['driver_last_name']??''}'.trim();
+    final vehicle=[b['vehicle_brand'],b['vehicle_model']].where((v)=>v!=null&&v.toString().isNotEmpty).join(' ');
+    if(bookingMap!=null&&!tripRouteRequested)WidgetsBinding.instance.addPostFrameCallback((_)=>loadTripRoute());
     return Scaffold(
-      appBar:AppBar(title:Text(t('Suivi en direct'))),
-      body:Stack(children:[
-        FlutterMap(
-          options:MapOptions(initialCenter:LatLng(lat,lng),initialZoom:available?14:9),
-          children:[
-            TileLayer(
-              urlTemplate:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName:'com.veyra.client',
-            ),
-            MarkerLayer(markers:[
-              if(pickupLat!=null&&pickupLng!=null)Marker(
-                point:LatLng(pickupLat,pickupLng),
-                width:44,height:44,
-                child:const Icon(Icons.trip_origin,size:34),
-              ),
-              if(dropoffLat!=null&&dropoffLng!=null)Marker(
-                point:LatLng(dropoffLat,dropoffLng),
-                width:44,height:44,
-                child:const Icon(Icons.location_on,size:38),
-              ),
-              if(available)Marker(
-                point:LatLng(lat,lng),
-                width:56,height:56,
-                child:const Icon(Icons.local_taxi,size:44),
-              ),
+      appBar:AppBar(
+        title:Text(t('Course en cours')),
+        actions:[Padding(padding:const EdgeInsets.only(right:16),child:Center(child:Text(ref,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13))))],
+      ),
+      body:bookingMap==null
+        ?const Center(child:CircularProgressIndicator())
+        :ListView(padding:const EdgeInsets.fromLTRB(16,4,16,24),children:[
+          // Status banner with the arrival estimate in bold (board 10 P4).
+          Container(
+            padding:const EdgeInsets.all(14),
+            decoration:BoxDecoration(color:VeyraColors.successBackground,borderRadius:BorderRadius.circular(VeyraRadius.lg)),
+            child:Row(children:[
+              const Icon(Icons.directions_car_outlined,size:32,color:VeyraColors.success),
+              const SizedBox(width:14),
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),
+                Text.rich(TextSpan(children:[
+                  TextSpan(text:etaMin==null?sub:sub.substring(0,sub.length-'$etaMin min'.length)),
+                  if(etaMin!=null)TextSpan(text:'$etaMin min',style:const TextStyle(fontWeight:FontWeight.w800,color:VeyraColors.textPrimary)),
+                ]),style:const TextStyle(color:VeyraColors.textSecondary)),
+              ])),
             ]),
-          ],
-        ),
-        Positioned(
-          left:16,right:16,bottom:20,
-          child:Card(child:Padding(
-            padding:const EdgeInsets.all(16),
-            child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-              VeyraStatusBadge(status:bookingMap?['status']?.toString()),
-              Text(available?t('Position actuelle du chauffeur'):t('Position indisponible'),style:const TextStyle(fontWeight:FontWeight.bold)),
-              Text(error??(available?t('Mise à jour automatique toutes les 10 secondes.'):t('En attente de la première position GPS.'))),
-              if(etaInfo!=null&&canEstimateTrackingEta(bookingMap,location,DateTime.now()))Text(
-                (bookingMap?['status']=='IN_PROGRESS'?t('ETA destination : '):t('Arrivée du chauffeur : '))+VeyraMoneyFormatter.duration(etaInfo!['durationSeconds'])+
-                ' • '+VeyraMoneyFormatter.distance(etaInfo!['distanceMeters']),
-                style:const TextStyle(fontWeight:FontWeight.w600),
+          ),
+          const SizedBox(height:12),
+          // Full width, edge to edge, as on the board.
+          SizedBox(height:270,child:OverflowBox(
+            minWidth:MediaQuery.sizeOf(context).width,
+            maxWidth:MediaQuery.sizeOf(context).width,
+            child:Stack(children:[
+              Positioned.fill(child:Container(color:const Color(0xFFE9EEF3))),
+              VeyraRouteMap(
+                key:ValueKey('live-${tripRoute.length}-${driver!=null}'),
+                pickup:pickup,dropoff:dropoff,
+                route:livePts.length>=2?livePts:tripRoute,
+                height:270,interactive:true,radius:0,
+                pickupLabel:_AddressScreenState.shortPlace(pTitle),
+                dropoffLabel:dTitle,
+                car:driver,
+                carHeading:(location?['heading'] as num?)?.toDouble()??0,
+                etaText:etaMin==null?null:'$etaMin min',
               ),
-              if(available&&location!['recorded_at']!=null)Text(
-                t('Dernière position : ')+VeyraDateFormatter.dateTime(location!['recorded_at']),
-                style:TextStyle(color:_isStale?const Color(0xFFDC2626):null),
-              ),
-              if(available&&_isStale)Padding(
-                padding:const EdgeInsets.only(top:4),
-                child:Text(
-                  t('Position possiblement obsolète — le chauffeur n’a pas transmis de nouvelle position récemment.'),
-                  style:const TextStyle(color:Color(0xFFDC2626),fontSize:12),
-                ),
-              ),
+              Positioned(right:12,bottom:28,child:VeyraMapButton(icon:Icons.my_location,tooltip:t('Recentrer'),onPressed:refresh)),
             ]),
           )),
-        ),
-      ]),
+          if(error!=null||(available&&_isStale))...[
+            const SizedBox(height:10),
+            VeyraBanner(tone:VeyraTone.warning,text:error??(t('Position possiblement obsolète — dernière position : ')+VeyraDateFormatter.dateTime(location!['recorded_at']))),
+          ],
+          const SizedBox(height:12),
+          _Section(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Row(children:[
+              _DriverAvatar(name,radius:30),
+              const SizedBox(width:14),
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(name.isEmpty?t('Chauffeur confirmé'):name,style:const TextStyle(fontSize:17,fontWeight:FontWeight.w700)),
+                _Rating(b['driver_rating']),
+                if(b['favorite_driver']==true)...[const SizedBox(height:4),const _FavoritePill()],
+              ])),
+            ]),
+            const SizedBox(height:12),
+            Row(children:[
+              const VeyraVehicleThumb(width:110),
+              const SizedBox(width:12),
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                if(vehicle.isNotEmpty)Text(vehicle,style:const TextStyle(fontWeight:FontWeight.w600)),
+                if(b['category_name']!=null)...[const SizedBox(height:4),_StatePill(b['category_name'].toString(),fg:VeyraColors.accent,bg:VeyraColors.infoBackground)],
+                if(b['plate_number']!=null)...[const SizedBox(height:4),Text(b['plate_number'].toString(),style:const TextStyle(color:VeyraColors.textSecondary))],
+              ])),
+            ]),
+          ])),
+          Row(children:[
+            Expanded(child:OutlinedButton.icon(onPressed:()=>context.push('/chat/'+widget.bookingId),icon:const Icon(Icons.chat_bubble_outline),label:Text(t('Message')))),
+            const SizedBox(width:10),
+            Expanded(child:Tooltip(message:t('Appel par numéro masqué bientôt disponible'),child:OutlinedButton.icon(onPressed:null,icon:const Icon(Icons.phone_outlined),label:Text(t('Appeler'))))),
+          ]),
+          const SizedBox(height:10),
+          Container(
+            padding:const EdgeInsets.symmetric(horizontal:12,vertical:10),
+            decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+            child:Row(children:[
+              const Icon(Icons.radio_button_checked,size:16,color:Color(0xFFF5A623)),
+              const SizedBox(width:8),
+              Expanded(child:Text(available&&location!['recorded_at']!=null
+                ?t('Suivez l’arrivée de votre chauffeur en temps réel.')+' '+t('Dernière position : ')+VeyraDateFormatter.dateTime(location!['recorded_at'])
+                :t('Suivez l’arrivée de votre chauffeur en temps réel.'),style:const TextStyle(fontSize:13,color:VeyraColors.textSecondary))),
+            ]),
+          ),
+          const SizedBox(height:12),
+          _Section(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            InkWell(
+              key:const ValueKey('trip-details-toggle'),
+              onTap:()=>setState(()=>detailsOpen=!detailsOpen),
+              child:Row(children:[
+                Expanded(child:Text(t('Détails du trajet'),style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16))),
+                Icon(detailsOpen?Icons.expand_less:Icons.expand_more),
+              ]),
+            ),
+            if(detailsOpen)...[
+              const SizedBox(height:12),
+              VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+              const SizedBox(height:10),
+              Row(children:[const Icon(Icons.calendar_today_outlined,size:18),const SizedBox(width:8),Expanded(child:Text(veyraBookingWhen(b['scheduled_at'])))]),
+              const SizedBox(height:8),
+              _PaxBags(b),
+            ],
+            if(notes.isNotEmpty)...[
+              const SizedBox(height:12),
+              Container(
+                padding:const EdgeInsets.all(12),
+                decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Text(t('Commentaire pour le chauffeur'),style:const TextStyle(fontWeight:FontWeight.w700,fontSize:13)),
+                  const SizedBox(height:2),
+                  Text(notes,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
+                ]),
+              ),
+            ],
+          ])),
+          OutlinedButton.icon(
+            key:const ValueKey('report-problem'),
+            style:OutlinedButton.styleFrom(foregroundColor:VeyraColors.danger,side:const BorderSide(color:VeyraColors.danger),minimumSize:const Size.fromHeight(50)),
+            onPressed:reportProblem,
+            icon:const Icon(Icons.report_gmailerrorred_outlined),
+            label:Text(t('Signaler un problème')),
+          ),
+        ]),
     );
   }
 }
-
 
 /// Inscription client en 3 étapes (planche 08 A2-A4) : informations,
 /// mot de passe, conditions ; puis vérification SMS (A5) et compte créé (A6).

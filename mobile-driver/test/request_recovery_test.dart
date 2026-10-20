@@ -45,9 +45,8 @@ void main() {
     await tester.tap(find.text('Réessayer'));
     await tester.pumpAndSettle();
     expect(routes, 1);
-    expect(
-        find.text('Distance départ → destination : 12,0 km'), findsOneWidget);
-    expect(find.text('Durée routière estimée : 20 min'), findsOneWidget);
+    // Board 12 P3: « ≈ 12,0 km · 20 min » in the trip-type pill.
+    expect(find.text('≈ 12,0 km · 20 min'), findsOneWidget);
     expect(find.byType(VeyraOfflineBanner), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

@@ -218,7 +218,7 @@ jobs:
           printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.client' android/app/google-services.json
           flutter pub get
-          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }} --dart-define=GOOGLE_MAPS_MOBILE_KEY=${{ secrets.GOOGLE_MAPS_MOBILE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-client-debug.apk
 
       - name: Build Driver APK
@@ -303,7 +303,7 @@ jobs:
           printf '%s\n' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           grep -q 'com.veyra.driver' android/app/google-services.json
           flutter pub get
-          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.VEYRA_API_BASE_URL }} --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }} --dart-define=GOOGLE_MAPS_MOBILE_KEY=${{ secrets.GOOGLE_MAPS_MOBILE_KEY }}
           cp build/app/outputs/flutter-apk/app-debug.apk ../veyra-driver-debug.apk
 
       - name: Publish APKs as a GitHub Release

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+import 'core/maps/veyra_map_marks.dart';
 import 'core/widgets/profile_dialog.dart';
 import 'dart:async';
 import 'core/active_booking.dart';
@@ -1691,27 +1693,40 @@ class _RequestScreenState extends State<RequestScreen>{
     child,
   ]));
 
-  Widget routeMap(Map<String,dynamic> x){
+  /// Board 12 P3 map: route, place names (« Paris », « ORY »), the car on
+  /// its way, Google logo.
+  Widget routeMap(Map<String,dynamic> x,String pickupTitle,String dropoffTitle){
     final a=_number(_field(x,'pickup_lat','pickupLat')),b=_number(_field(x,'pickup_lng','pickupLng'));
     final c=_number(_field(x,'dropoff_lat','dropoffLat')),e=_number(_field(x,'dropoff_lng','dropoffLng'));
     if(a==null||b==null||c==null||e==null)return const SizedBox.shrink();
     final points=(_tripEconomics?['points'] as List? ??const[]).whereType<Map>()
       .map((p)=>LatLng((p['lat'] as num).toDouble(),(p['lng'] as num).toDouble())).toList();
-    final meters=_number(_tripEconomics?['distanceMeters']);
-    final seconds=_number(_tripEconomics?['durationSeconds']);
+    final car=points.length>=3?points[points.length~/3]:null;
+    final heading=points.length>=3?_bearing(points[points.length~/3-1],points[points.length~/3]):0.0;
     return Padding(
       padding:const EdgeInsets.only(bottom:14),
-      child:ClipRRect(
-        borderRadius:BorderRadius.circular(VeyraRadius.card),
-        child:Stack(children:[
-          VeyraRouteMap(pickup:LatLng(a,b),dropoff:LatLng(c,e),route:points,height:190),
-          if(meters!=null&&seconds!=null)Positioned(right:12,bottom:12,child:DriverPill(
-            '${VeyraMoneyFormatter.duration(seconds)} · ${VeyraMoneyFormatter.distance(meters)}',
-            fg:Colors.white,bg:VeyraColors.accent,
-          )),
-        ]),
+      child:VeyraRouteMap(
+        key:ValueKey('route-${points.length}'),
+        pickup:LatLng(a,b),dropoff:LatLng(c,e),route:points,height:170,radius:VeyraRadius.md,
+        pickupLabel:shortPlace(pickupTitle),dropoffLabel:shortPlace(dropoffTitle),
+        car:car,carHeading:heading,
       ),
     );
+  }
+
+  /// Short place name for the map (« Paris », airport code « ORY »).
+  static String shortPlace(String title){
+    final code=RegExp(r'\(([A-Z]{3})\)').firstMatch(title);
+    if(code!=null)return code.group(1)!;
+    final first=title.split(',').first.trim();
+    final city=RegExp(r'^(Paris|Marseille|Lyon|Nice|Cannes|Monaco|Menton|Antibes)\b').firstMatch(first);
+    return city?.group(1)??first;
+  }
+
+  static double _bearing(LatLng a,LatLng b){
+    final p1=a.latitude*math.pi/180,p2=b.latitude*math.pi/180,dl=(b.longitude-a.longitude)*math.pi/180;
+    final y=math.sin(dl)*math.cos(p2),x=math.cos(p1)*math.sin(p2)-math.sin(p1)*math.cos(p2)*math.cos(dl);
+    return (math.atan2(y,x)*180/math.pi+360)%360;
   }
 
   /// Distances de course et d'approche (repères, jamais bloquants).
@@ -1725,8 +1740,6 @@ class _RequestScreenState extends State<RequestScreen>{
         if(courseMeters!=null)DriverPill('≈ '+VeyraMoneyFormatter.distance(courseMeters)+(routeSeconds==null?'':' · '+VeyraMoneyFormatter.duration(routeSeconds)),fg:VeyraColors.textPrimary,bg:VeyraColors.surfaceMuted,icon:Icons.schedule),
       ]),
       if(_tripEconomicsLoading)const Padding(padding:EdgeInsets.only(top:8),child:LinearProgressIndicator()),
-      if(courseMeters!=null)Padding(padding:const EdgeInsets.only(top:8),child:Text(t('Distance départ → destination')+' : '+VeyraMoneyFormatter.distance(courseMeters))),
-      if(routeSeconds!=null)Text(t('Durée routière estimée')+' : '+VeyraMoneyFormatter.duration(routeSeconds)),
       if(_tripEconomicsError!=null)Padding(padding:const EdgeInsets.only(top:6),child:Text(_tripEconomicsError!,style:const TextStyle(color:VeyraColors.textSecondary))),
       if(courseMeters==null&&!_tripEconomicsLoading)TextButton(onPressed:()=>detail.then(_loadTripEconomics),child:Text(t('Réessayer le calcul du trajet'))),
       const Divider(height:20),
@@ -1750,7 +1763,6 @@ class _RequestScreenState extends State<RequestScreen>{
         final x=s.data??{};
         final (pTitle,pSub)=splitPlace((x['pickup_address']??'').toString());
         final (dTitle,dSub)=splitPlace((x['dropoff_address']??'').toString());
-        final id=(x['id']??widget.bookingId).toString();
         final notes=(x['customer_notes']??'').toString();
         final best=x['currentBestOtherOfferMinor'];
         final own=x['ownActiveOfferAmountMinor'];
@@ -1760,24 +1772,20 @@ class _RequestScreenState extends State<RequestScreen>{
             title:t('Vous êtes le chauffeur préféré de ce client'),
             text:t('Ce client vous a ajouté à ses chauffeurs préférés.'),
           )),
-          Row(children:[
-            Flexible(flex:6,child:DriverPill(x['hasActiveOffer']==true?t('Offre envoyée'):t('Nouvelle demande'),fg:VeyraColors.warning,bg:VeyraColors.warningBackground,icon:Icons.schedule)),
-            const SizedBox(width:8),
-            const Spacer(),
-            Text('#'+(id.length>8?id.substring(0,8):id).toUpperCase(),style:const TextStyle(color:VeyraColors.textSecondary,fontSize:12)),
-          ]),
-          const SizedBox(height:12),
+          // Board 12 P3: client, « Trajet » with the map first, then the
+          // date, addresses, passengers and bags, trip type, comment.
           if((x['customer_display_name']??'').toString().isNotEmpty)section(child:DriverClientLine(name:x['customer_display_name'].toString(),rating:x['customer_rating'],count:x['customer_rating_count'],radius:26)),
-          section(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
-            const SizedBox(height:12),
+          section(title:t('Trajet'),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            routeMap(x,pTitle,dTitle),
             Row(children:[
               const Icon(Icons.calendar_today_outlined,size:18),
               const SizedBox(width:8),
               Expanded(child:Text(driverWhen(x['scheduled_at']))),
               DriverPill(driverStartsIn(x['scheduled_at']),fg:VeyraColors.accent,bg:VeyraColors.infoBackground),
             ]),
-            const SizedBox(height:8),
+            const SizedBox(height:12),
+            VeyraRoutePoints(pickupTitle:pTitle,pickupSubtitle:pSub,dropoffTitle:dTitle,dropoffSubtitle:dSub),
+            const SizedBox(height:12),
             DriverPaxBags(x['passenger_count'],x['baggage_count']),
             if(x['category_name']!=null)...[
               const SizedBox(height:8),
@@ -1787,25 +1795,18 @@ class _RequestScreenState extends State<RequestScreen>{
                 Expanded(child:Text(t('Type demandé')+' : '+x['category_name'].toString(),style:const TextStyle(color:VeyraColors.textSecondary))),
               ]),
             ],
-            if(notes.isNotEmpty)...[
-              const SizedBox(height:12),
-              Container(
-                padding:const EdgeInsets.all(12),
-                decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.md)),
-                child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                  const Icon(Icons.chat_outlined,size:18,color:VeyraColors.textSecondary),
-                  const SizedBox(width:10),
-                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                    Text(t('Commentaire du client'),style:const TextStyle(fontWeight:FontWeight.w700,fontSize:13)),
-                    const SizedBox(height:2),
-                    Text(notes,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13)),
-                  ])),
-                ]),
-              ),
-            ],
           ])),
-          routeMap(x),
           economics(x),
+          if(notes.isNotEmpty)section(title:t('Commentaire du client'),child:Container(
+            padding:const EdgeInsets.all(12),
+            decoration:BoxDecoration(color:VeyraColors.surfaceMuted,borderRadius:BorderRadius.circular(VeyraRadius.md)),
+            child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              const Icon(Icons.chat_outlined,size:18,color:VeyraColors.textSecondary),
+              const SizedBox(width:10),
+              Expanded(child:Text(notes,style:const TextStyle(color:VeyraColors.textSecondary,fontSize:13))),
+            ]),
+          )),
+          if(x['hasActiveOffer']==true&&own==null)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.success,text:t('Offre envoyée'))),
           if(best!=null)section(child:Row(children:[
             const Icon(Icons.price_check_outlined,color:VeyraColors.textSecondary),
             const SizedBox(width:10),
@@ -2566,8 +2567,145 @@ class _RideScreenState extends State<RideScreen>{
     }
   }
 
-  @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:Text(t('Détail de la course'))),
+  /// Board 12 P8: full-screen navigation while driving (en route, ride in
+  /// progress); the cross shows the ride details (P7) instead.
+  bool navigationView=true;
+
+  Future<void> _arrive()=>action(()async{final p=await currentPositionOrNull();await api.arrived(widget.bookingId,lat:p?.latitude,lng:p?.longitude);});
+
+  Future<void> _confirmComplete()async{
+    final confirmed=await showDialog<bool>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        title:Text(t('Terminer la course ?')),
+        content:Text(t('Confirmez uniquement lorsque le passager est arrivé à destination.')),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:Text(t('Continuer la course'))),
+          FilledButton(style:FilledButton.styleFrom(minimumSize:const Size(0,52)),onPressed:()=>Navigator.pop(dialogContext,true),child:Text(t('Terminer la course'))),
+        ],
+      ),
+    );
+    if(confirmed==true)action(()=>api.complete(widget.bookingId),stopGps:true);
+  }
+
+  /// Next maneuver ahead of the driver among the route steps.
+  (Map<String,dynamic>,double?)? _nextStep(List<Map<String,dynamic>> steps,LatLng? driver){
+    if(steps.isEmpty)return null;
+    if(driver==null)return (steps.length>1?steps[1]:steps.first,(steps.first['distanceMeters'] as num?)?.toDouble());
+    const d=Distance();
+    var best=-1;var bestDist=double.infinity;
+    for(var i=0;i<steps.length;i++){
+      final la=(steps[i]['lat'] as num?)?.toDouble(),lo=(steps[i]['lng'] as num?)?.toDouble();
+      if(la==null||lo==null)continue;
+      final m=d(driver,LatLng(la,lo));
+      if(m<bestDist){bestDist=m;best=i;}
+    }
+    if(best<0)return (steps.first,null);
+    // Just passed that step's start: the following maneuver is next.
+    final idx=bestDist<25&&best+1<steps.length?best+1:best;
+    final la=(steps[idx]['lat'] as num?)?.toDouble(),lo=(steps[idx]['lng'] as num?)?.toDouble();
+    return (steps[idx],la==null||lo==null?null:d(driver,LatLng(la,lo)));
+  }
+
+  static IconData _maneuverIcon(String m)=>switch(m){
+    'TURN_LEFT'=>Icons.turn_left,'TURN_RIGHT'=>Icons.turn_right,
+    'TURN_SLIGHT_LEFT'=>Icons.turn_slight_left,'TURN_SLIGHT_RIGHT'=>Icons.turn_slight_right,
+    'TURN_SHARP_LEFT'=>Icons.turn_sharp_left,'TURN_SHARP_RIGHT'=>Icons.turn_sharp_right,
+    'UTURN_LEFT'=>Icons.u_turn_left,'UTURN_RIGHT'=>Icons.u_turn_right,
+    'RAMP_LEFT'=>Icons.ramp_left,'RAMP_RIGHT'=>Icons.ramp_right,
+    'FORK_LEFT'=>Icons.fork_left,'FORK_RIGHT'=>Icons.fork_right,'MERGE'=>Icons.merge,
+    'ROUNDABOUT_LEFT'=>Icons.roundabout_left,'ROUNDABOUT_RIGHT'=>Icons.roundabout_right,
+    'STRAIGHT'=>Icons.straight,
+    _=>Icons.navigation_rounded,
+  };
+
+  /// « Tournez à droite sur Rue de la Paix » → « Rue de la Paix ».
+  static String _street(String instruction){
+    final m=RegExp(r"\b(?:sur|vers|dans|direction)\s+(?:la |le |l’|l'|les )?(.+)$",caseSensitive:false).firstMatch(instruction);
+    return (m==null?instruction:instruction.substring(m.start).replaceFirst(RegExp(r'^\S+\s+'),'')).trim();
+  }
+
+  Widget navigation(Map<String,dynamic> x,String status,LatLng? pickup,LatLng? dropoff,LatLng? driver,VeyraRouteGeometry route,double? legSeconds,double? legMeters,DateTime? eta){
+    final steps=((etaInfo?['steps'] as List?)??(status=='IN_PROGRESS'?(tripEtaInfo?['steps'] as List?):null)??const []).whereType<Map>().map((m)=>Map<String,dynamic>.from(m)).toList();
+    final next=_nextStep(steps,driver);
+    final (pTitle,_)=_RequestScreenState.splitPlace((x['pickup_address']??'').toString());
+    final (dTitle,_)=_RequestScreenState.splitPlace((x['dropoff_address']??'').toString());
+    final since=DateTime.tryParse((x['status_since']??'').toString());
+    final top=MediaQuery.paddingOf(context).top;
+    return Stack(children:[
+      Positioned.fill(child:VeyraMap(
+        pickup:status=='IN_PROGRESS'?null:pickup,
+        dropoff:status=='IN_PROGRESS'?dropoff:null,
+        driver:driver,
+        driverHeading:position?.heading,
+        route:route,
+        pickupLabel:_RequestScreenState.shortPlace(pTitle),
+        dropoffLabel:_RequestScreenState.shortPlace(dTitle),
+        controlsBottom:200,
+        userAgentPackageName:'com.veyra.driver',
+      )),
+      Positioned(left:16,right:16,top:top+10,child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Row(children:[
+          DriverPill(status=='IN_PROGRESS'?t('En cours'):t('En route'),fg:VeyraColors.success,bg:Colors.white,icon:Icons.circle),
+          const Spacer(),
+          if(since!=null)_ElapsedChip(since:since),
+        ]),
+        const SizedBox(height:10),
+        // Next maneuver (blue card of the board).
+        Container(
+          key:const ValueKey('nav-instruction'),
+          padding:const EdgeInsets.symmetric(horizontal:16,vertical:12),
+          decoration:BoxDecoration(color:VeyraMapMarks.routeBlue,borderRadius:BorderRadius.circular(14),boxShadow:const [BoxShadow(color:Colors.black26,blurRadius:8,offset:Offset(0,3))]),
+          child:Row(children:[
+            Icon(next==null?Icons.navigation_rounded:_maneuverIcon((next.$1['maneuver']??'').toString()),color:Colors.white,size:36),
+            const SizedBox(width:12),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              if(next?.$2!=null)Text(VeyraMoneyFormatter.distance(next!.$2!),style:const TextStyle(color:Colors.white,fontSize:24,fontWeight:FontWeight.w800)),
+              Text(
+                next==null
+                  ?(status=='IN_PROGRESS'?t('Direction la destination'):t('Direction le point de prise en charge'))
+                  :_street((next.$1['instruction']??'').toString()),
+                maxLines:2,overflow:TextOverflow.ellipsis,
+                style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w600),
+              ),
+            ])),
+          ]),
+        ),
+      ])),
+      if(error!=null)Positioned(left:16,right:16,top:top+150,child:VeyraBanner(tone:VeyraTone.danger,text:error!)),
+      // Bottom panel: remaining time · distance, arrival time, main action.
+      Positioned(left:0,right:0,bottom:0,child:Container(
+        padding:EdgeInsets.fromLTRB(20,16,12,16+MediaQuery.paddingOf(context).bottom),
+        decoration:const BoxDecoration(color:Colors.white,borderRadius:BorderRadius.vertical(top:Radius.circular(20)),boxShadow:[BoxShadow(color:Colors.black12,blurRadius:12,offset:Offset(0,-2))]),
+        child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          Row(children:[
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(legSeconds==null?t('Calcul de l’itinéraire…'):VeyraMoneyFormatter.duration(legSeconds)+(legMeters==null?'':' • '+VeyraMoneyFormatter.distance(legMeters)),
+                style:const TextStyle(fontSize:20,fontWeight:FontWeight.w800)),
+              if(eta!=null)Text(t('Arrivée à')+' ${eta.hour.toString().padLeft(2,'0')}:${eta.minute.toString().padLeft(2,'0')}',style:const TextStyle(color:VeyraColors.textSecondary)),
+            ])),
+            IconButton(key:const ValueKey('nav-close'),tooltip:t('Détail de la course'),onPressed:()=>setState(()=>navigationView=false),icon:const Icon(Icons.close)),
+          ]),
+          const SizedBox(height:12),
+          if(status=='IN_PROGRESS')
+            FilledButton(style:FilledButton.styleFrom(backgroundColor:VeyraColors.danger,minimumSize:const Size.fromHeight(52)),onPressed:busy?null:_confirmComplete,child:Text(t('Terminer la course')))
+          else
+            FilledButton.icon(style:FilledButton.styleFrom(minimumSize:const Size.fromHeight(52)),onPressed:busy?null:_arrive,icon:const Icon(Icons.flag_outlined),label:Text(t('Je suis arrivé'))),
+        ]),
+      )),
+    ]);
+  }
+
+  @override Widget build(BuildContext context)=>FutureBuilder<Map<String,dynamic>>(
+    future:future,
+    builder:(context,outer){
+      final current=(outer.data?['status']??'').toString();
+      final nav=navigationView&&outer.hasData&&{'DRIVER_EN_ROUTE','IN_PROGRESS'}.contains(current);
+      return Scaffold(
+    appBar:nav?null:AppBar(
+      title:Text(t('Détail de la course')),
+      actions:[if({'DRIVER_EN_ROUTE','IN_PROGRESS'}.contains(current))IconButton(tooltip:t('Navigation'),onPressed:()=>setState(()=>navigationView=true),icon:const Icon(Icons.navigation_outlined))],
+    ),
     body:FutureBuilder<Map<String,dynamic>>(
       future:future,
       builder:(context,s){
@@ -2635,6 +2773,12 @@ class _RideScreenState extends State<RideScreen>{
         final legSeconds=status=='DRIVER_EN_ROUTE'||status=='IN_PROGRESS'?route.durationSeconds:null;
         final legMeters=status=='DRIVER_EN_ROUTE'||status=='IN_PROGRESS'?route.distanceMeters:null;
         final eta=legSeconds==null?null:DateTime.now().add(Duration(seconds:legSeconds.round()));
+        if(navigationView&&(status=='DRIVER_EN_ROUTE'||status=='IN_PROGRESS')){
+          // Until the first GPS fix, the whole trip stands in for the live leg.
+          final live=route.points.length>=2;
+          final tripSeconds=(tripEtaInfo?['durationSeconds'] as num?)?.toDouble(),tripMeters=(tripEtaInfo?['distanceMeters'] as num?)?.toDouble();
+          return navigation(x,status,pickup,dropoff,driver,live?route:tripRoute,live?legSeconds?.toDouble():(status=='IN_PROGRESS'?tripSeconds:null),live?legMeters?.toDouble():(status=='IN_PROGRESS'?tripMeters:null),live?eta:(status=='IN_PROGRESS'&&tripSeconds!=null?DateTime.now().add(Duration(seconds:tripSeconds.round())):null));
+        }
 
         Widget section({String? title,required Widget child})=>DriverCard(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
           if(title!=null)...[Text(title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),const SizedBox(height:10)],
@@ -2652,7 +2796,12 @@ class _RideScreenState extends State<RideScreen>{
         return ListView(
           padding:EdgeInsets.zero,
           children:[
-            Stack(children:[
+            // Board 12 P7: a confirmed ride shows its details without a map.
+            if(status=='CONFIRMED'||!active)Padding(
+              padding:const EdgeInsets.fromLTRB(16,12,16,0),
+              child:Align(alignment:Alignment.centerRight,child:DriverPill(pill,fg:pillFg,bg:pillBg)),
+            )
+            else Stack(children:[
               SizedBox(
                 height:mapHeight,
                 child:VeyraMap(
@@ -2662,6 +2811,8 @@ class _RideScreenState extends State<RideScreen>{
                   driverHeading:position?.heading,
                   route:route,
                   secondaryRoute:tripRoute,
+                  pickupLabel:_RequestScreenState.shortPlace(pTitle),
+                  dropoffLabel:_RequestScreenState.shortPlace(dTitle),
                   userAgentPackageName:'com.veyra.driver',
                 ),
               ),
@@ -2891,6 +3042,30 @@ class _RideScreenState extends State<RideScreen>{
       },
     ),
   );
+    },
+  );
+}
+
+/// Elapsed time since the current ride status (« 00:12:35 », board 12 P8).
+class _ElapsedChip extends StatefulWidget{
+  final DateTime since;
+  const _ElapsedChip({required this.since});
+  @override State<_ElapsedChip> createState()=>_ElapsedChipState();
+}
+class _ElapsedChipState extends State<_ElapsedChip>{
+  Timer? tick;
+  @override void initState(){super.initState();tick=Timer.periodic(const Duration(seconds:1),(_){if(mounted)setState((){});});}
+  @override void dispose(){tick?.cancel();super.dispose();}
+  @override Widget build(BuildContext context){
+    final d=DateTime.now().difference(widget.since.toLocal());
+    final s=d.isNegative?Duration.zero:d;
+    String two(int n)=>n.toString().padLeft(2,'0');
+    return Container(
+      padding:const EdgeInsets.symmetric(horizontal:12,vertical:6),
+      decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(VeyraRadius.pill),boxShadow:const [BoxShadow(color:Colors.black12,blurRadius:6)]),
+      child:Text('${two(s.inHours)}:${two(s.inMinutes%60)}:${two(s.inSeconds%60)}',style:const TextStyle(fontWeight:FontWeight.w700,fontFeatures:[FontFeature.tabularFigures()])),
+    );
+  }
 }
 class WalletScreen extends StatefulWidget{
   const WalletScreen({super.key});

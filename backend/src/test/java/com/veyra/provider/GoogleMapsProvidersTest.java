@@ -30,6 +30,22 @@ class GoogleMapsProvidersTest {
     assertEquals(2,route.points().size());
   }
 
+  @Test void parsesTurnByTurnSteps(){
+    Map<String,Object> response=Map.of("routes",List.of(Map.of(
+        "distanceMeters",6000,"duration","900s","polyline",Map.of("encodedPolyline","_p~iF~ps|U_ulLnnqC"),
+        "legs",List.of(Map.of("steps",List.of(
+            Map.of("distanceMeters",200,"navigationInstruction",Map.of("maneuver","TURN_RIGHT","instructions","Tournez à droite sur Rue de la Paix"),
+                "startLocation",Map.of("latLng",Map.of("latitude",48.869,"longitude",2.331))),
+            Map.of("distanceMeters",5800,"navigationInstruction",Map.of("maneuver","STRAIGHT","instructions","Continuez sur A1"))))))));
+    var steps=GoogleMapsProviders.parseRoute(response).steps();
+    assertEquals(2,steps.size());
+    assertEquals("TURN_RIGHT",steps.get(0).get("maneuver"));
+    assertEquals("Tournez à droite sur Rue de la Paix",steps.get(0).get("instruction"));
+    assertEquals(200,steps.get(0).get("distanceMeters"));
+    assertEquals(48.869,(Double)steps.get(0).get("lat"),1e-9);
+    assertNull(steps.get(1).get("lat"));
+  }
+
   @Test void emptyRoutesIsAnExplicitError(){
     assertThrows(IllegalStateException.class,()->GoogleMapsProviders.parseRoute(Map.of("routes",List.of())));
   }

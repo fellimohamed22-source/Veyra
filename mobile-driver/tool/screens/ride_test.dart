@@ -21,4 +21,15 @@ void main() {
     fakeApi((path, method, data) => path.endsWith('/estimate') ? {'distanceMeters': 18000, 'durationSeconds': 1500} : _ride('CONFIRMED'));
     await shot(tester, MaterialApp(theme: veyraTheme(), debugShowCheckedModeBanner: false, home: const RideScreen(bookingId: 'r1')), 'driver_13_ride');
   });
+
+  testWidgets('ride navigation', (tester) async {
+    fakeApi((path, method, data) => path.endsWith('/estimate')
+        ? {'distanceMeters': 6000, 'durationSeconds': 900, 'points': [
+            {'lat': 48.86, 'lng': 2.28}, {'lat': 48.83, 'lng': 2.30}, {'lat': 48.78, 'lng': 2.33}, {'lat': 48.72, 'lng': 2.36}],
+            'steps': [
+              {'instruction': 'Prenez la direction sud', 'maneuver': 'DEPART', 'distanceMeters': 200, 'lat': 48.86, 'lng': 2.28},
+              {'instruction': 'Tournez à droite sur Rue de la Paix', 'maneuver': 'TURN_RIGHT', 'distanceMeters': 5800, 'lat': 48.858, 'lng': 2.281}]}
+        : {..._ride('IN_PROGRESS'), 'status_since': DateTime.now().subtract(const Duration(minutes: 12, seconds: 35)).toUtc().toIso8601String()});
+    await shot(tester, MaterialApp(theme: veyraTheme(), debugShowCheckedModeBanner: false, home: const RideScreen(bookingId: 'r1')), 'driver_14_navigation');
+  });
 }

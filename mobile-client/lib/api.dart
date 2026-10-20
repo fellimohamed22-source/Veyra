@@ -249,6 +249,11 @@ class Api {
     'fromLat':fromLat,'fromLng':fromLng,'toLat':toLat,'toLng':toLng
   })).data);
 
+  /// « Signaler un problème » (board 10 P4).
+  Future<void> reportProblem(String bookingId,String category,{String? message}) async {
+    await dio.post('/api/v1/bookings/$bookingId/problem-reports',data:{'category':category,'message':message});
+  }
+
   Future<Map<String,dynamic>> currentLocation(String bookingId) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/bookings/$bookingId/location')).data);
 
