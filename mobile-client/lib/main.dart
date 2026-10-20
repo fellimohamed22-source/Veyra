@@ -3240,7 +3240,13 @@ class _LiveLocationScreenState extends State<LiveLocationScreen>{
           Text(t('Signaler un problème'),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w800)),
           const SizedBox(height:12),
           for(final (code,label) in [('DRIVER_LATE','Chauffeur en retard'),('DRIVER_NOT_FOUND','Je ne trouve pas mon chauffeur'),('VEHICLE','Problème avec le véhicule'),('SAFETY','Sécurité'),('OTHER','Autre')])
-            RadioListTile<String>(contentPadding:EdgeInsets.zero,dense:true,value:code,groupValue:category,title:Text(t(label)),onChanged:(v)=>setSheet(()=>category=v??category)),
+            ListTile(
+              contentPadding:EdgeInsets.zero,dense:true,
+              leading:Icon(category==code?Icons.radio_button_checked:Icons.radio_button_unchecked,color:category==code?VeyraColors.accent:VeyraColors.textTertiary),
+              title:Text(t(label)),
+              selected:category==code,
+              onTap:()=>setSheet(()=>category=code),
+            ),
           TextField(controller:note,maxLength:1000,maxLines:3,decoration:InputDecoration(hintText:t('Précisez si besoin (facultatif)'))),
           const SizedBox(height:8),
           FilledButton(onPressed:()=>Navigator.pop(sheet,true),child:Text(t('Envoyer au support'))),
