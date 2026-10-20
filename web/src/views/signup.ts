@@ -16,7 +16,7 @@ import {errorMessage} from '../formatters';
   template: `
     <div class="login">
       <div class="card">
-        <div class="brand">VEYRA</div>
+        <div class="brand"><img src="assets/branding/veyra_wordmark_navy.svg" alt="VEYRA" class="wordmark"></div>
         <p class="sub" style="text-align:center;margin:0">{{company ? 'Créer l’espace de votre société VTC' : 'Créer l’espace de votre établissement'}}</p>
         <div class="seg" style="justify-self:center">
           <button type="button" [class.on]="company" (click)="profil = 'societe'">Société VTC</button>

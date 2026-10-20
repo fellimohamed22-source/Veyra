@@ -10,7 +10,7 @@ import {Api} from '../api';
   template:`
     <div class="login">
       <div class="card">
-        <div class="brand">VEYRA</div>
+        <div class="brand"><img src="assets/branding/veyra_wordmark_navy.svg" alt="VEYRA" class="wordmark"></div>
         <p class="sub" style="text-align:center;margin:0">Portail partenaires, sociétés VTC et administration</p>
         <div class="field"><label for="email">E-mail</label><input id="email" [(ngModel)]="email" type="email" autocomplete="username"></div>
         <div class="field"><label for="password">Mot de passe</label><input id="password" [(ngModel)]="password" type="password" autocomplete="current-password" (keyup.enter)="login()"></div>

@@ -16,7 +16,7 @@ export interface NavItem {label: string; link: string; exact?: boolean}
   template: `
     <div class="portal">
       <nav class="side" aria-label="Menu">
-        <div class="brand">VEYRA<small>{{subtitle}}</small></div>
+        <div class="brand"><img src="assets/branding/veyra_wordmark_white.svg" alt="VEYRA" class="wordmark"><small>{{subtitle}}</small></div>
         <a *ngFor="let item of items" class="nav" [routerLink]="item.link"
            routerLinkActive="on" [routerLinkActiveOptions]="{exact: !!item.exact}">{{item.label}}</a>
         <div class="spacer"></div>

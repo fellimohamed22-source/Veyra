@@ -144,6 +144,8 @@ export class Api {
   settleCustomerDebt(id:string,amountMinor:number){return this.request('/finance/customer-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
   markPayablePaid(id:string){return this.request('/finance/payables/'+id+'/mark-paid',{method:'POST'});}
   generatePartnerInvoice(partnerId:string,from:string,to:string){return this.request('/finance/partners/'+partnerId+'/invoices/generate?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{method:'POST'});}
+  problemReports(){return this.request('/support/problem-reports');}
+  resolveProblemReport(id:string){return this.request('/support/problem-reports/'+id+'/resolve',{method:'POST'});}
   supportTimeline(id:string){return this.request('/support/bookings/'+id+'/timeline');}
   createPartner(body:any){return this.request('/partner/organizations',{method:'POST',body:JSON.stringify(body)});}
   partnerOrganizations(){return this.request('/partner/organizations');}

@@ -19,6 +19,8 @@ a{color:var(--blue)}
 .portal{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
 .side{background:var(--navy);color:#C9D4E5;padding:20px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;overflow:auto}
 .brand{font-weight:800;letter-spacing:.18em;color:#fff;font-size:17px;padding:4px 10px 16px}
+.brand .wordmark{display:block;height:15px;width:auto}
+.login .brand .wordmark{height:24px;margin:0 auto}
 .brand small{display:block;letter-spacing:.02em;font-weight:500;color:#9FB0C8;font-size:12px;margin-top:3px}
 .side a.nav{display:block;padding:9px 12px;border-radius:10px;font-weight:600;font-size:13.5px;color:#C9D4E5;text-decoration:none}
 .side a.nav:hover{background:rgba(255,255,255,.07)}

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../app/theme.dart';
+import 'veyra_ui.dart' show VeyraWordmark;
 
 /// Chemins centralisés des images d'accueil (planche 08 A1 / B1).
 ///
@@ -57,8 +58,7 @@ class _VeyraWelcomeHeroState extends State<VeyraWelcomeHero> {
   // so the navy wordmark never sits on the navy fallback while decoding.
   bool painted = false;
 
-  Widget _wordmark(Color color) => Text('VEYRA', textScaler: TextScaler.noScaling,
-      style: TextStyle(fontSize: 40, fontWeight: FontWeight.w700, letterSpacing: 40 * 0.22, color: color));
+  Widget _wordmark(Color color) => VeyraWordmark(size: 40, color: color);
 
   @override
   Widget build(BuildContext context) => FutureBuilder<bool>(

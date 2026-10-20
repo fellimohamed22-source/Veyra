@@ -17,6 +17,7 @@ dependencies:
   file_picker: ^10.3.8
   latlong2: ^0.9.1
   flutter_map: ^7.0.2
+  flutter_svg: ^2.0.10
   geolocator: ^14.0.1
 dev_dependencies:
   flutter_test: {sdk: flutter}
@@ -24,6 +25,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/onboarding/
+    - assets/branding/
   # Police des maquettes (DEC-12), licence SIL OFL 1.1 : assets/fonts/OFL.txt
   fonts:
     - family: PlusJakartaSans
