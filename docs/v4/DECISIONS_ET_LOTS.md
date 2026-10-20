@@ -64,7 +64,6 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 |---|---|
 | Portails partenaire, société VTC et admin | Livrés (DEC-13 validée le 19/10) ; permissions fines des rôles partenaires à confirmer (DEC-15) |
 | Pièces exigées des sociétés VTC et des chauffeurs affiliés | À confirmer juridiquement (le pack le demande). En place : Kbis, attestation REVTC et assurance RC pro pour la société ; carte grise, assurance RC circulation, contrôle technique par véhicule ; justificatif de domicile facultatif pour l'affilié |
-| Inscription chauffeur rattaché (planche 08 C : code d'invitation, société, statut) | Espaces société, donc DEC-13 |
 | Appels masqués (bouton « Appeler » désactivé dans les deux apps) | Identifiants Twilio Proxy (DEC-06) |
 | SMS du lien de suivi passager | Identifiants Twilio, `VEYRA_GUEST_BASE_URL` |
 | Photos d'accueil client et chauffeur, logo vectoriel | Originaux sans texte ni interface, droits (voir l'audit des images ci-dessous) |
