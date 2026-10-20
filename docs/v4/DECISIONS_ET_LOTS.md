@@ -42,7 +42,7 @@ Rollback : chaque migration documente son `DROP` dans son en-tête.
 
 - Sur Render, définir `JWT_SECRET` et `PIN_ENCRYPTION_KEY` (aléatoires, distincts). **Sans eux, le backend refuse désormais de démarrer.**
 - Changer ces secrets s'ils ont déjà valu les valeurs par défaut du dépôt.
-- Décider pour `VEYRA_TEST_ACCOUNTS_ENABLED` (DEC-19).
+- Comptes de test : maintenus pour l'instant (DEC-19, 20/10/2026).
 - Restreindre les clés API Firebase Android (nom du package et SHA) dans la console GCP.
 - Décider de la visibilité du dépôt (actuellement public).
 - Sur Render, définir `STRIPE_PUBLISHABLE_KEY` (clé publique `pk_…`, même compte que `STRIPE_SECRET_KEY`) : sans elle, le paiement par carte du portail web et du lien passager reste désactivé.
@@ -53,7 +53,6 @@ Rollback : chaque migration documente son `DROP` dans son en-tête.
 - **DEC-16** : valider l'index des maquettes corrigé.
 - **DEC-17** : convention de commission affichée (3 variantes dans les maquettes).
 - **DEC-18** : prix conseillé, contre-offre, validité d'offre au choix.
-- **DEC-19** : suspendre les comptes de test en production ?
 - **DEC-21** : capacités bagages par catégorie (valeurs à fournir).
 
 ## Lots non démarrés (bloqués) — mise à jour du 19/10/2026
@@ -62,13 +61,12 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 
 | Lot bloqué | Ce qui manque |
 |---|---|
-| Portails partenaire, société VTC et admin | Livrés (DEC-13 validée le 19/10) ; permissions fines des rôles partenaires à confirmer (DEC-15) |
-| Pièces exigées des sociétés VTC et des chauffeurs affiliés | À confirmer juridiquement (le pack le demande). En place : Kbis, attestation REVTC et assurance RC pro pour la société ; carte grise, assurance RC circulation, contrôle technique par véhicule ; justificatif de domicile facultatif pour l'affilié |
+| Portails partenaire, société VTC et admin | Livrés (DEC-13 validée le 19/10) |
 | Appels masqués (bouton « Appeler » désactivé dans les deux apps) | Identifiants Twilio Proxy (DEC-06) |
 | SMS du lien de suivi passager | Identifiants Twilio, `VEYRA_GUEST_BASE_URL` |
 | Photos d'accueil client et chauffeur, logo vectoriel | Originaux sans texte ni interface, droits (voir l'audit des images ci-dessous) |
 | « Lire les documents » à l'inscription, charte chauffeur | Textes juridiques |
-| Connexion Apple (iOS) | Décision |
+| Connexion Apple (iOS) | Décidée le 20/10 : à activer dans Firebase (fournisseur Apple) et sur le compte Apple Developer |
 | Cartes Google dans les apps (L13b) | Clé Google Maps pour mobile |
 
 ## Décisions prises (17/10/2026)
@@ -90,6 +88,11 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 | DEC-18 | Pas de contre-offre ; prix conseillé via une grille en base (fournie par le propriétaire) ; validité liée à la fenêtre d'offres |
 | DEC-21 | Capacité bagages non fixée pour l'instant (évolution ultérieure) |
 | DEC-13 (19/10) | Maquettes des portails partenaire, société VTC et admin **validées** (navigation, réservation partenaire en 5 étapes avec choix du payeur, offres comme côté client, écrans Commissions et Paramètres) |
+| DEC-15 (20/10) | Rôles partenaires conservés : propriétaire (tout), réception (réserver, choisir le chauffeur), comptabilité (factures) |
+| DEC-19 (20/10) | Comptes de test maintenus pour l'instant |
+| Pièces sociétés VTC (20/10) | Liste proposée retenue : Kbis, attestation REVTC, assurance RC pro ; carte grise, assurance RC circulation, contrôle technique par véhicule ; justificatif de domicile facultatif pour l'affilié |
+| Expiration (20/10) | Pour tous les chauffeurs : pas d'offre si la carte VTC expire avant le jour de la course ; un document expiré bloque toutes les offres |
+| Apple (20/10) | Connexion Apple ajoutée |
 | Client visible du chauffeur (19/10) | **Oui** : prénom + initiale du nom (« Sophie M. ») et note moyenne donnée par les chauffeurs ; nom du passager pour une réservation partenaire ; jamais le nom complet ni le téléphone |
 
 ## Audit des images du pack « TOTAL » (18/10/2026)

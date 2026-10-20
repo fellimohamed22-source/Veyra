@@ -493,6 +493,9 @@ import java.util.*;
     private void eligibleVehicle(UUID bookingId,UUID d){
         Integer n=db.queryForObject("select count(*) from scheduled_bookings sb where sb.id=? and "+ELIGIBLE_VEHICLE_SQL,Integer.class,bookingId,d);
         if(n==null||n==0)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"NO_ELIGIBLE_VEHICLE");
+        // Owner decision 20/10/2026: no offer when the VTC card expires before the ride day.
+        Integer cardExpires=db.queryForObject(com.veyra.company.FleetRules.VTC_CARD_EXPIRES_BEFORE_RIDE_SQL,Integer.class,bookingId,d,d);
+        if(cardExpires!=null&&cardExpires>0)throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"VTC_CARD_EXPIRES_BEFORE_RIDE");
     }
     private void eligible(UUID d){
         Integer n=db.queryForObject("select count(*) from drivers where id=? and status='ACTIVE' and kyc_status='APPROVED' and marketplace_enabled=true",Integer.class,d);

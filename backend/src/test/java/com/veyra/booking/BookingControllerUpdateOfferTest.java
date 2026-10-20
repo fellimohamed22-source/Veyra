@@ -78,6 +78,7 @@ class BookingControllerUpdateOfferTest {
     when(db.queryForObject(contains("from drivers where id=? and status='ACTIVE'"), eq(Integer.class), eq(driverId))).thenReturn(1);
     when(db.queryForObject(contains("from driver_documents where driver_id=?"), eq(Integer.class), eq(driverId))).thenReturn(0);
     when(db.queryForObject(contains("from scheduled_bookings sb where sb.id=? and exists"), eq(Integer.class), eq(bookingId), eq(driverId))).thenReturn(1);
+    when(db.queryForObject(contains("driver_vtc_registrations r where r.driver_id=?"), eq(Integer.class), eq(bookingId), eq(driverId), eq(driverId))).thenReturn(0);
   }
 
   private void stubStandardPolicy(int bps) {

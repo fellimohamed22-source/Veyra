@@ -212,6 +212,19 @@ class CompanyDatabaseTest {
     assertEquals(1L, ((Number) company.overview(c).get("documentsToRenew")).longValue());
   }
 
+  @Test void vtcCardMustStillBeValidOnTheRideDay() {
+    UUID booking = UUID.randomUUID();
+    db.update("insert into scheduled_bookings(id,creator_type,creator_user_id,pickup,pickup_address,dropoff,dropoff_address,scheduled_at,category_id,payment_method,payer_type,status) " +
+        "select ?,'CLIENT',?,ST_SetSRID(ST_MakePoint(2,48),4326),'A',ST_SetSRID(ST_MakePoint(3,49),4326),'B',(current_date+10)::timestamp at time zone 'Europe/Paris'+interval '10 hours',id,'CASH','CLIENT','OPEN_FOR_OFFERS' " +
+        "from vehicle_categories where code='STANDARD'", booking, outsider);
+    db.update("insert into driver_vtc_registrations(driver_id,card_number,expires_at) values (?,'123',current_date+5)", driver);
+    assertEquals(1, db.queryForObject(FleetRules.VTC_CARD_EXPIRES_BEFORE_RIDE_SQL, Integer.class, booking, driver, driver), "expires before the ride");
+    db.update("update driver_vtc_registrations set expires_at=current_date+10 where driver_id=?", driver);
+    assertEquals(0, db.queryForObject(FleetRules.VTC_CARD_EXPIRES_BEFORE_RIDE_SQL, Integer.class, booking, driver, driver), "valid through the ride day");
+    db.update("insert into driver_documents(driver_id,type,storage_key,status,expires_at) values (?,'VTC_CARD','k','APPROVED',current_date+3)", driver);
+    assertEquals(1, db.queryForObject(FleetRules.VTC_CARD_EXPIRES_BEFORE_RIDE_SQL, Integer.class, booking, driver, driver), "card photo date counts too");
+  }
+
   @Test void expiredDriverDocumentIsDetected() {
     db.update("insert into driver_documents(driver_id,type,storage_key,status,expires_at) values (?,'VTC_CARD','k','APPROVED',current_date-2)", driver);
     assertEquals(1, db.queryForObject(FleetRules.DRIVER_DOCUMENT_EXPIRED_SQL, Integer.class, driver));

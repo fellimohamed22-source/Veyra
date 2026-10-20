@@ -43,6 +43,11 @@ public class DriverOpportunityController {
         "select proposed_amount_minor from driver_offers where booking_id=? and driver_id=? and status='ACTIVE'",
         bookingId,driverId);
     result.put("hasActiveOffer",!ownOffers.isEmpty());
+    // Shown before the driver composes an offer (same checks as submission).
+    Integer cardExpires=db.queryForObject(com.veyra.company.FleetRules.VTC_CARD_EXPIRES_BEFORE_RIDE_SQL,Integer.class,bookingId,driverId,driverId);
+    Integer expired=db.queryForObject(com.veyra.company.FleetRules.DRIVER_DOCUMENT_EXPIRED_SQL,Integer.class,driverId);
+    result.put("vtcCardExpiresBeforeRide",cardExpires!=null&&cardExpires>0);
+    result.put("documentExpired",expired!=null&&expired>0);
     if(!ownOffers.isEmpty())result.put("ownActiveOfferAmountMinor",ownOffers.getFirst().get("proposed_amount_minor"));
     if("BEST_VISIBLE".equals(result.get("offer_visibility_mode"))){
       // Same rule as at submission time: lowest price among the OTHER

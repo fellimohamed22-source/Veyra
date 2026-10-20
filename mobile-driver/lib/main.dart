@@ -1791,6 +1791,8 @@ class _RequestScreenState extends State<RequestScreen>{
           ])),
           if(own!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.success,text:t('Votre offre active')+' : '+VeyraMoneyFormatter.fromMinor(own))),
           if(x['has_eligible_vehicle']==false)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.danger,text:t('Aucun véhicule validé de cette catégorie : offre impossible.'))),
+          if(x['vtcCardExpiresBeforeRide']==true)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.danger,text:t('Votre carte VTC expire avant cette course : renouvelez-la pour faire une offre.'))),
+          if(x['documentExpired']==true)Padding(padding:const EdgeInsets.only(bottom:12),child:VeyraBanner(tone:VeyraTone.danger,text:t('Un de vos documents a expiré : offres bloquées jusqu’à son renouvellement.'))),
         ]);
       },
     ),
@@ -1803,7 +1805,7 @@ class _RequestScreenState extends State<RequestScreen>{
         return SafeArea(child:Padding(
           padding:const EdgeInsets.fromLTRB(16,8,16,16),
           child:FilledButton(
-            onPressed:x['has_eligible_vehicle']==false?null:()=>Navigator.of(context).push(MaterialPageRoute(builder:(_)=>OfferComposerScreen(bookingId:widget.bookingId,request:x,adjusting:adjusting))),
+            onPressed:x['has_eligible_vehicle']==false||x['vtcCardExpiresBeforeRide']==true||x['documentExpired']==true?null:()=>Navigator.of(context).push(MaterialPageRoute(builder:(_)=>OfferComposerScreen(bookingId:widget.bookingId,request:x,adjusting:adjusting))),
             child:Row(mainAxisSize:MainAxisSize.min,children:[
               Flexible(child:Text(adjusting?t('Modifier mon offre'):t('Créer mon offre'),textAlign:TextAlign.center)),
               const SizedBox(width:8),
