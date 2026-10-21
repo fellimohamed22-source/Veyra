@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../app/theme.dart';
 import 'veyra_ui.dart' show VeyraWordmark;
 
@@ -10,7 +11,8 @@ import 'veyra_ui.dart' show VeyraWordmark;
 /// pour le chauffeur), sans texte ni élément d'interface incrusté : voir
 /// assets/images/onboarding/README.md. Les recadrages de la planche de
 /// maquettes ne conviennent pas (barre d'état, logo et textes incrustés,
-/// 232 × 156 px). Tant qu'un fichier manque, l'écran garde son fond marine.
+/// 232 × 156 px). Sans photo, l'illustration vectorielle de la même scène
+/// (même chemin en .svg) est affichée ; sans les deux, fond marine.
 class VeyraAssets {
   static const welcomeClient = 'assets/images/onboarding/welcome_client.jpg';
   static const welcomeDriver = 'assets/images/onboarding/welcome_driver.jpg';
@@ -53,7 +55,13 @@ class VeyraWelcomeHero extends StatefulWidget {
 }
 
 class _VeyraWelcomeHeroState extends State<VeyraWelcomeHero> {
-  late final Future<bool> hasPhoto = VeyraAssets.available(widget.asset);
+  /// Original photo when bundled, otherwise the vector illustration of the
+  /// same scene (same path, .svg).
+  late final Future<String?> source = () async {
+    if (await VeyraAssets.available(widget.asset)) return widget.asset;
+    final svg = widget.asset.replaceFirst(RegExp(r'.(jpg|jpeg|png|webp)$'), '.svg');
+    return await VeyraAssets.available(svg) ? svg : null;
+  }();
   // Text colours follow the photo only once its first frame is painted,
   // so the navy wordmark never sits on the navy fallback while decoding.
   bool painted = false;
@@ -61,10 +69,13 @@ class _VeyraWelcomeHeroState extends State<VeyraWelcomeHero> {
   Widget _wordmark(Color color) => VeyraWordmark(size: 40, color: color);
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<bool>(
-        future: hasPhoto,
+  Widget build(BuildContext context) => FutureBuilder<String?>(
+        future: source,
         builder: (context, s) {
-          final available = s.data == true;
+          final path = s.data;
+          final available = path != null;
+          final vector = path?.endsWith('.svg') ?? false;
+          if (vector && !painted) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) setState(() => painted = true); });
           final photo = available && painted;
           // On the photo: navy wordmark over the sky (A1/B1); without it,
           // everything is white on the navy background.
@@ -79,9 +90,11 @@ class _VeyraWelcomeHeroState extends State<VeyraWelcomeHero> {
           ]);
           return Stack(fit: StackFit.expand, children: [
             const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF0A2E57), VeyraColors.primary]))),
-            if (available)
+            if (vector)
+              SvgPicture.asset(path!, fit: BoxFit.cover, alignment: widget.focal, excludeFromSemantics: true)
+            else if (available)
               Image.asset(
-                widget.asset,
+                path,
                 fit: BoxFit.cover,
                 alignment: widget.focal,
                 excludeFromSemantics: true,

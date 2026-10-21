@@ -474,8 +474,8 @@ class VeyraGoldButton extends StatelessWidget {
       );
 }
 
-/// Vignette véhicule : aucune photo de véhicule réel n'est approuvée
-/// (spec §02/D), d'où une silhouette neutre plutôt qu'une image générée.
+/// Vignette véhicule (planches 03, 05, 10, 12) : illustration vectorielle
+/// d.une berline ou d.un van noir, en attendant des photos réelles validées.
 class VeyraVehicleThumb extends StatelessWidget {
   final double width;
   final bool van;
@@ -484,7 +484,7 @@ class VeyraVehicleThumb extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: width,
         height: width * 0.6,
-        decoration: BoxDecoration(color: VeyraColors.surfaceMuted, borderRadius: BorderRadius.circular(VeyraRadius.md)),
-        child: Icon(van ? Icons.airport_shuttle : Icons.directions_car_filled, size: width * 0.42, color: VeyraColors.primary),
+        alignment: Alignment.center,
+        child: SvgPicture.asset(van ? 'assets/images/vehicles/van.svg' : 'assets/images/vehicles/sedan.svg', width: width, fit: BoxFit.contain, excludeFromSemantics: true),
       );
 }

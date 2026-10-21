@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 560" preserveAspectRatio="xMidYMid slice">
+  <!-- Board 08 A1 welcome illustration: Paris at dusk, Eiffel Tower on the
+       right, Haussmann buildings, black saloon in front. Illustration, not a photo. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D6E4F3"/>
+      <stop offset=".42" stop-color="#EEE6E0"/>
+      <stop offset=".62" stop-color="#F6D9BC"/>
+      <stop offset="1" stop-color="#E9B98F"/>
+    </linearGradient>
+    <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B4C2D4"/>
+      <stop offset="1" stop-color="#C9C3C2"/>
+    </linearGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#D9C6AC"/>
+      <stop offset="1" stop-color="#EAD9C0"/>
+    </linearGradient>
+    <linearGradient id="stoneR" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#CDB89D"/>
+      <stop offset="1" stop-color="#E4D2B8"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8E8A8E"/>
+      <stop offset="1" stop-color="#3F4249"/>
+    </linearGradient>
+    <linearGradient id="tower" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5C6678"/>
+      <stop offset="1" stop-color="#7B6E66"/>
+    </linearGradient>
+    <linearGradient id="carBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3F4756"/>
+      <stop offset=".5" stop-color="#141921"/>
+      <stop offset="1" stop-color="#05070A"/>
+    </linearGradient>
+    <linearGradient id="carGlass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9FB1C6"/>
+      <stop offset="1" stop-color="#2A3442"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#FFE7B0" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#FFE7B0" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="win" width="14" height="22" patternUnits="userSpaceOnUse">
+      <rect x="3" y="4" width="7" height="12" rx="1" fill="#8C7A66"/>
+      <rect x="3" y="4" width="7" height="5" rx="1" fill="#B9A58C"/>
+    </pattern>
+    <pattern id="winWarm" width="14" height="22" patternUnits="userSpaceOnUse">
+      <rect x="3" y="4" width="7" height="12" rx="1" fill="#8C7A66"/>
+      <rect x="3" y="9" width="7" height="7" rx="1" fill="#F2C783"/>
+    </pattern>
+  </defs>
+
+  <rect width="390" height="560" fill="url(#sky)"/>
+  <circle cx="300" cy="300" r="120" fill="url(#glow)" opacity=".35"/>
+
+  <!-- Distant skyline -->
+  <path d="M0 330 L20 322 L34 326 L48 314 L62 320 L80 310 L96 318 L118 308 L140 316 L160 306 L182 314 L200 305 L226 312 L250 304 L276 312 L300 306 L330 314 L360 307 L390 312 L390 360 L0 360 Z" fill="url(#haze)" opacity=".85"/>
+  <path d="M120 316 L126 296 L132 316 Z M210 312 C210 300 222 296 226 300 C230 296 242 300 242 312 Z" fill="#AEB9C9"/>
+
+  <!-- Eiffel Tower -->
+  <g fill="url(#tower)">
+    <path d="M296 58 L299 58 L300 92 L306 160 L314 210 L330 262 L352 318 L362 340 L346 340 C340 322 332 306 320 296 L300 290 L280 296 C268 306 260 322 254 340 L238 340 L248 318 L270 262 L286 210 L294 160 L298 92 Z"/>
+    <rect x="290" y="156" width="20" height="5" rx="1"/>
+    <rect x="278" y="206" width="44" height="6" rx="1"/>
+    <rect x="262" y="258" width="76" height="7" rx="1"/>
+    <rect x="297" y="40" width="3" height="20"/>
+  </g>
+  <path d="M300 292 C316 296 328 312 334 332 L326 332 C320 316 312 304 300 300 C288 304 280 316 274 332 L266 332 C272 312 284 296 300 292 Z" fill="#F0D8BC" opacity=".55"/>
+  <g stroke="#E9DCCB" stroke-width=".6" opacity=".45">
+    <path d="M296 100 L304 130 M304 100 L296 130 M294 170 L306 200 M306 170 L294 200 M284 220 L316 250 M316 220 L284 250"/>
+  </g>
+
+  <!-- Left Haussmann building -->
+  <path d="M0 210 L40 198 L92 204 L104 222 L104 470 L0 470 Z" fill="url(#stone)"/>
+  <path d="M0 200 L42 186 L96 194 L106 214 L0 222 Z" fill="#7A8AA0"/>
+  <path d="M10 196 l6 -12 l6 12 Z M40 190 l6 -12 l6 12 Z M70 194 l6 -12 l6 12 Z" fill="#6E7E94"/>
+  <rect x="6" y="232" width="92" height="230" fill="url(#win)"/>
+  <rect x="6" y="320" width="92" height="44" fill="url(#winWarm)"/>
+  <g fill="#3F454D" opacity=".75">
+    <rect x="0" y="266" width="104" height="3"/>
+    <rect x="0" y="354" width="104" height="3"/>
+  </g>
+  <rect x="0" y="430" width="104" height="40" fill="#C9B497"/>
+  <rect x="10" y="438" width="22" height="32" rx="10" fill="#5A4B3C"/>
+  <rect x="50" y="438" width="40" height="22" rx="2" fill="#F2C783" opacity=".85"/>
+
+  <!-- Right foreground building edge -->
+  <path d="M362 250 L390 244 L390 470 L362 470 Z" fill="url(#stoneR)"/>
+  <rect x="366" y="262" width="22" height="200" fill="url(#winWarm)" opacity=".9"/>
+
+  <!-- Street -->
+  <path d="M0 470 L390 470 L390 560 L0 560 Z" fill="url(#road)"/>
+  <path d="M104 470 L210 470 L390 520 L390 560 L0 560 Z" fill="#5A5C63" opacity=".5"/>
+  <path d="M180 474 L196 474 L250 500 L226 500 Z M262 512 L294 512 L360 548 L318 548 Z" fill="#E7E2D8" opacity=".55"/>
+
+  <!-- Street lamps -->
+  <g>
+    <rect x="128" y="380" width="3" height="92" fill="#2F3238"/>
+    <circle cx="129.5" cy="378" r="6" fill="#FFE2A3"/>
+    <circle cx="129.5" cy="378" r="22" fill="url(#glow)"/>
+    <rect x="344" y="372" width="3" height="100" fill="#2F3238"/>
+    <circle cx="345.5" cy="370" r="6" fill="#FFE2A3"/>
+    <circle cx="345.5" cy="370" r="22" fill="url(#glow)"/>
+  </g>
+
+  <!-- Black saloon, three-quarter side -->
+  <g transform="translate(120 430)">
+    <ellipse cx="128" cy="96" rx="140" ry="10" fill="#000" opacity=".35"/>
+    <path d="M0 74 C0 62 8 56 24 53 L64 47 C82 32 102 24 128 23 L168 23 C192 24 210 33 226 46 L248 50 C262 53 268 60 268 70 L268 80 C268 84 265 87 260 87 L10 87 C4 87 0 84 0 78 Z" fill="url(#carBody)"/>
+    <path d="M74 47 C88 35 106 28 128 27 L146 27 L146 47 Z" fill="url(#carGlass)"/>
+    <path d="M152 27 L168 27 C188 28 202 36 216 47 L152 47 Z" fill="url(#carGlass)"/>
+    <path d="M8 64 L266 64" stroke="#9AA4B2" stroke-width="1.2" opacity=".5"/>
+    <path d="M66 48 L230 48" stroke="#D3D9E2" stroke-width="1.4" opacity=".55"/>
+    <rect x="4" y="58" width="16" height="5" rx="2.5" fill="#FFF2CF"/>
+    <rect x="256" y="58" width="11" height="5" rx="2.5" fill="#C4262D"/>
+    <g>
+      <circle cx="66" cy="86" r="17" fill="#090B0F"/>
+      <circle cx="66" cy="86" r="11" fill="#A7AFBA"/>
+      <circle cx="66" cy="86" r="4" fill="#3A4048"/>
+      <circle cx="210" cy="86" r="17" fill="#090B0F"/>
+      <circle cx="210" cy="86" r="11" fill="#A7AFBA"/>
+      <circle cx="210" cy="86" r="4" fill="#3A4048"/>
+    </g>
+  </g>
+</svg>

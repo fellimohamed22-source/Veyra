@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 100">
+  <!-- Black executive saloon, side view (illustration, not a photo). -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A4250"/>
+      <stop offset=".45" stop-color="#151A22"/>
+      <stop offset="1" stop-color="#07090D"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C8DA3"/>
+      <stop offset="1" stop-color="#26303D"/>
+    </linearGradient>
+    <radialGradient id="rim" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#E4E8EE"/>
+      <stop offset=".55" stop-color="#9AA3AF"/>
+      <stop offset="1" stop-color="#4B525C"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="122" cy="88" rx="108" ry="6" fill="#000" opacity=".18"/>
+  <path d="M14 70 C14 60 20 55 34 53 L64 49 C78 36 94 28 116 27 L150 27 C170 28 184 36 198 48 L216 51 C226 53 230 59 230 66 L230 74 C230 77 228 79 225 79 L22 79 C17 79 14 76 14 72 Z" fill="url(#body)"/>
+  <path d="M72 49 C84 38 98 32 116 31 L132 31 L132 49 Z" fill="url(#glass)"/>
+  <path d="M137 31 L150 31 C166 32 178 39 189 49 L137 49 Z" fill="url(#glass)"/>
+  <path d="M22 62 L228 62" stroke="#8D97A5" stroke-width="1" opacity=".55"/>
+  <path d="M60 50 L200 50" stroke="#C9D0DA" stroke-width="1.2" opacity=".6"/>
+  <rect x="18" y="58" width="12" height="4" rx="2" fill="#F4E9C9"/>
+  <rect x="219" y="58" width="9" height="4" rx="2" fill="#B3262B"/>
+  <path d="M120 54 L128 54" stroke="#C9D0DA" stroke-width="2" stroke-linecap="round"/>
+  <path d="M164 54 L172 54" stroke="#C9D0DA" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="62" cy="78" r="15" fill="#0B0D11"/>
+  <circle cx="62" cy="78" r="9.5" fill="url(#rim)"/>
+  <circle cx="62" cy="78" r="3" fill="#2E343C"/>
+  <circle cx="186" cy="78" r="15" fill="#0B0D11"/>
+  <circle cx="186" cy="78" r="9.5" fill="url(#rim)"/>
+  <circle cx="186" cy="78" r="3" fill="#2E343C"/>
+</svg>

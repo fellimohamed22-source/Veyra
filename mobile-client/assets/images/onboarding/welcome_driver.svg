@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 560" preserveAspectRatio="xMidYMid slice">
+  <!-- Board 08 B1 welcome illustration: chauffeur in a dark suit in front
+       of a black saloon, Paris street in warm evening light, Eiffel Tower
+       in the distance. Stylised illustration, not a photo of a real person. -->
+  <defs>
+    <linearGradient id="dsky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E9DCCB"/>
+      <stop offset=".35" stop-color="#E4C9A6"/>
+      <stop offset=".7" stop-color="#9C7B5E"/>
+      <stop offset="1" stop-color="#2A2420"/>
+    </linearGradient>
+    <linearGradient id="dstone" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#C9AE8A"/>
+      <stop offset="1" stop-color="#E2CBA9"/>
+    </linearGradient>
+    <linearGradient id="dstoneR" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#B89A74"/>
+      <stop offset="1" stop-color="#D9BF9A"/>
+    </linearGradient>
+    <linearGradient id="dcar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5262"/>
+      <stop offset=".45" stop-color="#171C25"/>
+      <stop offset="1" stop-color="#06080B"/>
+    </linearGradient>
+    <linearGradient id="dglass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FA0B4"/>
+      <stop offset="1" stop-color="#1F2833"/>
+    </linearGradient>
+    <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A3140"/>
+      <stop offset="1" stop-color="#11151C"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9A782"/>
+      <stop offset="1" stop-color="#B9825E"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset=".45" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".55"/>
+    </linearGradient>
+    <radialGradient id="dglow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#FFD98F" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#FFD98F" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="390" height="560" fill="url(#dsky)"/>
+
+  <!-- Eiffel Tower, far left -->
+  <g fill="#8A7A6C" opacity=".75">
+    <path d="M64 120 L66 120 L67 150 L71 200 L77 236 L88 270 L100 300 L90 300 C86 288 80 280 66 278 C52 280 46 288 42 300 L32 300 L44 270 L55 236 L61 200 L65 150 Z"/>
+    <rect x="58" y="196" width="16" height="4"/>
+    <rect x="50" y="232" width="32" height="4"/>
+    <rect x="64" y="104" width="2" height="16"/>
+  </g>
+
+  <!-- Buildings -->
+  <path d="M110 150 L180 136 L196 150 L196 360 L110 360 Z" fill="url(#dstone)" opacity=".9"/>
+  <path d="M106 150 L182 132 L200 148 L106 160 Z" fill="#6F6C72"/>
+  <g fill="#7E6A55">
+    <rect x="120" y="172" width="10" height="18" rx="1"/><rect x="142" y="170" width="10" height="18" rx="1"/><rect x="164" y="168" width="10" height="18" rx="1"/>
+    <rect x="120" y="210" width="10" height="18" rx="1"/><rect x="142" y="208" width="10" height="18" rx="1"/><rect x="164" y="206" width="10" height="18" rx="1"/>
+  </g>
+  <g fill="#F3C47C">
+    <rect x="120" y="248" width="10" height="18" rx="1"/><rect x="164" y="246" width="10" height="18" rx="1"/>
+    <rect x="142" y="286" width="10" height="18" rx="1"/>
+  </g>
+  <path d="M300 60 L390 44 L390 380 L300 380 Z" fill="url(#dstoneR)"/>
+  <path d="M296 62 L390 40 L390 70 L296 80 Z" fill="#5F5C63"/>
+  <g fill="#7E6A55">
+    <rect x="312" y="96" width="14" height="24" rx="1"/><rect x="342" y="92" width="14" height="24" rx="1"/><rect x="370" y="88" width="14" height="24" rx="1"/>
+    <rect x="312" y="146" width="14" height="24" rx="1"/><rect x="370" y="140" width="14" height="24" rx="1"/>
+  </g>
+  <g fill="#F3C47C">
+    <rect x="342" y="142" width="14" height="24" rx="1"/>
+    <rect x="312" y="196" width="14" height="24" rx="1"/><rect x="342" y="192" width="14" height="24" rx="1"/><rect x="370" y="188" width="14" height="24" rx="1"/>
+  </g>
+  <circle cx="230" cy="250" r="60" fill="url(#dglow)" opacity=".5"/>
+
+  <!-- Black saloon behind the chauffeur -->
+  <g transform="translate(-30 300)">
+    <path d="M0 86 C0 72 10 64 30 60 L80 52 C102 34 128 24 160 23 L210 23 C240 24 262 35 282 50 L312 55 C330 58 340 66 340 78 L340 92 C340 96 336 100 330 100 L12 100 C4 100 0 96 0 90 Z" fill="url(#dcar)"/>
+    <path d="M92 52 C110 38 132 30 160 29 L182 29 L182 52 Z" fill="url(#dglass)"/>
+    <path d="M190 29 L210 29 C236 30 254 39 272 52 L190 52 Z" fill="url(#dglass)"/>
+    <path d="M10 72 L338 72" stroke="#9AA4B2" stroke-width="1.2" opacity=".45"/>
+    <path d="M84 54 L294 54" stroke="#D3D9E2" stroke-width="1.6" opacity=".5"/>
+    <circle cx="82" cy="98" r="21" fill="#08090C"/>
+    <circle cx="82" cy="98" r="13" fill="#9CA5B1"/>
+    <circle cx="268" cy="98" r="21" fill="#08090C"/>
+    <circle cx="268" cy="98" r="13" fill="#9CA5B1"/>
+  </g>
+
+  <!-- Chauffeur (stylised) -->
+  <g transform="translate(150 196)">
+    <!-- body / suit -->
+    <path d="M10 364 L18 214 C20 176 44 156 80 150 L110 150 C146 156 170 176 172 214 L180 364 Z" fill="url(#suit)"/>
+    <!-- shirt and tie -->
+    <path d="M78 150 L95 222 L112 150 Z" fill="#F4F2EE"/>
+    <path d="M91 160 L99 160 L102 172 L97 236 L95 240 L93 236 L88 172 Z" fill="#141820"/>
+    <!-- lapels -->
+    <path d="M78 150 L94 232 L66 186 L72 160 Z" fill="#1D232E"/>
+    <path d="M112 150 L96 232 L124 186 L118 160 Z" fill="#1D232E"/>
+    <!-- pocket square -->
+    <path d="M128 206 L148 202 L146 212 L130 214 Z" fill="#F4F2EE"/>
+    <!-- neck and head -->
+    <path d="M82 128 L108 128 L110 152 L95 160 L80 152 Z" fill="#B57E5B"/>
+    <ellipse cx="95" cy="92" rx="34" ry="42" fill="url(#skin)"/>
+    <path d="M60 86 C60 54 78 40 98 40 C120 40 132 56 130 82 C126 70 116 64 104 64 C88 64 74 70 62 92 Z" fill="#2B211B"/>
+    <path d="M66 104 C70 128 82 138 95 138 C108 138 120 128 124 104 C120 118 110 124 95 124 C80 124 70 118 66 104 Z" fill="#3A2C23" opacity=".85"/>
+    <ellipse cx="61" cy="96" rx="5" ry="9" fill="#C48F6A"/>
+    <ellipse cx="129" cy="96" rx="5" ry="9" fill="#C48F6A"/>
+    <!-- face -->
+    <path d="M74 80 Q83 75 91 79 M99 79 Q107 75 116 80" stroke="#2B211B" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <ellipse cx="83" cy="90" rx="3.4" ry="2.6" fill="#1E1712"/>
+    <ellipse cx="107" cy="90" rx="3.4" ry="2.6" fill="#1E1712"/>
+    <path d="M95 92 Q93 102 90 106 Q95 108 99 106" stroke="#9C6A4A" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <path d="M84 114 Q95 121 106 114" stroke="#F4F2EE" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <rect width="390" height="560" fill="url(#shade)"/>
+</svg>

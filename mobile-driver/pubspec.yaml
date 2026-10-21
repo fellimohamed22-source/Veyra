@@ -26,6 +26,7 @@ flutter:
   assets:
     - assets/images/onboarding/
     - assets/branding/
+    - assets/images/vehicles/
   # Police des maquettes (DEC-12), licence SIL OFL 1.1 : assets/fonts/OFL.txt
   fonts:
     - family: PlusJakartaSans
