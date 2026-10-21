@@ -1,0 +1,35 @@
+name: maps-key-check
+# Checks the mobile Google Maps key without ever printing it: presence of
+# the GOOGLE_MAPS_MOBILE_KEY secret and access to the Map Tiles API.
+# The result is a public annotation on the run.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [product-marketplace-v4]
+    paths:
+      - '.github/workflows/maps-key-check.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Google Maps mobile key
+        env:
+          MAPS_KEY: ${{ secrets.GOOGLE_MAPS_MOBILE_KEY }}
+        run: |
+          if [ -z "$MAPS_KEY" ]; then
+            echo "::warning title=Google Maps::GOOGLE_MAPS_MOBILE_KEY absente."
+            exit 0
+          fi
+          code=$(curl -s -o /tmp/maps.json -w '%{http_code}' -X POST \
+            "https://tile.googleapis.com/v1/createSession?key=${MAPS_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d '{"mapType":"roadmap","language":"fr-FR","region":"FR"}')
+          if [ "$code" = "200" ] && grep -q '"session"' /tmp/maps.json; then
+            echo "::notice title=Google Maps::GOOGLE_MAPS_MOBILE_KEY OK : l'API Map Tiles répond."
+          else
+            reason=$(grep -oE '"(status|message)": *"[^"]*"' /tmp/maps.json | head -2 | tr '\n' ' ' | tr -d '"')
+            echo "::warning title=Google Maps::GOOGLE_MAPS_MOBILE_KEY refusée par Map Tiles (HTTP $code) : $reason"
+          fi
+          rm -f /tmp/maps.json
