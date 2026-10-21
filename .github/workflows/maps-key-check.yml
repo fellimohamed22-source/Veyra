@@ -22,14 +22,18 @@ jobs:
             echo "::warning title=Google Maps::GOOGLE_MAPS_MOBILE_KEY absente."
             exit 0
           fi
-          code=$(curl -s -o /tmp/maps.json -w '%{http_code}' -X POST \
-            "https://tile.googleapis.com/v1/createSession?key=${MAPS_KEY}" \
-            -H 'Content-Type: application/json' \
-            -d '{"mapType":"roadmap","language":"fr-FR","region":"FR"}')
-          if [ "$code" = "200" ] && grep -q '"session"' /tmp/maps.json; then
-            echo "::notice title=Google Maps::GOOGLE_MAPS_MOBILE_KEY OK : l'API Map Tiles répond."
-          else
+          try() {
+            code=$(curl -s -o /tmp/maps.json -w '%{http_code}' -X POST \
+              "https://tile.googleapis.com/v1/createSession?key=${MAPS_KEY}" \
+              -H 'Content-Type: application/json' -d "$1")
             reason=$(grep -oE '"(status|message)": *"[^"]*"' /tmp/maps.json | head -2 | tr '\n' ' ' | tr -d '"')
-            echo "::warning title=Google Maps::GOOGLE_MAPS_MOBILE_KEY refusée par Map Tiles (HTTP $code) : $reason"
-          fi
-          rm -f /tmp/maps.json
+            ok=$(grep -q '"session"' /tmp/maps.json && echo yes || echo no)
+            echo "::notice title=Google Maps ($2)::HTTP $code session=$ok $reason"
+            rm -f /tmp/maps.json
+          }
+          try '{"mapType":"roadmap","language":"fr-FR","region":"FR"}' "fr-FR/FR"
+          try '{"mapType":"roadmap","language":"en-US","region":"US"}' "en-US/US"
+          try '{"mapType":"roadmap","language":"fr-FR","region":"FR","scale":"scaleFactor2x","highDpi":true}' "fr-FR/FR x2"
+          # Static Maps on the same key tells billing/key problems apart from Map Tiles ones.
+          scode=$(curl -s -o /dev/null -w '%{http_code}' "https://maps.googleapis.com/maps/api/staticmap?center=48.8566,2.3522&zoom=12&size=64x64&key=${MAPS_KEY}")
+          echo "::notice title=Google Maps (static)::Static Maps HTTP $scode"
