@@ -479,12 +479,24 @@ class VeyraGoldButton extends StatelessWidget {
 class VeyraVehicleThumb extends StatelessWidget {
   final double width;
   final bool van;
-  const VeyraVehicleThumb({this.width = 92, this.van = false, super.key});
+  /// Category name or code (« Standard », « Confort », « Van », « Premium »…):
+  /// picks the matching illustration.
+  final String? category;
+  const VeyraVehicleThumb({this.width = 92, this.van = false, this.category, super.key});
+
+  static String assetFor(String? category, {bool van = false}) {
+    final c = (category ?? '').toLowerCase();
+    if (van || c.contains('van') || c.contains('minibus')) return 'assets/images/vehicles/van.svg';
+    if (c.contains('premium') || c.contains('business') || c.contains('luxe') || c.contains('prestige')) return 'assets/images/vehicles/premium.svg';
+    if (c.contains('standard') || c.contains('eco') || c.contains('éco')) return 'assets/images/vehicles/standard.svg';
+    return 'assets/images/vehicles/sedan.svg';
+  }
+
   @override
   Widget build(BuildContext context) => Container(
         width: width,
         height: width * 0.6,
         alignment: Alignment.center,
-        child: SvgPicture.asset(van ? 'assets/images/vehicles/van.svg' : 'assets/images/vehicles/sedan.svg', width: width, fit: BoxFit.contain, excludeFromSemantics: true),
+        child: SvgPicture.asset(assetFor(category, van: van), width: width, fit: BoxFit.contain, excludeFromSemantics: true),
       );
 }

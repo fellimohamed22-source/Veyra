@@ -103,7 +103,12 @@ class _VeyraNotificationsScreenState extends State<VeyraNotificationsScreen> {
       try { veyraUnreadNotifications.value = await widget.markRead(n.id); } catch (_) {}
     }
     if (!mounted) return;
-    // Board 16 P3: full information first, then « Voir la demande ».
+    // Linked to a request or a ride: straight to that screen (back returns
+    // here). Otherwise the full information (board 16 P3).
+    if (n.bookingId != null) {
+      widget.open(n);
+      return;
+    }
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => VeyraNotificationDetailScreen(notification: n, open: widget.open)));
   }
 

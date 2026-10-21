@@ -33,13 +33,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(readIds, ['n1']);
     expect(veyraUnreadNotifications.value, 1);
-    // Board 16 P3: detail first, then « Voir la demande ».
-    expect(find.text('Détail de la demande'), findsOneWidget);
-    expect(find.text('Orly'), findsOneWidget);
-    await tester.tap(find.text('Voir la demande'));
+    // A notification linked to a request opens that request directly.
     expect(opened, 'b1');
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    expect(find.text('Détail de la demande'), findsNothing);
     expect(find.byKey(const ValueKey('unread-dot')), findsOneWidget);
 
     await tester.tap(find.text('Tout marquer comme lu'));

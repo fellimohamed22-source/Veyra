@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'core/widgets/chat_view.dart';
 import 'core/maps/veyra_map_marks.dart';
 import 'core/widgets/profile_dialog.dart';
 import 'dart:async';
@@ -22,7 +23,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:go_router/go_router.dart';
 import 'api.dart';
 import 'app_locale.dart';
-import 'chat_socket.dart';
 import 'app/theme.dart';
 import 'core/formatters/error_messages.dart';
 import 'core/formatters/status_labels.dart';
@@ -264,7 +264,7 @@ final router=GoRouter(
     load:()=>api.notifications(),
     markRead:api.markNotificationRead,
     markAllRead:api.markAllNotificationsRead,
-    open:(n){if(n.bookingId!=null)c.go(driverNotificationRoute(n.bookingId!,n.template,n.data));},
+    open:(n){if(n.bookingId!=null)c.push(driverNotificationRoute(n.bookingId!,n.template,n.data));},
   )),
 ],
   observers:[routeObserver],
@@ -1500,7 +1500,7 @@ class _MesOffresScreenState extends State<MesOffresScreen> with SingleTickerProv
                   if(vehicle.isNotEmpty)...[
                     const SizedBox(height:10),
                     Row(children:[
-                      const VeyraVehicleThumb(width:72),
+                      VeyraVehicleThumb(width:72,category:x['category_name']?.toString()),
                       const SizedBox(width:10),
                       Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                         Text(vehicle,style:const TextStyle(fontWeight:FontWeight.w600)),
@@ -1931,7 +1931,7 @@ class _OfferComposerScreenState extends State<OfferComposerScreen>{
             padding:const EdgeInsets.all(12),
             decoration:BoxDecoration(borderRadius:BorderRadius.circular(VeyraRadius.md),border:Border.all(color:selected?VeyraColors.accent:VeyraColors.border,width:selected?1.6:1)),
             child:Row(children:[
-              const VeyraVehicleThumb(width:84),
+              VeyraVehicleThumb(width:84,category:(v['category_name']??v['category'])?.toString()),
               const SizedBox(width:12),
               Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                 Text('${v['brand']??''} ${v['model']??''}'.trim(),style:const TextStyle(fontWeight:FontWeight.w700)),
@@ -2861,7 +2861,7 @@ class _RideScreenState extends State<RideScreen>{
                   if(vehicle.isNotEmpty||x['plate_number']!=null)...[
                     const SizedBox(height:10),
                     Row(children:[
-                      const VeyraVehicleThumb(width:64),
+                      VeyraVehicleThumb(width:64,category:x['category_name']?.toString()),
                       const SizedBox(width:10),
                       Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                         Text(vehicle,style:const TextStyle(fontWeight:FontWeight.w600)),
@@ -3357,200 +3357,12 @@ class DriverChatScreen extends StatefulWidget{
   @override State<DriverChatScreen> createState()=>_DriverChatScreenState();
 }
 class _DriverChatScreenState extends State<DriverChatScreen>{
-  final input=TextEditingController();
-  final scrollController=ScrollController();
-  final List<Map<String,dynamic>> messages=[];
-  String? myUserId;
-  Map<String,dynamic>? chatBooking;
-  Future<void> loadChatBooking()async{try{final b=await api.bookingDetail(widget.bookingId);if(mounted)setState(()=>chatBooking=b);}catch(_){}}
-  bool loading=true;
-  bool loadError=false;
-  bool sending=false;
-  ChatSocket? socket;
-
-  Timer? fallbackPoller;
-
-  @override void initState(){
-    super.initState();
-    _load();
-    loadChatBooking();
-    fallbackPoller=Timer.periodic(const Duration(seconds:5),(_)=>_pollForNewMessages());
-  }
-
-  Future<void> _pollForNewMessages()async{
-    if(!mounted)return;
-    loadChatBooking();
-    try{
-      final history=await api.chatMessages(widget.bookingId);
-      if(!mounted)return;
-      final fresh=history.map((e)=>Map<String,dynamic>.from(e as Map))
-        .where((m)=>!_isDuplicate(m['id'])).toList();
-      if(fresh.isEmpty)return;
-      setState(()=>messages.addAll(fresh));
-      _scrollToBottom();
-    }catch(_){}
-  }
-
-  Future<void> _load() async {
-    setState((){loading=true;loadError=false;});
-    try{
-      final me=await api.me();
-      final history=await api.chatMessages(widget.bookingId);
-      if(!mounted)return;
-      setState((){
-        myUserId=(me['id']??'').toString();
-        messages
-          ..clear()
-          ..addAll(history.map((e)=>Map<String,dynamic>.from(e as Map)));
-        loading=false;
-      });
-      _scrollToBottom();
-      socket?.dispose();
-      socket=ChatSocket(api:api,bookingId:widget.bookingId,onMessage:_onIncoming)..connect();
-    }catch(_){
-      if(mounted)setState((){loading=false;loadError=true;});
-    }
-  }
-
-  bool _isDuplicate(Object? id)=>id!=null&&messages.any((m)=>(m['id']?.toString())==id.toString());
-
-  void _onIncoming(Map<String,dynamic> msg){
-    if(!mounted)return;
-    if(_isDuplicate(msg['id']))return;
-    setState(()=>messages.add(msg));
-    _scrollToBottom();
-  }
-
-  void _scrollToBottom(){
-    WidgetsBinding.instance.addPostFrameCallback((_){
-      if(scrollController.hasClients){
-        scrollController.animateTo(
-          scrollController.position.maxScrollExtent,
-          duration:const Duration(milliseconds:250),
-          curve:Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  Future<void> send() async {
-    if(sending)return;
-    final draft=input.text;
-    final body=draft.trim();
-    if(body.isEmpty)return;
-    setState(()=>sending=true);
-    try{
-      final sent=await api.sendMessage(widget.bookingId,body);
-      if(mounted&&input.text==draft)input.clear();
-      if(mounted&&!_isDuplicate(sent['id'])){
-        setState(()=>messages.add(sent));
-        _scrollToBottom();
-      }
-    }catch(_){
-      if(mounted){
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t("Message non envoyé, réessayez"))));
-      }
-    }finally{
-      if(mounted)setState(()=>sending=false);
-    }
-  }
-
-  @override void dispose(){
-    fallbackPoller?.cancel();
-    socket?.dispose();
-    scrollController.dispose();
-    input.dispose();
-    super.dispose();
-  }
-
-  String? _timeLabel(Map<String,dynamic> m){
-    final raw=m['sentAt']??m['sent_at'];
-    if(raw==null)return null;
-    try{
-      final dt=DateTime.parse(raw.toString()).toLocal();
-      return '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
-    }catch(_){return null;}
-  }
-
-  @override Widget build(BuildContext context){
-    final scheme=Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor:const Color(0xFFF2F6FB),
-      appBar:AppBar(title:Text(t('Chat Veyra'))),
-      body:Column(children:[
-        if(chatBooking!=null)ListTile(
-          title:Text((chatBooking?['customer_name']??t('Votre interlocuteur')).toString()),
-          subtitle:Text((chatBooking?['pickup_address']??'').toString()+' → '+(chatBooking?['dropoff_address']??'').toString()),
-          trailing:VeyraStatusBadge(status:chatBooking?['status']?.toString()??''),
-        ),
-        Expanded(child:
-          loading?const Center(child:CircularProgressIndicator())
-          :loadError?Center(child:FilledButton(onPressed:_load,child:Text(t('Réessayer'))))
-          :messages.isEmpty?Center(child:Text(t('Aucun message pour le moment.')))
-          :ListView.builder(
-              controller:scrollController,
-              padding:const EdgeInsets.symmetric(horizontal:12,vertical:16),
-              itemCount:messages.length,
-              itemBuilder:(context,i){
-                final m=messages[i];
-                final senderId=(m['senderUserId']??m['sender_user_id'])?.toString();
-                final isMine=myUserId!=null&&senderId==myUserId;
-                final time=_timeLabel(m);
-                return Align(
-                  alignment:isMine?Alignment.centerRight:Alignment.centerLeft,
-                  child:Container(
-                    margin:const EdgeInsets.symmetric(vertical:3),
-                    padding:const EdgeInsets.symmetric(horizontal:14,vertical:10),
-                    constraints:BoxConstraints(maxWidth:MediaQuery.of(context).size.width*0.75),
-                    decoration:BoxDecoration(
-                      color:isMine?scheme.primary:Colors.white,
-                      borderRadius:BorderRadius.only(
-                        topLeft:const Radius.circular(16),
-                        topRight:const Radius.circular(16),
-                        bottomLeft:Radius.circular(isMine?16:4),
-                        bottomRight:Radius.circular(isMine?4:16),
-                      ),
-                      boxShadow:[BoxShadow(color:Colors.black.withValues(alpha:0.06),blurRadius:4,offset:const Offset(0,2))],
-                    ),
-                    child:Column(crossAxisAlignment:CrossAxisAlignment.end,mainAxisSize:MainAxisSize.min,children:[
-                      Text((m['body']??'').toString(),style:TextStyle(color:isMine?Colors.white:const Color(0xFF1F2937))),
-                      if(time!=null)...[
-                        const SizedBox(height:4),
-                        Text(time,style:TextStyle(fontSize:11,color:isMine?Colors.white70:const Color(0xFF9CA3AF))),
-                      ],
-                    ]),
-                  ),
-                );
-              },
-            ),
-        ),
-        SafeArea(child:Padding(
-          padding:const EdgeInsets.all(12),
-          child:Row(children:[
-            Expanded(child:TextField(
-              controller:input,
-              maxLength:2000,
-              textCapitalization:TextCapitalization.sentences,
-              decoration:InputDecoration(
-                hintText:t('Votre message'),
-                counterText:'',
-                filled:true,
-                fillColor:Colors.white,
-                border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),
-                contentPadding:const EdgeInsets.symmetric(horizontal:16,vertical:10),
-              ),
-              onSubmitted:(_)=>sending?null:send(),
-            )),
-            const SizedBox(width:8),
-            CircleAvatar(radius:22,backgroundColor:scheme.primary,child:sending
-              ?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
-              :IconButton(onPressed:send,tooltip:t('Envoyer'),icon:const Icon(Icons.send,color:Colors.white,size:20)),
-            ),
-          ]),
-        )),
-      ]),
-    );
-  }
+  /// Shared conversation view (same as the client app).
+  @override Widget build(BuildContext context)=>VeyraChatView(
+    api:api,
+    bookingId:widget.bookingId,
+    counterpartName:(b)=>(b['customer_name']??t('Client')).toString(),
+  );
 }
 
 

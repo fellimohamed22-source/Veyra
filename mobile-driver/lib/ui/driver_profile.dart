@@ -197,7 +197,7 @@ class _DriverVehiclesScreenState extends State<DriverVehiclesScreen> {
                 DriverCard(child: Text(_t('Aucun véhicule enregistré.'), style: const TextStyle(color: VeyraColors.textSecondary))),
               for (final v in vehicles)
                 DriverCard(child: Row(children: [
-                  const VeyraVehicleThumb(width: 88),
+                  VeyraVehicleThumb(width: 88, category: v['category_name']?.toString()),
                   const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('${v['brand'] ?? ''} ${v['model'] ?? ''}'.trim(), style: const TextStyle(fontWeight: FontWeight.w700)),

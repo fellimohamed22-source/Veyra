@@ -243,7 +243,7 @@ class DriverRequestCard extends StatelessWidget {
                 ]),
               ),
             const SizedBox(width: 10),
-            const VeyraVehicleThumb(width: 72),
+            VeyraVehicleThumb(width: 72, category: x['category_name']?.toString()),
           ]),
           if (own != null) ...[
             const SizedBox(height: 10),

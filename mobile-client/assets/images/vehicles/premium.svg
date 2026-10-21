@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 100">
+  <!-- Premium / business category: long black limousine-style saloon, chrome trim (illustration). -->
+  <defs>
+    <linearGradient id="pbody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#454E5E"/>
+      <stop offset=".4" stop-color="#11151C"/>
+      <stop offset="1" stop-color="#030406"/>
+    </linearGradient>
+    <linearGradient id="pglass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5F6C7D"/>
+      <stop offset="1" stop-color="#151B23"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#9AA3AF"/>
+    </linearGradient>
+    <radialGradient id="prim" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#F2F4F7"/>
+      <stop offset=".5" stop-color="#B7BEC8"/>
+      <stop offset="1" stop-color="#5A616B"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="120" cy="88" rx="114" ry="6" fill="#000" opacity=".2"/>
+  <path d="M6 70 C6 61 12 56 26 54 L58 50 C72 37 90 30 112 29 L158 29 C178 30 192 37 206 49 L224 52 C232 54 236 60 236 67 L236 75 C236 78 234 80 231 80 L14 80 C9 80 6 77 6 73 Z" fill="url(#pbody)"/>
+  <path d="M66 50 C78 39 94 33 112 33 L128 33 L128 50 Z" fill="url(#pglass)"/>
+  <rect x="132" y="33" width="34" height="17" rx="2" fill="url(#pglass)"/>
+  <path d="M170 33 L176 33 C188 34 196 40 204 50 L170 50 Z" fill="url(#pglass)"/>
+  <path d="M60 51 L208 51" stroke="url(#chrome)" stroke-width="1.6"/>
+  <path d="M10 64 L234 64" stroke="url(#chrome)" stroke-width="1.2" opacity=".8"/>
+  <rect x="9" y="58" width="13" height="4" rx="2" fill="#E8F0FF"/>
+  <rect x="228" y="57" width="7" height="5" rx="2" fill="#B3262B"/>
+  <path d="M112 56 L120 56 M152 56 L160 56 M186 56 L192 56" stroke="url(#chrome)" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="54" cy="78" r="15" fill="#08090C"/>
+  <circle cx="54" cy="78" r="10" fill="url(#prim)"/>
+  <circle cx="54" cy="78" r="3" fill="#2E343C"/>
+  <circle cx="196" cy="78" r="15" fill="#08090C"/>
+  <circle cx="196" cy="78" r="10" fill="url(#prim)"/>
+  <circle cx="196" cy="78" r="3" fill="#2E343C"/>
+</svg>
