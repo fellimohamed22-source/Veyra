@@ -43,6 +43,9 @@ class ChatSocket {
     try {
       final channel = WebSocketChannel.connect(Uri.parse('$wsBase/ws'));
       _channel = channel;
+      // A refused upgrade fails this future: retry quietly instead of
+      // surfacing an uncaught error.
+      unawaited(channel.ready.then((_) {}, onError: (_) => _scheduleReconnect()));
       _sub = channel.stream.listen(
         _onData,
         onDone: _scheduleReconnect,

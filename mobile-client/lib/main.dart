@@ -2114,7 +2114,51 @@ class _OffersScreenState extends State<OffersScreen>{
         ]);
       },
     )),
+    // Board 01 P6: « Annuler la demande » while it waits for offers.
+    bottomNavigationBar:FutureBuilder<Map<String,dynamic>>(
+      future:bookingFuture,
+      builder:(context,bs){
+        final status=(bs.data?['status']??'').toString();
+        if(!_offerPhaseStates.contains(status))return const SizedBox.shrink();
+        return SafeArea(child:Padding(
+          padding:const EdgeInsets.fromLTRB(16,8,16,12),
+          child:OutlinedButton.icon(
+            key:const ValueKey('cancel-request'),
+            style:OutlinedButton.styleFrom(foregroundColor:VeyraColors.danger,side:const BorderSide(color:VeyraColors.danger),minimumSize:const Size.fromHeight(50)),
+            onPressed:cancelling?null:cancelRequest,
+            icon:const Icon(Icons.delete_outline),
+            label:Text(cancelling?t('Annulation…'):t('Annuler la demande')),
+          ),
+        ));
+      },
+    ),
   );
+
+  bool cancelling=false;
+
+  Future<void> cancelRequest()async{
+    final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
+      title:Text(t('Annuler la demande ?')),
+      content:Text(t('Les chauffeurs ne pourront plus vous faire d’offre. Aucun frais : aucun chauffeur n’a encore été choisi.')),
+      actions:[
+        TextButton(onPressed:()=>Navigator.pop(d,false),child:Text(t('Garder ma demande'))),
+        FilledButton(style:FilledButton.styleFrom(backgroundColor:VeyraColors.danger,minimumSize:const Size(0,48)),onPressed:()=>Navigator.pop(d,true),child:Text(t('Annuler la demande'))),
+      ],
+    ));
+    if(ok!=true||!mounted)return;
+    setState((){cancelling=true;error=null;});
+    try{
+      await api.cancel(widget.bookingId);
+      RefreshBus.bump();
+      if(!mounted)return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t('Demande annulée.'))));
+      context.go('/home');
+    }catch(e){
+      if(mounted)setState(()=>error=VeyraErrorMessages.forException(e));
+    }finally{
+      if(mounted)setState(()=>cancelling=false);
+    }
+  }
 }
 
 class _FavoritePill extends StatelessWidget{

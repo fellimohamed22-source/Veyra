@@ -100,6 +100,9 @@ public class SecurityConfig {
                 "/api/v1/payments/stripe/webhook",
                 // PART-03: passenger tracking link, authorised by its own token.
                 "/api/v1/guest/**",
+                // Chat socket: the HTTP upgrade carries no token; the STOMP
+                // CONNECT frame is authenticated (StompAuthConfig).
+                "/ws",
                 "/actuator/health")
             .permitAll()
             .anyRequest()
