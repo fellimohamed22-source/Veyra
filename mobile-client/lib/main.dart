@@ -1676,10 +1676,15 @@ class _AddressScreenState extends State<AddressScreen>{
       onTap:locating?null:useMyLocation,
       trailing:locating?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):null,
     ),
-    const SizedBox(height:14),
-    VeyraRouteMap(pickup:point(pickupPlace),height:190),
-    const SizedBox(height:18),
-    ...suggestions(true),
+    // While typing, results sit right under the actions so the keyboard
+    // never hides them; the map comes back once a place is chosen.
+    if(pickupResults.isNotEmpty)...[const SizedBox(height:14),...suggestions(true)]
+    else...[
+      const SizedBox(height:14),
+      VeyraRouteMap(pickup:point(pickupPlace),height:190),
+      const SizedBox(height:18),
+      ...suggestions(true),
+    ],
   ]);
 
   Widget stepDropoff()=>ListView(padding:const EdgeInsets.fromLTRB(20,8,20,20),children:[
@@ -1688,6 +1693,8 @@ class _AddressScreenState extends State<AddressScreen>{
     searchField(false),
     const SizedBox(height:10),
     VeyraTapRow(icon:Icons.map_outlined,label:pickOnMap?t('Touchez la carte pour placer la destination'):t('Choisir sur la carte'),muted:true,onTap:()=>setState(()=>pickOnMap=!pickOnMap)),
+    if(dropoffResults.isNotEmpty&&!pickOnMap)...[const SizedBox(height:14),...suggestions(false)]
+    else...[
     const SizedBox(height:14),
     // Board 09 step 2 shows the destination pin only.
     VeyraRouteMap(
@@ -1699,6 +1706,7 @@ class _AddressScreenState extends State<AddressScreen>{
     ),
     const SizedBox(height:18),
     ...suggestions(false),
+    ],
   ]);
 
   Widget stepCategory()=>FutureBuilder<List<dynamic>>(

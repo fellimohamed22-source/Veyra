@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veyra_client/main.dart';
+import 'package:veyra_client/core/widgets/veyra_ui.dart' show VeyraRouteMap;
 
 void main() {
   testWidgets('late address results cannot replace the current search',
@@ -37,6 +38,9 @@ void main() {
     // Suggestions show the street as title and the rest as subtitle.
     expect(find.text('Cannes Centre'), findsOneWidget);
     expect(find.text('Nice Ville'), findsNothing);
+    // Results sit right under the actions, the map is hidden while typing
+    // (the keyboard would otherwise cover them).
+    expect(find.byType(VeyraRouteMap), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

@@ -66,30 +66,41 @@ class VeyraTiles {
     );
   }
 
+  /// Fallback until the Google key works (CARTO basemaps now need a key).
   static Widget _carto(String package) => TileLayer(
-        urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-        subdomains: const ['a', 'b', 'c', 'd'],
-        retinaMode: true,
+        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         userAgentPackageName: package,
       );
 
   /// Attribution required by the tile provider (Google logo bottom-left).
-  static Widget attribution() => google
-      ? const Positioned(
+  /// Fills the map stack; shows « Google » only once a Google session exists.
+  static Widget attribution() => Positioned.fill(
+        child: IgnorePointer(
+          child: !google
+              ? Stack(children: [_fallbackAttribution()])
+              : FutureBuilder<String?>(
+                  future: session(),
+                  builder: (context, s) => Stack(children: [s.data != null ? _googleAttribution() : _fallbackAttribution()]),
+                ),
+        ),
+      );
+
+  static Widget _googleAttribution() => const Positioned(
           left: 8,
           bottom: 6,
           child: IgnorePointer(
             child: Text('Google', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF5F6368), letterSpacing: -.2)),
           ),
-        )
-      : Positioned(
+        );
+
+  static Widget _fallbackAttribution() => Positioned(
           right: 6,
           bottom: 4,
           child: IgnorePointer(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(color: Colors.white.withValues(alpha: .85), borderRadius: BorderRadius.circular(4)),
-              child: const Text('© OpenStreetMap © CARTO', style: TextStyle(fontSize: 8, color: Color(0xFF6B7280))),
+              child: const Text('© OpenStreetMap', style: TextStyle(fontSize: 8, color: Color(0xFF6B7280))),
             ),
           ),
         );
