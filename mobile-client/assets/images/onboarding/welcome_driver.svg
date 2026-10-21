@@ -1,121 +1,182 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 560" preserveAspectRatio="xMidYMid slice">
-  <!-- Board 08 B1 welcome illustration: chauffeur in a dark suit in front
-       of a black saloon, Paris street in warm evening light, Eiffel Tower
-       in the distance. Stylised illustration, not a photo of a real person. -->
+  <!-- Board 08 B1 welcome illustration: clean-shaven chauffeur in a dark
+       suit beside a black saloon, Paris avenue at golden hour, Eiffel Tower
+       in the distance. Stylised illustration drawn for VEYRA, not a photo. -->
   <defs>
-    <linearGradient id="dsky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#E9DCCB"/>
-      <stop offset=".35" stop-color="#E4C9A6"/>
-      <stop offset=".7" stop-color="#9C7B5E"/>
-      <stop offset="1" stop-color="#2A2420"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EEE4D6"/>
+      <stop offset=".38" stop-color="#EBCFA8"/>
+      <stop offset=".62" stop-color="#C79A6D"/>
+      <stop offset="1" stop-color="#3A2E26"/>
     </linearGradient>
-    <linearGradient id="dstone" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#C9AE8A"/>
-      <stop offset="1" stop-color="#E2CBA9"/>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9B49B"/>
+      <stop offset="1" stop-color="#B49A7E"/>
     </linearGradient>
-    <linearGradient id="dstoneR" x1="1" y1="0" x2="0" y2="0">
-      <stop offset="0" stop-color="#B89A74"/>
-      <stop offset="1" stop-color="#D9BF9A"/>
+    <linearGradient id="facadeL" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#B9996F"/>
+      <stop offset="1" stop-color="#D9BE96"/>
     </linearGradient>
-    <linearGradient id="dcar" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4A5262"/>
-      <stop offset=".45" stop-color="#171C25"/>
-      <stop offset="1" stop-color="#06080B"/>
+    <linearGradient id="facadeR" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#A88B66"/>
+      <stop offset="1" stop-color="#CFB28B"/>
     </linearGradient>
-    <linearGradient id="dglass" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8FA0B4"/>
-      <stop offset="1" stop-color="#1F2833"/>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5E6470"/>
+      <stop offset="1" stop-color="#454A54"/>
+    </linearGradient>
+    <linearGradient id="street" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6E6158"/>
+      <stop offset="1" stop-color="#231D1A"/>
+    </linearGradient>
+    <linearGradient id="car" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#525B6C"/>
+      <stop offset=".35" stop-color="#1E242E"/>
+      <stop offset="1" stop-color="#05070A"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B7C2CF"/>
+      <stop offset=".5" stop-color="#5D6B7C"/>
+      <stop offset="1" stop-color="#1B232D"/>
     </linearGradient>
     <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2A3140"/>
-      <stop offset="1" stop-color="#11151C"/>
+      <stop offset="0" stop-color="#2D3546"/>
+      <stop offset="1" stop-color="#0F131A"/>
     </linearGradient>
-    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#D9A782"/>
-      <stop offset="1" stop-color="#B9825E"/>
+    <linearGradient id="suitLight" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3B4559" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#3B4559" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset=".45" stop-color="#000" stop-opacity="0"/>
-      <stop offset="1" stop-color="#000" stop-opacity=".55"/>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E8BC97"/>
+      <stop offset="1" stop-color="#C98F68"/>
     </linearGradient>
-    <radialGradient id="dglow" cx=".5" cy=".5" r=".5">
-      <stop offset="0" stop-color="#FFD98F" stop-opacity=".9"/>
-      <stop offset="1" stop-color="#FFD98F" stop-opacity="0"/>
+    <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A2A20"/>
+      <stop offset="1" stop-color="#241912"/>
+    </linearGradient>
+    <linearGradient id="vignette" x1="0" y1="0" x2="0" y2="1">
+      <stop offset=".5" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".6"/>
+    </linearGradient>
+    <radialGradient id="sun" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#FFE4B0" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#FFE4B0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lamp" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#FFD68A" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#FFD68A" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
-  <rect width="390" height="560" fill="url(#dsky)"/>
+  <rect width="390" height="560" fill="url(#sky)"/>
+  <circle cx="150" cy="300" r="150" fill="url(#sun)" opacity=".55"/>
 
-  <!-- Eiffel Tower, far left -->
-  <g fill="#8A7A6C" opacity=".75">
-    <path d="M64 120 L66 120 L67 150 L71 200 L77 236 L88 270 L100 300 L90 300 C86 288 80 280 66 278 C52 280 46 288 42 300 L32 300 L44 270 L55 236 L61 200 L65 150 Z"/>
-    <rect x="58" y="196" width="16" height="4"/>
-    <rect x="50" y="232" width="32" height="4"/>
-    <rect x="64" y="104" width="2" height="16"/>
-  </g>
-
-  <!-- Buildings -->
-  <path d="M110 150 L180 136 L196 150 L196 360 L110 360 Z" fill="url(#dstone)" opacity=".9"/>
-  <path d="M106 150 L182 132 L200 148 L106 160 Z" fill="#6F6C72"/>
-  <g fill="#7E6A55">
-    <rect x="120" y="172" width="10" height="18" rx="1"/><rect x="142" y="170" width="10" height="18" rx="1"/><rect x="164" y="168" width="10" height="18" rx="1"/>
-    <rect x="120" y="210" width="10" height="18" rx="1"/><rect x="142" y="208" width="10" height="18" rx="1"/><rect x="164" y="206" width="10" height="18" rx="1"/>
-  </g>
-  <g fill="#F3C47C">
-    <rect x="120" y="248" width="10" height="18" rx="1"/><rect x="164" y="246" width="10" height="18" rx="1"/>
-    <rect x="142" y="286" width="10" height="18" rx="1"/>
-  </g>
-  <path d="M300 60 L390 44 L390 380 L300 380 Z" fill="url(#dstoneR)"/>
-  <path d="M296 62 L390 40 L390 70 L296 80 Z" fill="#5F5C63"/>
-  <g fill="#7E6A55">
-    <rect x="312" y="96" width="14" height="24" rx="1"/><rect x="342" y="92" width="14" height="24" rx="1"/><rect x="370" y="88" width="14" height="24" rx="1"/>
-    <rect x="312" y="146" width="14" height="24" rx="1"/><rect x="370" y="140" width="14" height="24" rx="1"/>
-  </g>
-  <g fill="#F3C47C">
-    <rect x="342" y="142" width="14" height="24" rx="1"/>
-    <rect x="312" y="196" width="14" height="24" rx="1"/><rect x="342" y="192" width="14" height="24" rx="1"/><rect x="370" y="188" width="14" height="24" rx="1"/>
-  </g>
-  <circle cx="230" cy="250" r="60" fill="url(#dglow)" opacity=".5"/>
-
-  <!-- Black saloon behind the chauffeur -->
-  <g transform="translate(-30 300)">
-    <path d="M0 86 C0 72 10 64 30 60 L80 52 C102 34 128 24 160 23 L210 23 C240 24 262 35 282 50 L312 55 C330 58 340 66 340 78 L340 92 C340 96 336 100 330 100 L12 100 C4 100 0 96 0 90 Z" fill="url(#dcar)"/>
-    <path d="M92 52 C110 38 132 30 160 29 L182 29 L182 52 Z" fill="url(#dglass)"/>
-    <path d="M190 29 L210 29 C236 30 254 39 272 52 L190 52 Z" fill="url(#dglass)"/>
-    <path d="M10 72 L338 72" stroke="#9AA4B2" stroke-width="1.2" opacity=".45"/>
-    <path d="M84 54 L294 54" stroke="#D3D9E2" stroke-width="1.6" opacity=".5"/>
-    <circle cx="82" cy="98" r="21" fill="#08090C"/>
-    <circle cx="82" cy="98" r="13" fill="#9CA5B1"/>
-    <circle cx="268" cy="98" r="21" fill="#08090C"/>
-    <circle cx="268" cy="98" r="13" fill="#9CA5B1"/>
+  <!-- Far avenue with the Eiffel Tower -->
+  <path d="M0 330 L40 318 L70 324 L110 312 L150 320 L190 310 L230 318 L270 308 L300 316 L300 360 L0 360 Z" fill="url(#far)" opacity=".8"/>
+  <g fill="#8C7865" opacity=".85">
+    <path d="M118 150 L120 150 L121 182 L125 236 L131 272 L142 304 L152 328 L143 328 C139 316 132 308 120 306 C108 308 101 316 97 328 L88 328 L98 304 L109 272 L115 236 L119 182 Z"/>
+    <rect x="112" y="232" width="16" height="4" rx="1"/>
+    <rect x="104" y="268" width="32" height="4" rx="1"/>
+    <rect x="118.5" y="134" width="2" height="16"/>
   </g>
 
-  <!-- Chauffeur (stylised) -->
-  <g transform="translate(150 196)">
-    <!-- body / suit -->
-    <path d="M10 364 L18 214 C20 176 44 156 80 150 L110 150 C146 156 170 176 172 214 L180 364 Z" fill="url(#suit)"/>
-    <!-- shirt and tie -->
-    <path d="M78 150 L95 222 L112 150 Z" fill="#F4F2EE"/>
-    <path d="M91 160 L99 160 L102 172 L97 236 L95 240 L93 236 L88 172 Z" fill="#141820"/>
+  <!-- Left Haussmann facade -->
+  <path d="M0 120 L66 108 L66 420 L0 420 Z" fill="url(#facadeL)"/>
+  <path d="M0 112 L70 98 L72 116 L0 128 Z" fill="url(#roof)"/>
+  <g fill="#6E5B47">
+    <rect x="10" y="146" width="16" height="30" rx="2"/><rect x="40" y="142" width="16" height="30" rx="2"/>
+    <rect x="10" y="204" width="16" height="30" rx="2"/><rect x="40" y="200" width="16" height="30" rx="2"/>
+  </g>
+  <g fill="#F5C77E">
+    <rect x="10" y="262" width="16" height="30" rx="2"/><rect x="40" y="258" width="16" height="30" rx="2"/>
+    <rect x="40" y="316" width="16" height="30" rx="2"/>
+  </g>
+  <g fill="#3E3730" opacity=".7"><rect x="0" y="190" width="66" height="3"/><rect x="0" y="248" width="66" height="3"/></g>
+
+  <!-- Right Haussmann facade -->
+  <path d="M300 70 L390 54 L390 420 L300 420 Z" fill="url(#facadeR)"/>
+  <path d="M296 72 L390 50 L390 76 L298 90 Z" fill="url(#roof)"/>
+  <path d="M312 62 l7 -16 l7 16 Z M344 56 l7 -16 l7 16 Z M374 50 l7 -16 l7 16 Z" fill="#525865"/>
+  <g fill="#6E5B47">
+    <rect x="312" y="104" width="16" height="30" rx="2"/><rect x="342" y="98" width="16" height="30" rx="2"/><rect x="370" y="92" width="16" height="30" rx="2"/>
+    <rect x="312" y="162" width="16" height="30" rx="2"/><rect x="370" y="150" width="16" height="30" rx="2"/>
+  </g>
+  <g fill="#F5C77E">
+    <rect x="342" y="156" width="16" height="30" rx="2"/>
+    <rect x="312" y="220" width="16" height="30" rx="2"/><rect x="342" y="214" width="16" height="30" rx="2"/><rect x="370" y="208" width="16" height="30" rx="2"/>
+  </g>
+  <g fill="#3E3730" opacity=".7"><rect x="300" y="146" width="90" height="3"/><rect x="300" y="204" width="90" height="3"/></g>
+
+  <!-- Lamp posts -->
+  <rect x="82" y="250" width="3" height="170" fill="#2B2622"/>
+  <circle cx="83.5" cy="248" r="6" fill="#FFE3A6"/>
+  <circle cx="83.5" cy="248" r="26" fill="url(#lamp)"/>
+  <rect x="286" y="236" width="3" height="184" fill="#2B2622"/>
+  <circle cx="287.5" cy="234" r="6" fill="#FFE3A6"/>
+  <circle cx="287.5" cy="234" r="26" fill="url(#lamp)"/>
+
+  <!-- Street -->
+  <path d="M0 400 L390 400 L390 560 L0 560 Z" fill="url(#street)"/>
+  <path d="M150 400 L240 400 L390 470 L390 560 L0 560 L0 470 Z" fill="#4C423B" opacity=".45"/>
+
+  <!-- Black saloon, side view, behind the chauffeur -->
+  <g transform="translate(-24 318)">
+    <ellipse cx="190" cy="122" rx="210" ry="12" fill="#000" opacity=".35"/>
+    <path d="M0 92 C0 78 10 69 32 65 L92 56 C116 36 144 25 180 24 L238 24 C272 25 296 37 318 53 L352 58 C372 61 384 70 384 84 L384 100 C384 105 380 109 374 109 L14 109 C5 109 0 105 0 98 Z" fill="url(#car)"/>
+    <path d="M104 56 C124 40 148 31 180 30 L206 30 L206 56 Z" fill="url(#glass)"/>
+    <path d="M214 30 L238 30 C266 31 288 41 308 56 L214 56 Z" fill="url(#glass)"/>
+    <path d="M210 30 L210 106" stroke="#0B0E13" stroke-width="2"/>
+    <path d="M12 78 L382 78" stroke="#A3ADBB" stroke-width="1.2" opacity=".45"/>
+    <path d="M96 58 L330 58" stroke="#E0E5EC" stroke-width="1.8" opacity=".55"/>
+    <path d="M160 70 L172 70 M250 70 L262 70" stroke="#C9D0DA" stroke-width="2.4" stroke-linecap="round"/>
+    <rect x="6" y="70" width="20" height="6" rx="3" fill="#FFF0CC"/>
+    <rect x="368" y="70" width="14" height="6" rx="3" fill="#C4262D"/>
+    <circle cx="92" cy="106" r="24" fill="#08090C"/>
+    <circle cx="92" cy="106" r="15" fill="#A5AEBA"/>
+    <circle cx="92" cy="106" r="5" fill="#3A4048"/>
+    <circle cx="306" cy="106" r="24" fill="#08090C"/>
+    <circle cx="306" cy="106" r="15" fill="#A5AEBA"/>
+    <circle cx="306" cy="106" r="5" fill="#3A4048"/>
+  </g>
+
+  <!-- Chauffeur, clean-shaven, smiling -->
+  <g transform="translate(168 180)">
+    <!-- jacket -->
+    <path d="M6 380 L14 232 C16 196 40 174 78 166 L118 166 C156 174 180 196 182 232 L190 380 Z" fill="url(#suit)"/>
+    <path d="M14 232 C16 196 40 174 78 166 L84 166 L60 380 L6 380 Z" fill="url(#suitLight)" opacity=".5"/>
+    <!-- shirt, tie -->
+    <path d="M78 166 L98 246 L118 166 Z" fill="#F6F4F0"/>
+    <path d="M93 176 L103 176 L106 190 L101 252 L98 257 L95 252 L90 190 Z" fill="#141922"/>
+    <path d="M93 176 L103 176 L101 186 L95 186 Z" fill="#232A36"/>
     <!-- lapels -->
-    <path d="M78 150 L94 232 L66 186 L72 160 Z" fill="#1D232E"/>
-    <path d="M112 150 L96 232 L124 186 L118 160 Z" fill="#1D232E"/>
-    <!-- pocket square -->
-    <path d="M128 206 L148 202 L146 212 L130 214 Z" fill="#F4F2EE"/>
-    <!-- neck and head -->
-    <path d="M82 128 L108 128 L110 152 L95 160 L80 152 Z" fill="#B57E5B"/>
-    <ellipse cx="95" cy="92" rx="34" ry="42" fill="url(#skin)"/>
-    <path d="M60 86 C60 54 78 40 98 40 C120 40 132 56 130 82 C126 70 116 64 104 64 C88 64 74 70 62 92 Z" fill="#2B211B"/>
-    <path d="M66 104 C70 128 82 138 95 138 C108 138 120 128 124 104 C120 118 110 124 95 124 C80 124 70 118 66 104 Z" fill="#3A2C23" opacity=".85"/>
-    <ellipse cx="61" cy="96" rx="5" ry="9" fill="#C48F6A"/>
-    <ellipse cx="129" cy="96" rx="5" ry="9" fill="#C48F6A"/>
-    <!-- face -->
-    <path d="M74 80 Q83 75 91 79 M99 79 Q107 75 116 80" stroke="#2B211B" stroke-width="3" fill="none" stroke-linecap="round"/>
-    <ellipse cx="83" cy="90" rx="3.4" ry="2.6" fill="#1E1712"/>
-    <ellipse cx="107" cy="90" rx="3.4" ry="2.6" fill="#1E1712"/>
-    <path d="M95 92 Q93 102 90 106 Q95 108 99 106" stroke="#9C6A4A" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-    <path d="M84 114 Q95 121 106 114" stroke="#F4F2EE" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M78 166 L97 252 L64 204 L71 176 Z" fill="#1A202A"/>
+    <path d="M118 166 L99 252 L132 204 L125 176 Z" fill="#1A202A"/>
+    <!-- pocket square, buttons -->
+    <path d="M136 222 L156 218 L154 229 L138 231 Z" fill="#F6F4F0"/>
+    <circle cx="99" cy="290" r="3" fill="#0A0D12"/>
+    <circle cx="99" cy="322" r="3" fill="#0A0D12"/>
+    <!-- neck -->
+    <path d="M82 140 L114 140 L116 168 L98 176 L80 168 Z" fill="#D09A73"/>
+    <!-- ears -->
+    <ellipse cx="62" cy="100" rx="6" ry="10" fill="#D29C76"/>
+    <ellipse cx="134" cy="100" rx="6" ry="10" fill="#D29C76"/>
+    <!-- head, smooth jaw, no beard -->
+    <path d="M62 92 C62 58 78 40 98 40 C120 40 134 58 134 92 C134 120 122 146 98 148 C74 146 62 120 62 92 Z" fill="url(#face)"/>
+    <!-- short hair -->
+    <path d="M60 92 C58 56 76 34 100 34 C124 34 140 54 136 88 C132 72 124 62 112 58 C104 66 86 68 70 66 C64 72 62 82 62 94 Z" fill="url(#hair)"/>
+    <!-- brows, eyes, nose, smile -->
+    <path d="M74 86 Q83 81 91 85 M105 85 Q113 81 122 86" stroke="#2F2219" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <ellipse cx="83" cy="96" rx="3.6" ry="2.8" fill="#1E1712"/>
+    <ellipse cx="113" cy="96" rx="3.6" ry="2.8" fill="#1E1712"/>
+    <circle cx="84.2" cy="95.2" r=".9" fill="#FFF"/>
+    <circle cx="114.2" cy="95.2" r=".9" fill="#FFF"/>
+    <path d="M98 98 Q96 110 92 114 Q98 117 103 114" stroke="#A86F4B" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <path d="M84 124 Q98 135 112 124 Q98 129 84 124 Z" fill="#FFFFFF" stroke="#9C5A44" stroke-width="1.6" stroke-linejoin="round"/>
+    <!-- light cheek blush and chin highlight -->
+    <ellipse cx="76" cy="112" rx="7" ry="4" fill="#E79C7F" opacity=".35"/>
+    <ellipse cx="120" cy="112" rx="7" ry="4" fill="#E79C7F" opacity=".35"/>
   </g>
 
-  <rect width="390" height="560" fill="url(#shade)"/>
+  <rect width="390" height="560" fill="url(#vignette)"/>
 </svg>
