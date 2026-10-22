@@ -6,6 +6,11 @@ import org.springframework.http.*;import org.springframework.web.bind.annotation
  private static final Logger log=LoggerFactory.getLogger(ApiExceptionHandler.class);
  public record Error(String code,String message,String correlationId,Instant timestamp){}
  @ExceptionHandler(ApiException.class) ResponseEntity<Error> api(ApiException e){return ResponseEntity.status(e.status()).body(new Error(e.code(),e.getMessage(),UUID.randomUUID().toString(),Instant.now()));}
+ // Malformed or invalid request bodies and parameters are the caller's error (400), not a 500.
+ @ExceptionHandler({org.springframework.web.bind.MethodArgumentNotValidException.class,org.springframework.http.converter.HttpMessageNotReadableException.class,
+   org.springframework.web.bind.MissingServletRequestParameterException.class,org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+   org.springframework.web.method.annotation.HandlerMethodValidationException.class})
+ ResponseEntity<Error> badRequest(Exception e){return ResponseEntity.status(400).body(new Error("VALIDATION_ERROR","Requete invalide",UUID.randomUUID().toString(),Instant.now()));}
  @ExceptionHandler(Exception.class) ResponseEntity<Error> unexpected(Exception e){
   String correlationId=UUID.randomUUID().toString();
   // Real gap fixed here: this handler "handles" the exception by

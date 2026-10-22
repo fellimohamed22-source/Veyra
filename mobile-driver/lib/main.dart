@@ -734,7 +734,8 @@ class _LoginScreenState extends State<LoginScreen>{
         width:double.infinity,
         decoration:const BoxDecoration(color:Colors.white,borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
         // The sheet never takes the whole screen; its content scrolls.
-        constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*.72),
+        // Capped to the space left by the keyboard (it overflowed by a few px).
+        constraints:BoxConstraints(maxHeight:(){final s=MediaQuery.sizeOf(context).height;final free=s-MediaQuery.viewInsetsOf(context).bottom-MediaQuery.paddingOf(context).top;return free<s*.72?free:s*.72;}()),
         child:SafeArea(top:false,child:SingleChildScrollView(
           padding:const EdgeInsets.fromLTRB(24,24,24,16),
           child:AutofillGroup(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:showForm?loginForm():welcomeActions())),

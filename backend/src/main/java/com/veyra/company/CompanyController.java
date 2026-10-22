@@ -113,7 +113,7 @@ public class CompanyController {
   public Map<String, Object> overview(@PathVariable UUID id) {
     member(id);
     Map<String, Object> out = new LinkedHashMap<>(db.queryForMap(
-        "select id,legal_name,siren,revtc_number,address,contact_email,status,invite_code,rejection_reason_code from vtc_companies where id=?", id));
+        "select id,legal_name,siren,revtc_number,address,contact_email,status,invite_code,rejection_reason_code,vat_registered,vat_number from vtc_companies where id=?", id));
     out.put("approvedVehicles", count("select count(*) from vehicles v where v.company_id=? and v.status='APPROVED'", id));
     out.put("vehicles", count("select count(*) from vehicles v where v.company_id=?", id));
     out.put("activeDrivers", count("select count(*) from company_affiliations where company_id=? and status='ACTIVE'", id));

@@ -24,6 +24,7 @@ const BOOKING_STATUS_FR: Record<string,string> = {
 const PAYMENT_METHOD_FR: Record<string,string> = {
   CASH: 'Espèces',
   ONLINE: 'Paiement en ligne',
+  CARD: 'Carte bancaire',
   PARTNER_INVOICE: 'Facturation partenaire',
 };
 

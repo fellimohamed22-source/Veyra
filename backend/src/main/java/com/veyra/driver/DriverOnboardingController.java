@@ -174,7 +174,7 @@ public class DriverOnboardingController {
     Map<String, Object> result = new LinkedHashMap<>(db.queryForMap("select status,kyc_status,marketplace_enabled,rating,birth_date,driver_type from drivers where id=?", d));
     result.put("documents", db.queryForList("select id,type,side,subtype,status,rejection_reason_code,created_at,expires_at from driver_documents where driver_id=? and status<>'SUPERSEDED' order by created_at desc", d));
     result.put("vehicles", db.queryForList("select v.id,v.category_id,v.brand,v.model,v.year,v.plate_number,v.color,v.seats,v.baggage_capacity,v.status,vc.display_name as category_name from vehicles v join vehicle_categories vc on vc.id=v.category_id where v.driver_id=? order by case when v.status='APPROVED' then 0 else 1 end,v.id", d));
-    result.put("company", db.queryForList("select legal_name,siren,siret,legal_form,address,status from driver_companies where driver_id=?", d));
+    result.put("company", db.queryForList("select legal_name,siren,siret,legal_form,address,status,vat_registered,vat_number from driver_companies where driver_id=?", d));
     result.put("registration", db.queryForList("select registration_number,card_number,issued_at,expires_at from driver_vtc_registrations where driver_id=?", d));
     result.put("license", db.queryForList("select license_number,category,expires_at from driver_licenses where driver_id=?", d));
     result.put("bank", db.queryForList("select holder_name,iban_country,iban_last4,bic from driver_bank_accounts where driver_id=?", d).stream()

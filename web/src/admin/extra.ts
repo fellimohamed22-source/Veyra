@@ -26,7 +26,7 @@ const ACTIONS: Record<string, string> = {
       <input [(ngModel)]="filter" placeholder="Filtrer (action, élément…)" aria-label="Filtrer" style="max-width:280px"></div>
     <div class="errbox" *ngIf="error">{{error}}</div>
     <div class="tablewrap">
-      <table>
+      <table data-nofilter>
         <thead><tr><th>Date</th><th>Action</th><th>Élément</th><th>Par</th><th>Détail</th></tr></thead>
         <tbody><tr *ngFor="let l of filtered">
           <td>{{dateTime(l.created_at)}}</td>

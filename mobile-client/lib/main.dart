@@ -290,9 +290,9 @@ Future<void> _mainBody() async {
     return Material(child:SafeArea(child:SingleChildScrollView(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('ERREUR DE RENDU (diagnostic temporaire)',style:TextStyle(color:Colors.red,fontWeight:FontWeight.bold,fontSize:16)),
       const SizedBox(height:12),
-      SelectableText(details.exceptionAsString(),style:const TextStyle(fontSize:13)),
+      Text(details.exceptionAsString(),style:const TextStyle(fontSize:13)),
       const SizedBox(height:12),
-      SelectableText(details.stack?.toString()??'',style:const TextStyle(fontSize:10,color:Colors.black54)),
+      Text(details.stack?.toString()??'',style:const TextStyle(fontSize:10,color:Colors.black54)),
     ]))));
   };
   runApp(const App());
@@ -360,9 +360,10 @@ class App extends StatelessWidget{
         builder:(context,crash,_)=>Stack(children:[
           if(child!=null)child,
           if(crash!=null)Positioned(top:0,left:0,right:0,child:Material(color:Colors.red.shade900,child:SafeArea(bottom:false,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[
-            const Text('ERREUR CAPTURÉE (diagnostic temporaire)',style:TextStyle(color:Colors.white,fontWeight:FontWeight.bold)),
-            const SizedBox(height:6),
-            SelectableText(crash,style:const TextStyle(color:Colors.white,fontSize:12)),
+            Row(children:[const Expanded(child:Text('ERREUR CAPTURÉE (diagnostic temporaire)',style:TextStyle(color:Colors.white,fontWeight:FontWeight.bold))),IconButton(key:const Key('crash-close'),onPressed:()=>lastCrash.value=null,icon:const Icon(Icons.close,color:Colors.white))]),
+            // Plain Text: this banner sits above the Navigator, so there is no
+            // Overlay for SelectableText (it crashed and hid the real error).
+            Text(crash,maxLines:8,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:12)),
           ]))))),
         ]),
       ),
@@ -690,7 +691,8 @@ class _LoginScreenState extends State<LoginScreen>{
         width:double.infinity,
         decoration:const BoxDecoration(color:Colors.white,borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
         // The sheet never takes the whole screen; its content scrolls.
-        constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*.72),
+        // Capped to the space left by the keyboard (it overflowed by a few px).
+        constraints:BoxConstraints(maxHeight:(){final s=MediaQuery.sizeOf(context).height;final free=s-MediaQuery.viewInsetsOf(context).bottom-MediaQuery.paddingOf(context).top;return free<s*.72?free:s*.72;}()),
         child:SafeArea(top:false,child:SingleChildScrollView(
           padding:const EdgeInsets.fromLTRB(24,24,24,16),
           child:AutofillGroup(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:showForm?loginForm():welcomeActions())),
