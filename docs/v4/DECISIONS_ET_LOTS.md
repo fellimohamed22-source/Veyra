@@ -94,6 +94,9 @@ Livrés depuis : moteur de commission (L6), contrôle GPS (L8), Stripe (L10), OT
 | Expiration (20/10) | Pour tous les chauffeurs : pas d'offre si la carte VTC expire avant le jour de la course ; un document expiré bloque toutes les offres |
 | Apple (20/10) | Connexion Apple ajoutée |
 | Client visible du chauffeur (19/10) | **Oui** : prénom + initiale du nom (« Sophie M. ») et note moyenne donnée par les chauffeurs ; nom du passager pour une réservation partenaire ; jamais le nom complet ni le téléphone |
+| Comptes (22/10) | Une même adresse e-mail peut porter un compte client et un compte chauffeur ; chaque app refuse le compte de l'autre type (V058) |
+| Zone (22/10) | Restriction « Sud de la France » suspendue pour la création de demande (V056), réactivable |
+| Factures (22/10) | **Facture de course** par course terminée, émise par VEYRA au nom et pour le compte du chauffeur (ou de sa société VTC) — mandat de facturation —, montant total payé par le client ; TVA 10 % si l'émetteur est assujetti, sinon mention art. 293 B (statut déclaré par le chauffeur dans « Mes factures » ou par la société sur le portail). **Facture de commission** VEYRA mensuelle par chauffeur, mois clos. Émission au premier téléchargement puis figée (V059). Variables Render : `VEYRA_INVOICE_ISSUER_NAME`, `VEYRA_INVOICE_ISSUER_LEGAL_FORM`, `VEYRA_INVOICE_ISSUER_SIREN`, `VEYRA_INVOICE_ISSUER_ADDRESS`, `VEYRA_INVOICE_ISSUER_VAT_NUMBER`, `VEYRA_COMMISSION_VAT_BPS` (défaut 2000 = commission TTC à 20 %, **à confirmer**) |
 
 ## Audit des images du pack « TOTAL » (18/10/2026)
 

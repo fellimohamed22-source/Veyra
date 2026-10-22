@@ -7,7 +7,7 @@
  * Filtering applies to the rows loaded on screen.
  */
 const MAX_CHOICES = 12;
-const MIN_ROWS = 1;
+const MIN_ROWS = 2;
 // Columns that get a drop-down whenever they hold at least two values.
 const CATEGORY_HEADERS = /statut|paiement|type|cat[ée]gorie|r[ôo]le|dossier|profil|niveau|motif|action/i;
 

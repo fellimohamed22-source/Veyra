@@ -252,6 +252,12 @@ class Api {
   })).data);
 
   /// « Signaler un problème » (board 10 P4).
+  /// Short-lived link to the ride invoice PDF (owner decision 22/10/2026).
+  Future<Uri> rideInvoiceLink(String bookingId) async {
+    final r=await dio.post('/api/v1/bookings/$bookingId/invoice/link');
+    return Uri.parse(dio.options.baseUrl).resolve(r.data['url'] as String);
+  }
+
   Future<void> reportProblem(String bookingId,String category,{String? message}) async {
     await dio.post('/api/v1/bookings/$bookingId/problem-reports',data:{'category':category,'message':message});
   }

@@ -21,6 +21,17 @@ class VeyraErrorMessages {
   VeyraErrorMessages._();
 
   static const Map<String, String> _fr = {
+    'INVOICE_VAT_STATUS_MISSING': 'Facture pas encore disponible : le statut TVA du chauffeur doit être renseigné.',
+    'INVOICE_ISSUER_INCOMPLETE': 'Facture pas encore disponible : les informations légales du chauffeur sont incomplètes (SIREN).',
+    'INVOICE_RIDE_NOT_COMPLETED': 'La facture sera disponible une fois la course terminée.',
+    'INVOICE_VIA_PARTNER_BILLING': 'Cette course est facturée à votre établissement partenaire.',
+    'INVOICE_PERIOD_NOT_CLOSED': 'La facture du mois sera disponible après la fin du mois.',
+    'INVOICE_ISSUER_NOT_CONFIGURED': 'Factures de commission momentanément indisponibles. Réessayez plus tard.',
+    'INVOICE_NO_RIDES': 'Aucune course sur cette période.',
+    'INVOICE_LINK_EXPIRED': 'Lien de facture expiré : relancez le téléchargement.',
+    'VAT_NUMBER_INVALID': 'Numéro de TVA intracommunautaire invalide.',
+    'VAT_STATUS_REQUIRED': 'Choisissez votre statut TVA.',
+    'VAT_MANAGED_BY_COMPANY': 'Votre statut TVA est géré par votre société VTC.',
     'CLIENT_ACCOUNT_IN_DRIVER_APP': 'Ce compte est un compte client. Connectez-vous avec l’application VEYRA, ou créez un compte chauffeur (la même adresse e-mail est possible).',
     'DRIVER_ACCOUNT_IN_CLIENT_APP': 'Ce compte est un compte chauffeur. Connectez-vous avec l’application VEYRA Chauffeur, ou créez un compte client (la même adresse e-mail est possible).',
     'CURRENT_PASSWORD_INVALID': 'Mot de passe actuel incorrect.',
@@ -60,6 +71,17 @@ class VeyraErrorMessages {
   };
 
   static const Map<String, String> _en = {
+    'INVOICE_VAT_STATUS_MISSING': 'Invoice not available yet: the driver must set their VAT status.',
+    'INVOICE_ISSUER_INCOMPLETE': 'Invoice not available yet: the driver’s legal details are incomplete (SIREN).',
+    'INVOICE_RIDE_NOT_COMPLETED': 'The invoice will be available once the ride is completed.',
+    'INVOICE_VIA_PARTNER_BILLING': 'This ride is invoiced to your partner organisation.',
+    'INVOICE_PERIOD_NOT_CLOSED': 'The monthly invoice will be available after the month ends.',
+    'INVOICE_ISSUER_NOT_CONFIGURED': 'Commission invoices are temporarily unavailable. Try again later.',
+    'INVOICE_NO_RIDES': 'No ride in this period.',
+    'INVOICE_LINK_EXPIRED': 'Invoice link expired: download it again.',
+    'VAT_NUMBER_INVALID': 'Invalid EU VAT number.',
+    'VAT_STATUS_REQUIRED': 'Choose your VAT status.',
+    'VAT_MANAGED_BY_COMPANY': 'Your VAT status is managed by your VTC company.',
     'CLIENT_ACCOUNT_IN_DRIVER_APP': 'This is a client account. Sign in with the VEYRA app, or create a driver account (the same e-mail is allowed).',
     'DRIVER_ACCOUNT_IN_CLIENT_APP': 'This is a driver account. Sign in with the VEYRA Driver app, or create a client account (the same e-mail is allowed).',
     'CURRENT_PASSWORD_INVALID': 'Current password is incorrect.',

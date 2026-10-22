@@ -33,7 +33,7 @@ const MISSING_FR: Record<string, string> = {
 /** SOC-07 / SOC-09 / SOC-10: fleet dashboard. */
 @Component({
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="errbox" *ngIf="error">{{error}}</div>
     <ng-container *ngIf="o">
@@ -60,6 +60,19 @@ const MISSING_FR: Record<string, string> = {
         <a class="card kpi" routerLink="/societe/chauffeurs" style="text-decoration:none;color:inherit"><div class="n">{{o.activeDrivers}}</div><div class="l">Chauffeurs affiliés<span *ngIf="o.pendingDrivers"> · {{o.pendingDrivers}} à valider</span></div></a>
         <a class="card kpi" routerLink="/societe/documents" style="text-decoration:none;color:inherit"><div class="n">{{o.documentsToRenew}}</div><div class="l">Documents à renouveler</div></a>
         <a class="card kpi" routerLink="/societe/activite" style="text-decoration:none;color:inherit"><div class="n">{{o.ridesThisMonth}}</div><div class="l">Courses ce mois</div></a>
+      </div>
+
+      <div class="card" id="tva">
+        <h3>TVA et facturation</h3>
+        <div class="sub">VEYRA émet en votre nom les factures des courses de vos chauffeurs (mandat de facturation). Votre statut TVA y figure.</div>
+        <div class="warnbox" *ngIf="o.vat_registered === null || o.vat_registered === undefined">Statut TVA à renseigner : sans lui, les factures des courses de vos chauffeurs ne peuvent pas être émises.</div>
+        <div class="seg" role="radiogroup" aria-label="Statut TVA" style="justify-self:start">
+          <button type="button" role="radio" [attr.aria-checked]="vatRegistered === true" [class.on]="vatRegistered === true" (click)="vatRegistered = true">Assujettie à la TVA (10 %)</button>
+          <button type="button" role="radio" [attr.aria-checked]="vatRegistered === false" [class.on]="vatRegistered === false" (click)="vatRegistered = false">Franchise de TVA (art. 293 B)</button>
+        </div>
+        <div class="field" *ngIf="vatRegistered" style="max-width:320px"><label for="c-vat">N° de TVA intracommunautaire</label><input id="c-vat" [(ngModel)]="vatNumber" placeholder="FR12345678901" maxlength="20"></div>
+        <div class="errbox" *ngIf="vatError">{{vatError}}</div>
+        <div class="row"><button (click)="saveVat()" [disabled]="vatBusy || vatRegistered === null">{{vatBusy ? 'Enregistrement…' : 'Enregistrer'}}</button></div>
       </div>
 
       <div class="card">
@@ -90,6 +103,7 @@ export class CompanyDashboard implements OnInit {
   async load() {
     try {
       [this.o, this.expiries] = await Promise.all([this.api.companyOverview(this.ctx.id), this.api.companyExpiries(this.ctx.id)]);
+      this.syncVat();
     } catch (e: any) { this.error = errorMessage(e?.code); }
   }
   async submit() {
@@ -97,6 +111,17 @@ export class CompanyDashboard implements OnInit {
     try { await this.api.submitCompany(this.ctx.id); this.message = 'Dossier envoyé : VEYRA vous répond après vérification.'; await this.load(); await this.ctx.load(); }
     catch (e: any) { this.error = e?.missing ? 'Le dossier est incomplet.' : errorMessage(e?.code); }
     finally { this.busy = false; }
+  }
+  vatRegistered: boolean | null = null; vatNumber = ''; vatBusy = false; vatError = '';
+  private syncVat() { this.vatRegistered = this.o?.vat_registered ?? null; this.vatNumber = this.o?.vat_number || ''; }
+  async saveVat() {
+    if (this.vatRegistered === null) return;
+    const number = this.vatNumber.replace(/s/g, '').toUpperCase();
+    if (this.vatRegistered && !/^[A-Z]{2}[A-Z0-9]{2,13}$/.test(number)) { this.vatError = 'Numéro de TVA intracommunautaire invalide (ex. FR12345678901).'; return; }
+    this.vatBusy = true; this.vatError = ''; this.message = '';
+    try { await this.api.setCompanyVat(this.ctx.id, this.vatRegistered, this.vatRegistered ? number : null); this.message = 'Statut TVA enregistré.'; await this.load(); }
+    catch (e: any) { this.vatError = errorMessage(e?.code); }
+    finally { this.vatBusy = false; }
   }
   missingLabel(m: string) { return MISSING_FR[m] || documentTypeLabel(m); }
   siren(s: string) { return (s || '').replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'); }

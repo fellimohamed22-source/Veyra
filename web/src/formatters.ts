@@ -82,6 +82,18 @@ const DOCUMENT_TYPE_FR: Record<string,string> = {
 // identique à celui utilisé côté Flutter (core/formatters/error_messages.dart),
 // plus les codes réels rencontrés en pratique et vérifiés dans le backend.
 const ERROR_MESSAGES_FR: Record<string,string> = {
+  INVOICE_VAT_STATUS_MISSING: 'Facture impossible : le statut TVA de l’émetteur (chauffeur ou société) n’est pas renseigné.',
+  INVOICE_ISSUER_INCOMPLETE: 'Facture impossible : SIREN du chauffeur manquant.',
+  INVOICE_RIDE_NOT_COMPLETED: 'La facture sera disponible une fois la course terminée.',
+  INVOICE_VIA_PARTNER_BILLING: 'Course facturée à l’établissement (facturation partenaire).',
+  INVOICE_PERIOD_NOT_CLOSED: 'La facture du mois sera disponible après la fin du mois.',
+  INVOICE_ISSUER_NOT_CONFIGURED: 'Identité légale VEYRA non configurée (VEYRA_INVOICE_ISSUER_SIREN / ADDRESS).',
+  INVOICE_NO_RIDES: 'Aucune course sur cette période.',
+  INVOICE_NOT_FOUND: 'Facture introuvable.',
+  INVOICE_LINK_EXPIRED: 'Lien de facture expiré : relancez le téléchargement.',
+  VAT_NUMBER_INVALID: 'Numéro de TVA intracommunautaire invalide.',
+  VAT_STATUS_REQUIRED: 'Choisissez le statut TVA.',
+  VALIDATION_ERROR: 'Requête invalide : vérifiez les champs saisis.',
   EMAIL_INVALID: 'Adresse e-mail invalide.',
   ALREADY_PAID: 'Cette course est déjà réglée.',
   BOOKING_NOT_PAYABLE: 'Le paiement s’ouvre dès que le chauffeur est confirmé.',

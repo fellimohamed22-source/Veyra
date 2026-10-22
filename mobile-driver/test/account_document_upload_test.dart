@@ -40,6 +40,9 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: AccountScreen()));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byTooltip('Téléverser'), 200);
+    // The documents sit in a nested list: bring the button fully on screen.
+    await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Téléverser'));
     await tester.pumpAndSettle();
     expect(find.byType(SnackBar), findsOneWidget);

@@ -25,6 +25,7 @@ import 'api.dart';
 import 'app_locale.dart';
 import 'app/theme.dart';
 import 'core/formatters/error_messages.dart';
+import 'core/invoices/invoice_link.dart';
 import 'core/formatters/date_formatter.dart';
 import 'core/formatters/money_formatter.dart';
 import 'core/formatters/status_labels.dart';
@@ -2596,6 +2597,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   bool ratingSubmitted=false;
   bool favorite=false;
   bool favoriteBusy=false;
+  bool invoiceBusy=false;
 
   @override void initState(){
     super.initState();
@@ -2988,6 +2990,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
             if(_pinStates.contains(status))pinSection(),
             if(_pastStates.contains(status))...[
               ratingSection(),
+              if(x['payment_method']!='PARTNER_INVOICE')Padding(padding:const EdgeInsets.only(bottom:12),child:OutlinedButton.icon(key:const Key('invoice-download'),onPressed:invoiceBusy?null:()async{setState(()=>invoiceBusy=true);await openInvoiceLink(context,()=>api.rideInvoiceLink(widget.bookingId));if(mounted)setState(()=>invoiceBusy=false);},icon:const Icon(Icons.receipt_long_outlined),label:Text(t('Télécharger la facture')))),
               if(hasDriver)Padding(padding:const EdgeInsets.only(bottom:12),child:OutlinedButton.icon(onPressed:favoriteBusy?null:()=>toggleFavorite(x),icon:Icon(favorite?Icons.favorite:Icons.favorite_border,color:VeyraColors.pinRed),label:Text(favorite?t('Retirer des favoris'):t('Ajouter le chauffeur aux favoris')))),
             ],
             if(terminal)FilledButton.icon(onPressed:()=>context.push('/addresses',extra:x),icon:const Icon(Icons.replay),label:Text(t('Réserver à nouveau'))),

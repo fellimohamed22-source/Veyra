@@ -24,6 +24,7 @@ import 'api.dart';
 import 'app_locale.dart';
 import 'app/theme.dart';
 import 'core/formatters/error_messages.dart';
+import 'core/invoices/driver_invoices_screen.dart';
 import 'core/formatters/status_labels.dart';
 import 'core/formatters/date_formatter.dart';
 import 'core/formatters/money_formatter.dart';
@@ -3171,6 +3172,7 @@ class _WalletScreenState extends State<WalletScreen>{
           ])),
           balance(Icons.account_balance_wallet_outlined,VeyraColors.success,t('Solde à recevoir'),x['onlinePayableMinor'],note:t('Montants dus par Veyra, en attente de versement.')),
           balance(Icons.warning_amber_rounded,VeyraColors.danger,t('Commissions espèces à reverser'),x['cashDebtMinor']),
+          Padding(padding:const EdgeInsets.only(bottom:14),child:OutlinedButton.icon(key:const Key('open-invoices'),onPressed:()=>openDriverInvoices(context),icon:const Icon(Icons.receipt_long_outlined),label:Text(t('Mes factures')))),
           if(x['cashWarning']==true)Padding(padding:const EdgeInsets.only(bottom:14),child:VeyraBanner(
             tone:VeyraTone.warning,
             title:t('Seuil de dette atteint'),
@@ -3333,7 +3335,7 @@ Future<void> logout()async{await activeRideTracker.stop();await api.logout();try
               trailing:const Icon(Icons.chevron_right),
               onTap:()=>context.push('/kyc'),
             ));
-          }),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),DriverDocuments(documents:docs,onRetry:()=>setState((){docs=api.documents();}),onUpload:busy?null:doc),const Card(child:Padding(padding:EdgeInsets.symmetric(horizontal:16),child:LanguageTile())),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}));}
+          }),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password),ListTile(key:const Key('account-invoices'),leading:const Icon(Icons.receipt_long_outlined),title:Text(t('Mes factures')),subtitle:Text(t('Statut TVA, factures de course et de commission')),onTap:()=>openDriverInvoices(context))])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),DriverDocuments(documents:docs,onRetry:()=>setState((){docs=api.documents();}),onUpload:busy?null:doc),const Card(child:Padding(padding:EdgeInsets.symmetric(horizontal:16),child:LanguageTile())),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}));}
 
 /// Coquille de navigation persistante chauffeur (bottom nav 4 onglets),
 /// conforme à la maquette D14 : Demandes / Planning / Revenus / Compte.
@@ -3398,3 +3400,11 @@ Future<void> driverLogout(BuildContext context)async{
 Future<void> refreshUnreadNotifications()async{
   try{veyraUnreadNotifications.value=await api.unreadNotifications();}catch(_){}
 }
+
+/// « Mes factures » with the real API (earnings screen and Paramètres).
+void openDriverInvoices(BuildContext context)=>Navigator.push(context,MaterialPageRoute(builder:(_)=>DriverInvoicesScreen(
+  load:api.invoices,
+  saveVat:api.saveVat,
+  rideLink:api.rideInvoiceLink,
+  commissionLink:api.commissionInvoiceLink,
+)));

@@ -145,6 +145,18 @@ export class Api {
   markPayablePaid(id:string){return this.request('/finance/payables/'+id+'/mark-paid',{method:'POST'});}
   generatePartnerInvoice(partnerId:string,from:string,to:string){return this.request('/finance/partners/'+partnerId+'/invoices/generate?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{method:'POST'});}
   driverBank(driverId:string){return this.request('/finance/drivers/'+driverId+'/bank');}
+  // Invoices (V059): issued invoices and short-lived PDF links.
+  financeInvoices(filter:{driverId?:string;kind?:string}={}){
+    const q=new URLSearchParams();
+    if(filter.driverId)q.set('driverId',filter.driverId);
+    if(filter.kind)q.set('kind',filter.kind);
+    return this.request('/finance/invoices'+(q.toString()?'?'+q:''));
+  }
+  async financeInvoiceUrl(id:string):Promise<string>{return this.absolute((await this.request('/finance/invoices/'+id+'/link',{method:'POST'})).url);}
+  async bookingInvoiceUrl(bookingId:string):Promise<string>{return this.absolute((await this.request('/bookings/'+bookingId+'/invoice/link',{method:'POST'})).url);}
+  setCompanyVat(id:string,vatRegistered:boolean,vatNumber:string|null){return this.request('/company/'+id+'/vat',{method:'PUT',body:JSON.stringify({vatRegistered,vatNumber})});}
+  /** Link paths from the API start with /api/v1. */
+  absolute(path:string){return new URL(path,this.base).toString();}
   adminDriverVehicles(id:string){return this.request('/admin/drivers/'+id+'/vehicles');}
   auditLogs(limit=200){return this.request('/admin/audit?limit='+limit);}
   priceGrid(){return this.request('/admin/suggested-price-grid');}

@@ -46,6 +46,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(updates, 1);
     expect(find.byType(SnackBar), findsOneWidget);
+    // The identity header is at the top of the (long) settings list.
+    await tester.drag(find.byType(ListView).first, const Offset(0, 3000));
+    await tester.pumpAndSettle();
     expect(find.text('Alex Martin'), findsOneWidget);
     expect(find.text('Chris Martin'), findsNothing);
     expect(tester.takeException(), isNull);

@@ -80,6 +80,30 @@ import {dateTime, errorMessage, money} from '../formatters';
     </div>
 
     <div class="card">
+      <h3>Factures émises</h3>
+      <div class="sub">Factures de course (au nom du chauffeur ou de sa société, mandat de facturation) et factures mensuelles de commission VEYRA. Une facture est émise à son premier téléchargement.</div>
+      <div class="row">
+        <div class="seg"><button *ngFor="let k of invoiceKinds" type="button" [class.on]="invoiceKind === k.key" (click)="invoiceKind = k.key; loadInvoices()">{{k.label}}</button></div>
+      </div>
+      <div class="errbox" *ngIf="invoicesError">{{invoicesError}}</div>
+      <p class="empty" *ngIf="!invoicesError && !invoices.length">Aucune facture émise.</p>
+      <div class="tablewrap" *ngIf="invoices.length">
+        <table>
+          <thead><tr><th>Numéro</th><th>Type</th><th>Émise le</th><th>Émetteur</th><th>Client</th><th>Montant TTC</th><th></th></tr></thead>
+          <tbody><tr *ngFor="let i of invoices">
+            <td class="mono"><b>{{i.number}}</b></td>
+            <td><span class="pill" [ngClass]="i.kind === 'RIDE' ? 'p-info' : 'p-mute'">{{i.kind === 'RIDE' ? 'Course' : 'Commission'}}</span></td>
+            <td>{{dateTime(i.issued_at)}}<div class="sub" *ngIf="i.period_start">période {{monthOf(i.period_start)}}</div></td>
+            <td>{{i.seller_name || '—'}}</td>
+            <td>{{i.buyer_name || '—'}}</td>
+            <td>{{money(i.total_ttc_minor)}}</td>
+            <td><button class="ghost" (click)="openInvoice(i)">PDF</button></td>
+          </tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>Facturation d'un établissement</h3>
       <div class="grid3">
         <div class="field"><label for="f-partner">Établissement</label>
@@ -102,6 +126,7 @@ export class Finance implements OnInit {
   async ngOnInit() {
     await this.load();
     try { this.partners = await this.api.adminPartners(); } catch {}
+    await this.loadInvoices();
   }
   async load() {
     this.loading = true; this.error = '';
@@ -128,6 +153,20 @@ export class Finance implements OnInit {
     catch (e: any) { this.bankError[p.driver_id] = e?.code === 'BANK_ACCOUNT_NOT_FOUND' ? 'Ce chauffeur n’a pas encore renseigné son compte bancaire.' : errorMessage(e?.code); }
   }
   markPaid(p: any) { return this.act(() => this.api.markPayablePaid(p.id), 'Versement enregistré.'); }
+  invoices: any[] = []; invoicesError = ''; invoiceKind = '';
+  invoiceKinds = [{key: '', label: 'Toutes'}, {key: 'RIDE', label: 'Courses'}, {key: 'COMMISSION', label: 'Commissions'}];
+  async loadInvoices() {
+    this.invoicesError = '';
+    try { this.invoices = await this.api.financeInvoices({kind: this.invoiceKind || undefined}); }
+    catch (e: any) { this.invoices = []; this.invoicesError = errorMessage(e?.code); }
+  }
+  monthOf(d: string) { const [y, m] = String(d).split('-'); return m && y ? m + '/' + y : d; }
+  /** The tab opens before the request so the browser does not block it. */
+  async openInvoice(i: any) {
+    const tab = window.open('', '_blank');
+    try { const url = await this.api.financeInvoiceUrl(i.id); if (tab) tab.location.href = url; else location.href = url; }
+    catch (e: any) { tab?.close(); this.error = errorMessage(e?.code); }
+  }
   async generateInvoice() {
     this.invoiceLoading = true; this.invoiceResult = null;
     try { this.invoiceResult = await this.api.generatePartnerInvoice(this.invoicePartnerId, this.invoiceFrom, this.invoiceTo) || {}; }

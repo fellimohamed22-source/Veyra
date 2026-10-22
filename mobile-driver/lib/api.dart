@@ -253,6 +253,22 @@ class Api {
   Future<Map<String,dynamic>> bookingDetail(String id) async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/bookings/$id')).data);
 
+  // Invoices (V059): ride invoices issued on the driver's behalf, monthly
+  // VEYRA commission invoices, and the VAT status they depend on.
+  Future<Map<String,dynamic>> invoices() async =>
+      Map<String,dynamic>.from((await dio.get('/api/v1/driver/invoices')).data);
+
+  Future<Uri> rideInvoiceLink(String bookingId) async =>
+      _absolute((await dio.post('/api/v1/driver/invoices/rides/$bookingId/link')).data['url'] as String);
+
+  Future<Uri> commissionInvoiceLink(String month) async =>
+      _absolute((await dio.post('/api/v1/driver/invoices/commissions/$month/link')).data['url'] as String);
+
+  Future<Map<String,dynamic>> saveVat(bool registered,String? number) async =>
+      Map<String,dynamic>.from((await dio.put('/api/v1/driver/invoices/vat',data:{'vatRegistered':registered,'vatNumber':number})).data);
+
+  Uri _absolute(String path)=>Uri.parse(dio.options.baseUrl).resolve(path);
+
   Future<Map<String,dynamic>> wallet() async =>
       Map<String,dynamic>.from((await dio.get('/api/v1/driver/wallet')).data);
 
