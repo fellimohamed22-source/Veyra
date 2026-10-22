@@ -118,7 +118,8 @@ class Api {
   Future<void> login(String email,String password) async {
     _me=null;
     final r=await dio.post('/api/v1/auth/login',data:{
-      'email':email.trim(),'password':password,'deviceName':'driver-mobile'
+      // Driver-type account only (a client account is refused, V058).
+      'email':email.trim(),'password':password,'deviceName':'driver-mobile','accountType':'DRIVER'
     });
     await storage.write(key:'accessToken',value:r.data['accessToken']);
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);
@@ -177,7 +178,7 @@ class Api {
   }
 
   Future<void> forgotPassword(String email) async {
-    await dio.post('/api/v1/auth/forgot-password',data:{'email':email.trim()});
+    await dio.post('/api/v1/auth/forgot-password',data:{'email':email.trim(),'accountType':'DRIVER'});
   }
 
   Future<void> resetPassword(String token,String newPassword) async {
@@ -295,6 +296,10 @@ class Api {
   /// « Envoyer mon dossier »: 422 DOSSIER_INCOMPLETE lists what is missing.
   Future<Map<String,dynamic>> submitDossier() async =>
       Map<String,dynamic>.from((await dio.post('/api/v1/driver/onboarding/submit')).data);
+
+  /// Payout bank account (IBAN checked and encrypted by the server).
+  Future<Map<String,dynamic>> saveBank({required String holderName,required String iban,String? bic}) async =>
+      Map<String,dynamic>.from((await dio.put('/api/v1/driver/onboarding/bank',data:{'holderName':holderName,'iban':iban,'bic':bic})).data);
 
   Future<void> saveVtc({
     String? registrationNumber,

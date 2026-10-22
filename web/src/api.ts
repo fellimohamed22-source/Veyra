@@ -144,6 +144,7 @@ export class Api {
   settleCustomerDebt(id:string,amountMinor:number){return this.request('/finance/customer-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
   markPayablePaid(id:string){return this.request('/finance/payables/'+id+'/mark-paid',{method:'POST'});}
   generatePartnerInvoice(partnerId:string,from:string,to:string){return this.request('/finance/partners/'+partnerId+'/invoices/generate?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{method:'POST'});}
+  driverBank(driverId:string){return this.request('/finance/drivers/'+driverId+'/bank');}
   adminDriverVehicles(id:string){return this.request('/admin/drivers/'+id+'/vehicles');}
   auditLogs(limit=200){return this.request('/admin/audit?limit='+limit);}
   priceGrid(){return this.request('/admin/suggested-price-grid');}

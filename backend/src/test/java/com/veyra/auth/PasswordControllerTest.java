@@ -37,7 +37,7 @@ class PasswordControllerTest {
   void forgotPasswordForARealEmailCreatesATokenAndSendsMail() {
     PasswordController controller = new PasswordController(db, mail, enc);
     UUID userId = UUID.randomUUID();
-    when(db.queryForList(eq("select id from users where email=?"), eq(UUID.class), any(Object[].class)))
+    when(db.queryForList(eq("select id from users where email=? and account_type=?"), eq(UUID.class), any(Object[].class)))
         .thenReturn(List.of(userId));
 
     ResponseEntity<Void> response = controller.forgot(new PasswordController.Forgot("driver@example.com"));
@@ -53,7 +53,7 @@ class PasswordControllerTest {
     // exact same response either way. A 404-vs-202 difference here would
     // itself be the account-enumeration bug.
     PasswordController controller = new PasswordController(db, mail, enc);
-    when(db.queryForList(eq("select id from users where email=?"), eq(UUID.class), any(Object[].class)))
+    when(db.queryForList(eq("select id from users where email=? and account_type=?"), eq(UUID.class), any(Object[].class)))
         .thenReturn(List.of());
 
     ResponseEntity<Void> response = controller.forgot(new PasswordController.Forgot("nobody@example.com"));
@@ -70,7 +70,7 @@ class PasswordControllerTest {
     // exist" -- the controller's own catch(Exception ignored) exists
     // specifically for this, verified here rather than just trusted.
     PasswordController controller = new PasswordController(db, mail, enc);
-    when(db.queryForList(eq("select id from users where email=?"), eq(UUID.class), any(Object[].class)))
+    when(db.queryForList(eq("select id from users where email=? and account_type=?"), eq(UUID.class), any(Object[].class)))
         .thenReturn(List.of(UUID.randomUUID()));
     doThrow(new MailException("smtp down") {}).when(mail).send(any(SimpleMailMessage.class));
 

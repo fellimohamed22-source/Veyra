@@ -30,7 +30,7 @@ public class BootstrapAdmin implements ApplicationRunner {
     if(email.isBlank() || password.isBlank()) return;
     if(password.length()<12) throw new IllegalStateException("Bootstrap admin password must be at least 12 characters");
 
-    var users=db.queryForList("select id from users where email=?", email);
+    var users=db.queryForList("select id from users where email=? and account_type='CLIENT'", email);
     java.util.UUID userId;
     if(users.isEmpty()){
       userId=java.util.UUID.randomUUID();

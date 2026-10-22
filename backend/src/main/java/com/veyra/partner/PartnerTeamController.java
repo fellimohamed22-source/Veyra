@@ -62,7 +62,7 @@ public class PartnerTeamController {
     String role = role(i.role());
     String email = i.email() == null ? "" : i.email().trim().toLowerCase(Locale.ROOT);
     if (!email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+") || email.length() > 254) throw new ApiException(HttpStatus.BAD_REQUEST, "EMAIL_INVALID");
-    List<UUID> users = db.queryForList("select id from users where lower(email::text)=?", UUID.class, email);
+    List<UUID> users = db.queryForList("select id from users where lower(email::text)=? and account_type='CLIENT'", UUID.class, email);
     if (!users.isEmpty()) {
       attach(partnerId, users.getFirst(), role);
       return Map.of("status", "ACTIVE");

@@ -54,10 +54,10 @@ class _Page {
 
 class DriverSignupFlowState extends State<DriverSignupFlow> {
   // Step identifiers; the numbering shown follows the kind's sequence.
-  static const sInfo = 1, sIdentity = 2, sVtc = 3, sLicense = 4, sCompany = 5, sVehicle = 6, sSummary = 7, sJoin = 8, sExtraDocs = 9;
+  static const sInfo = 1, sIdentity = 2, sVtc = 3, sLicense = 4, sCompany = 5, sVehicle = 6, sSummary = 7, sJoin = 8, sExtraDocs = 9, sBank = 10;
   /// Board 08 B2-B9 (7 steps) and board 08 C2-C7 (6 steps).
-  static const independentStages = [sInfo, sIdentity, sVtc, sLicense, sCompany, sVehicle, sSummary];
-  static const affiliatedStages = [sInfo, sIdentity, sVtc, sJoin, sExtraDocs, sSummary];
+  static const independentStages = [sInfo, sIdentity, sVtc, sLicense, sCompany, sVehicle, sBank, sSummary];
+  static const affiliatedStages = [sInfo, sIdentity, sVtc, sJoin, sExtraDocs, sBank, sSummary];
 
   DriverKind? kind;
   /// 0 = driver type (B2 / C1), then a step identifier.
@@ -121,6 +121,13 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
   int baggage = 3;
   bool hasVehicle = false;
 
+  // Bank account for payouts (owner request, RIB as on Uber / Bolt).
+  final bankHolder = TextEditingController();
+  final bankIban = TextEditingController();
+  final bankBic = TextEditingController();
+  bool bankSaved = false;
+  String bankMasked = '';
+
   // Step 7: summary.
   bool acceptCharter = false;
   List<String> missing = [];
@@ -150,7 +157,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
 
   @override
   void dispose() {
-    for (final c in [firstName, lastName, phone, email, password, vtcCard, licenseNumber, legalName, sirenSiret, address, revtc, brand, model, plate, inviteCode, companySearch]) {
+    for (final c in [firstName, lastName, phone, email, password, vtcCard, licenseNumber, legalName, sirenSiret, address, revtc, brand, model, plate, inviteCode, companySearch, bankHolder, bankIban, bankBic]) {
       c.dispose();
     }
     super.dispose();
@@ -222,6 +229,14 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         baggage = (x['baggage_capacity'] as num?)?.toInt() ?? baggage;
       }
       missing = (s['missing'] as List? ?? const []).map((e) => e.toString()).toList();
+      page('AVATAR').sent = !missing.contains('PROFILE_PHOTO');
+      final bank = (s['bank'] as List? ?? const []).whereType<Map>();
+      if (bank.isNotEmpty) {
+        bankSaved = true;
+        bankHolder.text = (bank.first['holder_name'] ?? '').toString();
+        bankMasked = (bank.first['iban_masked'] ?? '').toString();
+        bankBic.text = (bank.first['bic'] ?? '').toString();
+      }
       step = _firstIncompleteStep();
     } catch (e) {
       error = VeyraErrorMessages.forException(e);
@@ -234,15 +249,17 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
     if (missing.contains('BIRTH_DATE')) return sInfo;
     if (missing.contains('IDENTITY')) return sIdentity;
     if (missing.contains('VTC_CARD') || missing.contains('VTC')) return sVtc;
+    final bank = missing.contains('BANK_ACCOUNT') || missing.contains('RIB');
     if (kind == DriverKind.affiliated) {
       if (missing.contains('AFFILIATION')) return sJoin;
-      if (missing.contains('DRIVING_LICENSE') || missing.contains('LICENSE')) return sExtraDocs;
-      return sSummary;
+      if (missing.contains('DRIVING_LICENSE') || missing.contains('LICENSE') || missing.contains('PROFILE_PHOTO')) return sExtraDocs;
+      return bank ? sBank : sSummary;
     }
+    if (missing.contains('PROFILE_PHOTO')) return sInfo;
     if (missing.contains('DRIVING_LICENSE') || missing.contains('LICENSE')) return sLicense;
-    if (missing.contains('COMPANY') || missing.contains('INSURANCE')) return sCompany;
-    if (missing.contains('VEHICLE') || missing.contains('VEHICLE_REGISTRATION')) return sVehicle;
-    return sSummary;
+    if (missing.contains('COMPANY') || missing.contains('INSURANCE') || missing.contains('KBIS') || missing.contains('REVTC_CERTIFICATE')) return sCompany;
+    if (missing.contains('VEHICLE') || missing.contains('VEHICLE_REGISTRATION') || missing.contains('VEHICLE_INSURANCE')) return sVehicle;
+    return bank ? sBank : sSummary;
   }
 
   /// Board 08 C5: company card for the typed invitation code.
@@ -315,6 +332,8 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         if (birthDate == null) return _fail(_t('Date de naissance requise.'));
         if (!RegExp(r'^\+[1-9]\d{6,14}$').hasMatch(e164)) return _fail(_t('Téléphone incomplet'));
         if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email.text.trim())) return _fail(_t('E-mail invalide'));
+        // Profile photo required, as on Uber and Bolt (affiliated: step C6).
+        if (kind != DriverKind.affiliated && avatarPath == null && !page('AVATAR').sent) return _fail(_t('Ajoutez une photo de profil (obligatoire).'));
         if (!accountCreated) {
           if (password.text.length < 10) return _fail(_t('Mot de passe : 10 caractères minimum.'));
           if (!SignupConsents.mandatoryAccepted(acceptTerms, acceptPrivacy)) {
@@ -328,7 +347,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
           accountCreated = true;
           await widget.onAccountCreated();
           if (avatarPath != null) {
-            try { await widget.api.uploadAvatar(avatarPath!); } catch (_) {}
+            try { await widget.api.uploadAvatar(avatarPath!); page('AVATAR').sent = true; } catch (_) {}
           }
         }
         await widget.api.saveDriverProfile(birthDate: iso(birthDate!), driverType: kind == DriverKind.affiliated ? 'AFFILIATED' : 'INDEPENDENT');
@@ -345,7 +364,22 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         }
         joinedCompany = await widget.api.myCompany();
         return true;
+      case sBank:
+        if (!bankSaved) {
+          if (bankHolder.text.trim().length < 2) return _fail(_t('Titulaire du compte requis.'));
+          final iban = bankIban.text.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+          if (!RegExp(r'^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$').hasMatch(iban)) return _fail(_t('IBAN invalide.'));
+        }
+        if (!page('RIB').sent) return _fail(_t('Ajoutez votre RIB.'));
+        if (!bankSaved || bankIban.text.trim().isNotEmpty) {
+          final r = await widget.api.saveBank(holderName: bankHolder.text.trim(), iban: bankIban.text, bic: bankBic.text.trim().isEmpty ? null : bankBic.text.trim());
+          bankMasked = (r['ibanMasked'] ?? '').toString();
+          bankSaved = true;
+          bankIban.clear();
+        }
+        return true;
       case sExtraDocs:
+        if (!page('AVATAR').sent && avatarPath == null) return _fail(_t('Ajoutez une photo de profil (obligatoire).'));
         if (licenseNumber.text.trim().isEmpty) return _fail(_t('Numéro de permis requis.'));
         if (licenseExpiry == null) return _fail(_t('Date de validité requise.'));
         if (!page('DRIVING_LICENSE', 'FRONT').sent) return _fail(_t('Ajoutez une photo de votre permis.'));
@@ -372,7 +406,9 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         if (!RegExp(r'^(\d{9}|\d{14})$').hasMatch(digits)) return _fail(_t('SIREN (9 chiffres) ou SIRET (14 chiffres) requis.'));
         if (address.text.trim().isEmpty) return _fail(_t('Adresse requise.'));
         if (_needsLegalName && legalName.text.trim().isEmpty) return _fail(_t('Raison sociale requise.'));
-        if (!page('INSURANCE').sent) return _fail(_t('Ajoutez votre attestation d’assurance.'));
+        if (!page('INSURANCE').sent) return _fail(_t('Ajoutez votre attestation d’assurance RC professionnelle.'));
+        if (!page('KBIS').sent) return _fail(_t('Ajoutez votre Kbis ou avis de situation SIRENE.'));
+        if (!page('REVTC_CERTIFICATE').sent) return _fail(_t('Ajoutez votre attestation d’inscription au registre VTC.'));
         await widget.api.saveCompany(
           siren: digits.substring(0, 9),
           siret: digits.length == 14 ? digits : null,
@@ -392,6 +428,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
           }
         }
         if (!page('VEHICLE_REGISTRATION').sent) return _fail(_t('Ajoutez la carte grise du véhicule.'));
+        if (!page('VEHICLE_INSURANCE').sent) return _fail(_t('Ajoutez l’attestation d’assurance du véhicule.'));
         if (!hasVehicle) {
           await widget.api.addVehicle(
             categoryId: categoryId!, brand: brand.text.trim(), model: model.text.trim(), year: vehicleYear!,
@@ -472,6 +509,12 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         'VEHICLE' => 'véhicule',
         'VEHICLE_REGISTRATION' => 'carte grise',
         'AFFILIATION' => 'société de rattachement',
+        'PROFILE_PHOTO' => 'photo de profil',
+        'BANK_ACCOUNT' => 'compte bancaire',
+        'RIB' => 'RIB',
+        'KBIS' => 'Kbis ou avis SIRENE',
+        'REVTC_CERTIFICATE' => 'attestation du registre VTC',
+        'VEHICLE_INSURANCE' => 'assurance du véhicule',
         _ => code,
       });
 
@@ -724,6 +767,22 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
             if (selectedCompany != null) ...[const SizedBox(height: 16), companyCard(selectedCompany!, key: const ValueKey('selected-company'))],
           ],
         ];
+      case sBank:
+        return [
+          VeyraStepTitle(_t('Compte bancaire')),
+          const SizedBox(height: 6),
+          Text(_t('Vos gains vous sont versés par virement sur ce compte. L’IBAN est chiffré ; seuls ses 4 derniers chiffres sont affichés.'),
+              style: const TextStyle(color: VeyraColors.textSecondary)),
+          const SizedBox(height: 16),
+          field(_t('Titulaire du compte'), bankHolder, hint: '${firstName.text} ${lastName.text}'.trim(), key: const ValueKey('bank-holder')),
+          if (bankSaved && bankMasked.isNotEmpty)
+            Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_t('IBAN enregistré') + ' : ' + bankMasked, style: const TextStyle(fontWeight: FontWeight.w600))),
+          field(bankSaved ? _t('Nouvel IBAN (laisser vide pour garder l’actuel)') : _t('IBAN'), bankIban,
+              hint: 'FR76 3000 6000 0112 3456 7890 189', required: !bankSaved, key: const ValueKey('bank-iban')),
+          field(_t('BIC (facultatif)'), bankBic, hint: 'BNPAFRPP', required: false, key: const ValueKey('bank-bic')),
+          VeyraFieldLabel(_t('RIB (relevé d’identité bancaire)'), required: true),
+          uploadTile(_t('RIB'), 'RIB', key: const ValueKey('RIB')),
+        ];
       case sExtraDocs:
         return [
           VeyraStepTitle(_t('Documents requis')),
@@ -749,7 +808,10 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(child: VeyraStepTitle(_t('Vos informations'))),
             InkWell(
-              onTap: accountCreated ? null : () async {
+              key: const ValueKey('profile-photo'),
+              // Before the account exists the photo is kept and sent with it;
+              // afterwards it is uploaded right away.
+              onTap: accountCreated ? uploadProfilePhoto : () async {
                 final path = await widget.pickFile(imageOnly: true);
                 if (path != null) setState(() => avatarPath = path);
               },
@@ -757,7 +819,8 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
               child: CircleAvatar(
                 radius: 30,
                 backgroundColor: VeyraColors.surfaceMuted,
-                child: Icon(avatarPath == null ? Icons.add_a_photo_outlined : Icons.check, color: avatarPath == null ? VeyraColors.textSecondary : VeyraColors.success),
+                child: Icon(avatarPath == null && !page('AVATAR').sent ? Icons.add_a_photo_outlined : Icons.check,
+                    color: avatarPath == null && !page('AVATAR').sent ? VeyraColors.textSecondary : VeyraColors.success),
               ),
             ),
           ]),
@@ -829,7 +892,14 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
           field(_t('Adresse'), address, key: const ValueKey('address')),
           field(_t('Inscription au registre VTC (si applicable)'), revtc, required: false, key: const ValueKey('revtc')),
           VeyraFieldLabel(_t('Attestation d’assurance (RC professionnelle / véhicule)'), required: true),
-          uploadTile(_t('ASSURANCE'), 'INSURANCE', key: const ValueKey('INSURANCE')),
+          uploadTile(_t('ASSURANCE RC PRO'), 'INSURANCE', key: const ValueKey('INSURANCE')),
+          const SizedBox(height: 14),
+          VeyraFieldLabel(_t('Justificatifs de l’entreprise'), required: true),
+          Row(children: [
+            Expanded(child: uploadTile(_t('KBIS / AVIS SIRENE'), 'KBIS', key: const ValueKey('KBIS'))),
+            const SizedBox(width: 12),
+            Expanded(child: uploadTile(_t('ATTESTATION REGISTRE VTC'), 'REVTC_CERTIFICATE', key: const ValueKey('REVTC_CERTIFICATE'))),
+          ]),
         ];
       case 6:
         final years = {for (var y = DateTime.now().year + 1; y >= DateTime.now().year - 15; y--) y: '$y'};
@@ -855,7 +925,15 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
             Expanded(child: dropdown<int>(_t('Capacité bagages'), baggage, {for (var i = 0; i <= 10; i++) i: '$i'}, hasVehicle ? null : (v) => setState(() => baggage = v ?? baggage))),
           ]),
           VeyraFieldLabel(_t('Carte grise'), required: true),
-          uploadTile(_t('CARTE GRISE'), 'VEHICLE_REGISTRATION', key: const ValueKey('VEHICLE_REGISTRATION')),
+          Row(children: [
+            Expanded(child: uploadTile(_t('CARTE GRISE'), 'VEHICLE_REGISTRATION', key: const ValueKey('VEHICLE_REGISTRATION'))),
+            const SizedBox(width: 12),
+            Expanded(child: uploadTile(_t('ASSURANCE VÉHICULE'), 'VEHICLE_INSURANCE', key: const ValueKey('VEHICLE_INSURANCE'))),
+          ]),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_t('Assurance du véhicule : carte verte ou attestation de transport de personnes à titre onéreux.'), style: const TextStyle(color: VeyraColors.textSecondary, fontSize: 13)),
+          ),
         ];
       default:
         final docsDone = page('IDENTITY', 'FRONT').sent && page('VTC_CARD', 'FRONT').sent && page('DRIVING_LICENSE', 'FRONT').sent;
@@ -865,6 +943,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
           const SizedBox(height: 12),
           summaryRow(Icons.person_outline, _t('Informations personnelles'), '${firstName.text} ${lastName.text} · ${display(birthDate)}', sInfo, birthDate != null),
           summaryRow(Icons.badge_outlined, _t('Documents'), _t('Identité, carte VTC, permis'), affiliated ? sExtraDocs : sIdentity, docsDone),
+          summaryRow(Icons.account_balance_outlined, _t('Compte bancaire'), bankSaved ? '${bankHolder.text} · $bankMasked' : _t('À compléter'), sBank, bankSaved && page('RIB').sent),
           if (affiliated) ...[
             summaryRow(Icons.business_outlined, _t('Société'), (joinedCompany?['legal_name'] ?? '—').toString(), sJoin, joinedCompany != null),
             ListTile(
@@ -878,7 +957,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
             ),
           ] else ...[
             summaryRow(Icons.business_outlined, _t('Entreprise'), '${_t(legalForms[legalForm]!)} · ${sirenSiret.text}', sCompany, sirenSiret.text.isNotEmpty && page('INSURANCE').sent),
-            summaryRow(Icons.directions_car_outlined, _t('Véhicule'), '${brand.text} ${model.text} · ${plate.text}', sVehicle, hasVehicle && page('VEHICLE_REGISTRATION').sent),
+            summaryRow(Icons.directions_car_outlined, _t('Véhicule'), '${brand.text} ${model.text} · ${plate.text}', sVehicle, hasVehicle && page('VEHICLE_REGISTRATION').sent && page('VEHICLE_INSURANCE').sent),
           ],
           const SizedBox(height: 8),
           CheckboxListTile(

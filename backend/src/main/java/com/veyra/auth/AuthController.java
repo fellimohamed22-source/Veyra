@@ -53,7 +53,13 @@ public class AuthController {
   public record Login(
       @Email @NotBlank String email,
       @NotBlank String password,
-      String deviceName){}
+      String deviceName,
+      /** App signing in: CLIENT (client app, web portals, default) or DRIVER (driver app). */
+      @Pattern(regexp="CLIENT|DRIVER") String accountType){
+    public Login(String email,String password,String deviceName){this(email,password,deviceName,null);}
+  }
+
+  static String type(String raw){return "DRIVER".equals(raw)?"DRIVER":"CLIENT";}
 
   public record Tokens(
       String accessToken,
@@ -70,7 +76,7 @@ public class AuthController {
   public ResponseEntity<Tokens> register(@Valid @RequestBody Register request){
     ConsentService.requireMandatory(request.acceptTerms(),request.acceptPrivacy());
     String email=request.email().trim().toLowerCase(Locale.ROOT);
-    if(users.existsByEmailIgnoreCase(email)){
+    if(users.existsByEmailIgnoreCaseAndAccountType(email,"CLIENT")){
       throw new ApiException(HttpStatus.CONFLICT,"EMAIL_ALREADY_USED");
     }
 
@@ -97,9 +103,9 @@ public class AuthController {
   public ResponseEntity<Tokens> registerDriver(@Valid @RequestBody Register request){
     ConsentService.requireMandatory(request.acceptTerms(),request.acceptPrivacy());
     String email=request.email().trim().toLowerCase(Locale.ROOT);
-    if(users.existsByEmailIgnoreCase(email))throw new ApiException(HttpStatus.CONFLICT,"EMAIL_ALREADY_USED");
+    if(users.existsByEmailIgnoreCaseAndAccountType(email,"DRIVER"))throw new ApiException(HttpStatus.CONFLICT,"EMAIL_ALREADY_USED");
     if(request.phone()==null||request.phone().trim().length()<6)throw new ApiException(HttpStatus.BAD_REQUEST,"PHONE_REQUIRED");
-    User user=users.save(new User(request.firstName().trim(),request.lastName()==null?null:request.lastName().trim(),email,encoder.encode(request.password())));
+    User user=users.save(new User(request.firstName().trim(),request.lastName()==null?null:request.lastName().trim(),email,encoder.encode(request.password()),"DRIVER"));
     db.update("update users set phone=? where id=?",request.phone().trim(),user.id());
     db.update("insert into user_roles(user_id,role_id) select ?,id from roles where code='DRIVER' on conflict do nothing",user.id());
     db.update("insert into drivers(id,user_id) values (?,?)",UUID.randomUUID(),user.id());
@@ -123,10 +129,11 @@ public class AuthController {
     boolean phoneVerified="phone".equals(provider)&&!phone.isEmpty();
     String role=request.role()==null?"CLIENT":request.role();
     User user=null;
-    List<UUID> bound=db.queryForList("select id from users where firebase_uid=?",UUID.class,firebaseUid);
+    // Each app has its own account (V058): look up within that account type only.
+    List<UUID> bound=db.queryForList("select id from users where firebase_uid=? and account_type=?",UUID.class,firebaseUid,role);
     if(!bound.isEmpty())user=users.findById(bound.getFirst()).orElse(null);
     if(user==null&&!email.isEmpty()){
-      User byEmail=users.findByEmailIgnoreCase(email).orElse(null);
+      User byEmail=users.findByEmailIgnoreCaseAndAccountType(email,role).orElse(null);
       if(byEmail!=null){
         // Linking an existing VEYRA account to a Firebase identity is only
         // safe when Firebase has proven ownership of that email; otherwise
@@ -136,14 +143,14 @@ public class AuthController {
       }
     }
     if(user==null&&phoneVerified){
-      List<UUID> ids=db.queryForList("select id from users where phone=?",UUID.class,phone);
+      List<UUID> ids=db.queryForList("select id from users where phone=? and account_type=?",UUID.class,phone,role);
       if(!ids.isEmpty())user=users.findById(ids.getFirst()).orElse(null);
     }
     if(user==null){
       if(email.isEmpty())email="firebase-"+firebaseUid+"@phone.veyra.local";
       String name=Objects.toString(claims.get("name"),role.equals("DRIVER")?"Chauffeur Veyra":"Client Veyra").trim();
       if(name.isEmpty())name=role.equals("DRIVER")?"Chauffeur Veyra":"Client Veyra";
-      user=users.save(new User(name,null,email,encoder.encode(UUID.randomUUID().toString()+UUID.randomUUID())));
+      user=users.save(new User(name,null,email,encoder.encode(UUID.randomUUID().toString()+UUID.randomUUID()),role));
       if(phoneVerified)db.update("update users set phone=? where id=?",phone,user.id());
     }
     if(!"ACTIVE".equals(user.status()))throw new ApiException(HttpStatus.FORBIDDEN,"ACCOUNT_NOT_ACTIVE");
@@ -169,8 +176,17 @@ public class AuthController {
   @PostMapping("/login")
   @Transactional
   public Tokens login(@Valid @RequestBody Login request){
-    User user=users.findByEmailIgnoreCase(request.email().trim())
-        .orElseThrow(()->new ApiException(HttpStatus.UNAUTHORIZED,"INVALID_CREDENTIALS"));
+    String type=type(request.accountType());
+    String email=request.email().trim();
+    User user=users.findByEmailIgnoreCaseAndAccountType(email,type).orElse(null);
+    if(user==null){
+      // Owner decision 22/10/2026: a client account never opens the driver
+      // app and vice versa. Said explicitly only once the password matches.
+      User other=users.findByEmailIgnoreCaseAndAccountType(email,"DRIVER".equals(type)?"CLIENT":"DRIVER").orElse(null);
+      if(other!=null&&encoder.matches(request.password(),other.passwordHash()))
+        throw new ApiException(HttpStatus.FORBIDDEN,"DRIVER".equals(type)?"CLIENT_ACCOUNT_IN_DRIVER_APP":"DRIVER_ACCOUNT_IN_CLIENT_APP");
+      throw new ApiException(HttpStatus.UNAUTHORIZED,"INVALID_CREDENTIALS");
+    }
 
     if(user.lockedUntil()!=null && user.lockedUntil().isAfter(OffsetDateTime.now())){
       throw new ApiException(HttpStatus.LOCKED,"ACCOUNT_LOCKED");

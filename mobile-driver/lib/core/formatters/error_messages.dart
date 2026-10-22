@@ -21,10 +21,15 @@ class VeyraErrorMessages {
   VeyraErrorMessages._();
 
   static const Map<String, String> _fr = {
+    'CLIENT_ACCOUNT_IN_DRIVER_APP': 'Ce compte est un compte client. Connectez-vous avec l’application VEYRA, ou créez un compte chauffeur (la même adresse e-mail est possible).',
+    'DRIVER_ACCOUNT_IN_CLIENT_APP': 'Ce compte est un compte chauffeur. Connectez-vous avec l’application VEYRA Chauffeur, ou créez un compte client (la même adresse e-mail est possible).',
     'INVITE_CODE_INVALID': 'Code d’invitation invalide.',
     'AFFILIATION_EXISTS': 'Vous êtes déjà rattaché à une société.',
     'COMPANY_NOT_FOUND': 'Société introuvable.',
     'DRIVER_DOCUMENT_EXPIRED': 'Un de vos documents a expiré : renouvelez-le pour proposer des offres.',
+    'IBAN_INVALID': 'IBAN invalide : vérifiez les chiffres saisis.',
+    'BIC_INVALID': 'BIC invalide.',
+    'BANK_HOLDER_REQUIRED': 'Indiquez le titulaire du compte.',
     'VTC_CARD_EXPIRES_BEFORE_RIDE': 'Votre carte VTC expire avant cette course : renouvelez-la pour faire une offre.',
     'CURRENT_PASSWORD_INVALID': 'Mot de passe actuel incorrect.',
     'LEAD_TIME_TOO_SHORT': "Choisissez un départ au moins 2 heures à l'avance.",
@@ -62,6 +67,8 @@ class VeyraErrorMessages {
   };
 
   static const Map<String, String> _en = {
+    'CLIENT_ACCOUNT_IN_DRIVER_APP': 'This is a client account. Sign in with the VEYRA app, or create a driver account (the same e-mail is allowed).',
+    'DRIVER_ACCOUNT_IN_CLIENT_APP': 'This is a driver account. Sign in with the VEYRA Driver app, or create a client account (the same e-mail is allowed).',
     'INVITE_CODE_INVALID': 'Invalid invitation code.',
     'AFFILIATION_EXISTS': 'You are already attached to a company.',
     'COMPANY_NOT_FOUND': 'Company not found.',

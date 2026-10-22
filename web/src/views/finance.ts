@@ -67,7 +67,13 @@ import {dateTime, errorMessage, money} from '../formatters';
             <td>{{money(p.amount_minor)}}</td>
             <td>{{p.created_at ? dateTime(p.created_at) : '—'}}</td>
             <td><span class="pill" [ngClass]="p.status === 'PAYABLE' ? 'p-warn' : 'p-ok'">{{p.status === 'PAYABLE' ? 'À verser' : 'Versé'}}</span></td>
-            <td><button class="ghost" *ngIf="p.status === 'PAYABLE'" (click)="markPaid(p)">Marquer versé</button></td>
+            <td><div class="row">
+              <button class="link" (click)="showBank(p)">Coordonnées bancaires</button>
+              <button class="ghost" *ngIf="p.status === 'PAYABLE'" (click)="markPaid(p)">Marquer versé</button></div>
+              <div class="note" *ngIf="bank[p.driver_id] as b" style="margin-top:6px">
+                <b>{{b.holderName}}</b><br><span class="mono">{{b.iban}}</span><span *ngIf="b.bic"> · BIC {{b.bic}}</span>
+              </div>
+              <div class="errbox" *ngIf="bankError[p.driver_id]" style="margin-top:6px">{{bankError[p.driver_id]}}</div></td>
           </tr></tbody>
         </table>
       </div>
@@ -114,6 +120,13 @@ export class Finance implements OnInit {
   }
   settle(d: any) { return this.act(() => this.api.settleDebt(d.id, this.remaining(d)), 'Dette réglée.'); }
   settleCustomer(d: any) { return this.act(() => this.api.settleCustomerDebt(d.id, this.remaining(d)), 'Créance réglée.'); }
+  bank: Record<string, any> = {}; bankError: Record<string, string> = {};
+  /** Full IBAN for the transfer (each view is recorded in the audit log). */
+  async showBank(p: any) {
+    delete this.bankError[p.driver_id];
+    try { this.bank[p.driver_id] = await this.api.driverBank(p.driver_id); }
+    catch (e: any) { this.bankError[p.driver_id] = e?.code === 'BANK_ACCOUNT_NOT_FOUND' ? 'Ce chauffeur n’a pas encore renseigné son compte bancaire.' : errorMessage(e?.code); }
+  }
   markPaid(p: any) { return this.act(() => this.api.markPayablePaid(p.id), 'Versement enregistré.'); }
   async generateInvoice() {
     this.invoiceLoading = true; this.invoiceResult = null;

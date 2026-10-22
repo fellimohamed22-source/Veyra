@@ -19,12 +19,14 @@ import java.util.*;
         mail=m;
         enc=e;
     }
-    public record Forgot(String email){
+    /** accountType: CLIENT (client app, web; default) or DRIVER (driver app). */
+    public record Forgot(String email,String accountType){
+        public Forgot(String email){this(email,null);}
     }
     public record Reset(String token,String newPassword){
     }
     @PostMapping("/forgot-password")ResponseEntity<Void>forgot(@RequestBody Forgot r){
-        List<UUID>u=db.queryForList("select id from users where email=?",UUID.class,r.email());
+        List<UUID>u=db.queryForList("select id from users where email=? and account_type=?",UUID.class,r.email(),"DRIVER".equals(r.accountType())?"DRIVER":"CLIENT");
         if(!u.isEmpty()){
             String t=token();
             db.update("insert into password_reset_tokens(user_id,token_hash,expires_at) values (?,?,?)",u.getFirst(),sha(t),OffsetDateTime.now().plusMinutes(30));

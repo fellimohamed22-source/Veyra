@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'app_locale_en.dart';
 
 /// Deliberately lightweight: no new state-management dependency, no ARB
 /// files/code generation (retrofitting flutter gen-l10n onto an
@@ -42,7 +43,7 @@ class AppLocale {
 
   static String t(String french) {
     if (code.value != 'en') return french;
-    return _en[french] ?? french;
+    return _en[french] ?? veyraEnExtra[french] ?? french;
   }
 
   static const Map<String, String> _en = {

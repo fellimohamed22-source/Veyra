@@ -21,6 +21,8 @@ class VeyraErrorMessages {
   VeyraErrorMessages._();
 
   static const Map<String, String> _fr = {
+    'CLIENT_ACCOUNT_IN_DRIVER_APP': 'Ce compte est un compte client. Connectez-vous avec l’application VEYRA, ou créez un compte chauffeur (la même adresse e-mail est possible).',
+    'DRIVER_ACCOUNT_IN_CLIENT_APP': 'Ce compte est un compte chauffeur. Connectez-vous avec l’application VEYRA Chauffeur, ou créez un compte client (la même adresse e-mail est possible).',
     'CURRENT_PASSWORD_INVALID': 'Mot de passe actuel incorrect.',
     'LEAD_TIME_TOO_SHORT': "Choisissez un départ au moins 2 heures à l'avance.",
     'PICKUP_OUTSIDE_SERVICE_ZONE': "Cette adresse de départ est hors de la zone pilote actuelle (Sud de la France, Marseille - Menton).",
@@ -58,6 +60,8 @@ class VeyraErrorMessages {
   };
 
   static const Map<String, String> _en = {
+    'CLIENT_ACCOUNT_IN_DRIVER_APP': 'This is a client account. Sign in with the VEYRA app, or create a driver account (the same e-mail is allowed).',
+    'DRIVER_ACCOUNT_IN_CLIENT_APP': 'This is a driver account. Sign in with the VEYRA Driver app, or create a client account (the same e-mail is allowed).',
     'CURRENT_PASSWORD_INVALID': 'Current password is incorrect.',
     'LEAD_TIME_TOO_SHORT': 'Choose a pickup time at least 2 hours from now.',
     'PICKUP_OUTSIDE_SERVICE_ZONE': "This pickup address is outside the current pilot zone (South of France, Marseille-Menton).",

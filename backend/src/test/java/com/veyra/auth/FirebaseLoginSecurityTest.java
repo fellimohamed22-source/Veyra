@@ -96,8 +96,8 @@ class FirebaseLoginSecurityTest {
     Map<String,Object> c=claims(PROJECT,"attacker-uid");
     c.put("email","victim@example.com");
     c.put("email_verified",false);
-    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("attacker-uid"))).thenReturn(List.of());
-    when(users.findByEmailIgnoreCase("victim@example.com")).thenReturn(Optional.of(user("victim@example.com","ACTIVE")));
+    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("attacker-uid"),eq("CLIENT"))).thenReturn(List.of());
+    when(users.findByEmailIgnoreCaseAndAccountType("victim@example.com", "CLIENT")).thenReturn(Optional.of(user("victim@example.com","ACTIVE")));
 
     ApiException ex=assertThrows(ApiException.class,
         ()->controllerReturning(c).firebase(new AuthController.FirebaseLogin("t","CLIENT",null)));
@@ -112,8 +112,8 @@ class FirebaseLoginSecurityTest {
     c.put("email","client@example.com");
     c.put("email_verified",true);
     User existing=user("client@example.com","ACTIVE");
-    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("uid-42"))).thenReturn(List.of());
-    when(users.findByEmailIgnoreCase("client@example.com")).thenReturn(Optional.of(existing));
+    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("uid-42"),eq("CLIENT"))).thenReturn(List.of());
+    when(users.findByEmailIgnoreCaseAndAccountType("client@example.com", "CLIENT")).thenReturn(Optional.of(existing));
     when(db.queryForList(contains("from roles"),eq(String.class),any(Object[].class))).thenReturn(List.of("CLIENT"));
     when(jwt.issue(any(),any(),any())).thenReturn("access");
 
@@ -128,7 +128,7 @@ class FirebaseLoginSecurityTest {
     Map<String,Object> c=claims(PROJECT,"uid-7");
     c.put("phone_number","+33600000000");
     c.put("provider","google.com");
-    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("uid-7"))).thenReturn(List.of());
+    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("uid-7"),eq("CLIENT"))).thenReturn(List.of());
     User created=user("firebase-uid-7@phone.veyra.local","ACTIVE");
     when(users.save(any(User.class))).thenReturn(created);
     when(db.queryForList(contains("from roles"),eq(String.class),any(Object[].class))).thenReturn(List.of("CLIENT"));
@@ -136,14 +136,14 @@ class FirebaseLoginSecurityTest {
 
     controllerReturning(c).firebase(new AuthController.FirebaseLogin("t","CLIENT",null));
 
-    verify(db,never()).queryForList(contains("where phone=?"),eq(UUID.class),any());
+    verify(db,never()).queryForList(contains("where phone=?"),eq(UUID.class),any(),any());
   }
 
   @Test
   void suspendedAccountCannotSignInThroughFirebase(){
     Map<String,Object> c=claims(PROJECT,"uid-9");
     User suspended=user("s@example.com","SUSPENDED");
-    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("uid-9"))).thenReturn(List.of(suspended.id()));
+    when(db.queryForList(contains("firebase_uid=?"),eq(UUID.class),eq("uid-9"),eq("CLIENT"))).thenReturn(List.of(suspended.id()));
     when(users.findById(suspended.id())).thenReturn(Optional.of(suspended));
 
     ApiException ex=assertThrows(ApiException.class,

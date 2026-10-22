@@ -101,7 +101,7 @@ class Api {
   }
 
   Future<void> forgotPassword(String email) async {
-    await dio.post('/api/v1/auth/forgot-password',data:{'email':email.trim()});
+    await dio.post('/api/v1/auth/forgot-password',data:{'email':email.trim(),'accountType':'CLIENT'});
   }
 
   Future<void> resetPassword(String token,String newPassword) async {
@@ -122,6 +122,7 @@ class Api {
       'email':email.trim(),
       'password':password,
       'deviceName':'client-mobile',
+      'accountType':'CLIENT',
     });
     await storage.write(key:'accessToken',value:r.data['accessToken']);
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);
@@ -137,6 +138,7 @@ class Api {
       'idToken':idToken,
       'role':'CLIENT',
       'deviceName':'client-mobile',
+      'accountType':'CLIENT',
     });
     await storage.write(key:'accessToken',value:r.data['accessToken']);
     await storage.write(key:'refreshToken',value:r.data['refreshToken']);

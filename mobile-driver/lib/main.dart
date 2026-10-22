@@ -60,7 +60,7 @@ Future<void> _ensureDriverLocalNotifications(void Function(String payload) onTap
   if(_driverLocalNotificationsInitialized)return;
   const androidInit=AndroidInitializationSettings('@mipmap/ic_launcher');
   await _driverLocalNotifications.initialize(
-    const InitializationSettings(android:androidInit),
+    const InitializationSettings(android:androidInit,iOS:DarwinInitializationSettings(requestAlertPermission:false,requestBadgePermission:false,requestSoundPermission:false)),
     onDidReceiveNotificationResponse:(response){
       final payload=response.payload;
       if(payload!=null)onTap(payload);
@@ -90,7 +90,7 @@ Future<void> _showDriverForegroundPush(RemoteMessage message)async{
       channelDescription:'Notifications Veyra',
       importance:Importance.high,
       priority:Priority.high,
-    )),
+    ),iOS:DarwinNotificationDetails(presentAlert:true,presentBadge:true,presentSound:true)),
     payload:jsonEncode(message.data),
   );
 }
@@ -179,6 +179,23 @@ class LanguageSwitch extends StatelessWidget{
       style:style,
       onPressed:()=>AppLocale.set(code=='fr'?'en':'fr'),
       child:Text(code=='fr'?'FR':'EN',style:const TextStyle(fontWeight:FontWeight.bold)),
+    ),
+  );
+}
+
+/// Profile row to pick the app language explicitly (Français / English).
+class LanguageTile extends StatelessWidget{
+  const LanguageTile({super.key});
+  @override Widget build(BuildContext context)=>ValueListenableBuilder<String>(
+    valueListenable:AppLocale.code,
+    builder:(context,code,_)=>ListTile(
+      contentPadding:EdgeInsets.zero,
+      leading:const Icon(Icons.language),
+      title:Text(t('Langue')),
+      trailing:Wrap(spacing:6,children:[
+        ChoiceChip(key:const Key('lang-fr'),label:const Text('Français'),selected:code=='fr',onSelected:(_)=>AppLocale.set('fr')),
+        ChoiceChip(key:const Key('lang-en'),label:const Text('English'),selected:code=='en',onSelected:(_)=>AppLocale.set('en')),
+      ]),
     ),
   );
 }
@@ -2293,7 +2310,7 @@ class _RideScreenState extends State<RideScreen>{
     super.initState();
     future=api.bookingDetail(widget.bookingId);
     tracker=activeRideTracker;
-    statusTimer=Timer.periodic(const Duration(seconds:8),(_)=>refreshStatus());
+    // No periodic reload (owner request): pull to refresh, push notifications.
     RefreshBus.tick.addListener(refreshStatus);
   }
 
@@ -2785,7 +2802,8 @@ class _RideScreenState extends State<RideScreen>{
           ]),
         );
 
-        return ListView(
+        return RefreshIndicator(onRefresh:refreshStatus,child:ListView(
+          physics:const AlwaysScrollableScrollPhysics(),
           padding:EdgeInsets.zero,
           children:[
             // Board 12 P7: a confirmed ride shows its details without a map.
@@ -3030,7 +3048,7 @@ class _RideScreenState extends State<RideScreen>{
               ]),
             ),
           ],
-        );
+        ));
       },
     ),
   );
@@ -3314,7 +3332,7 @@ Future<void> logout()async{await activeRideTracker.stop();await api.logout();try
               trailing:const Icon(Icons.chevron_right),
               onTap:()=>context.push('/kyc'),
             ));
-          }),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),DriverDocuments(documents:docs,onRetry:()=>setState((){docs=api.documents();}),onUpload:busy?null:doc),const LanguageSwitch(),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}));}
+          }),Card(child:Column(children:[ListTile(leading:const Icon(Icons.edit),title:Text(t('Informations personnelles')),onTap:()=>edit(m)),ListTile(leading:const Icon(Icons.lock),title:Text(t('Modifier mon mot de passe')),onTap:password)])),Text(t('Mes documents chauffeur'),style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),DriverDocuments(documents:docs,onRetry:()=>setState((){docs=api.documents();}),onUpload:busy?null:doc),const Card(child:Padding(padding:EdgeInsets.symmetric(horizontal:16),child:LanguageTile())),const SizedBox(height:20),VeyraSecondaryButton(label:t('Se déconnecter'),icon:Icons.logout,onPressed:logout)]);}));}
 
 /// Coquille de navigation persistante chauffeur (bottom nav 4 onglets),
 /// conforme à la maquette D14 : Demandes / Planning / Revenus / Compte.

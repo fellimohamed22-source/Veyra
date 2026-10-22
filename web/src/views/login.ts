@@ -44,7 +44,7 @@ export class Login{
         else this.error='Ce compte n’a pas encore d’espace professionnel : créez celui de votre société ou de votre établissement ci-dessous.';
       }
     }
-    catch{this.error='Identifiants invalides ou service indisponible.';}
+    catch(e:any){this.error=e?.code==='DRIVER_ACCOUNT_IN_CLIENT_APP'?'Ce compte est un compte chauffeur : il ne donne pas accès au portail. Utilisez un compte client ou professionnel (la même adresse e-mail est possible).':'Identifiants invalides ou service indisponible.';}
     finally{this.loading=false;}
   }
 }

@@ -135,7 +135,7 @@ class DriverOnboardingControllerTest {
   void completeDossierMovesFromDraftToSubmitted() {
     when(db.queryForObject(startsWith("select count(*)"), eq(Integer.class), eq(driverId))).thenReturn(1);
     when(db.queryForList(contains("select distinct type"), eq(String.class), eq(driverId)))
-        .thenReturn(java.util.List.of("IDENTITY", "VTC_CARD", "DRIVING_LICENSE", "INSURANCE", "VEHICLE_REGISTRATION"));
+        .thenReturn(DriverOnboardingController.REQUIRED_DOCUMENTS);
     when(db.queryForObject(eq("select kyc_status from drivers where id=?"), eq(String.class), eq(driverId))).thenReturn("SUBMITTED");
 
     var response = controller().submit();

@@ -88,7 +88,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('kind-independent')));
     await tester.pumpAndSettle();
     await tapNext(tester);
-    expect(find.text('1/7'), findsOneWidget);
+    expect(find.text('1/8'), findsOneWidget);
 
     // B3: personal information creates the account.
     await tester.enterText(find.byKey(const ValueKey('first-name')), 'Karim');
@@ -97,20 +97,27 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('phone')), '06 12 34 56 78');
     await tester.enterText(find.byKey(const ValueKey('email')), 'karim@example.com');
     await tester.enterText(find.byKey(const ValueKey('password')), 'Chauffeur2026!');
+    await tapTile(tester, 'profile-photo');
     await tapNext(tester);
-    expect(find.text('1/7'), findsOneWidget, reason: 'consents are mandatory');
+    expect(find.text('1/8'), findsOneWidget, reason: 'consents are mandatory');
     await tester.ensureVisible(find.text("J'accepte les conditions générales d'utilisation"));
     await tester.tap(find.text("J'accepte les conditions générales d'utilisation"));
     await tester.tap(find.text("J'accepte la politique de confidentialité"));
     await tester.pumpAndSettle();
-    await tapNext(tester);
-    expect(find.text('2/7'), findsOneWidget);
+    // Account creation also uploads the profile photo (real file I/O).
+    await tester.tap(find.widgetWithText(FilledButton, 'Continuer'));
+    for (var i = 0; i < 40 && find.text('2/8').evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('2/8'), findsOneWidget);
     expect((calls['/api/v1/auth/register-driver'] as Map)['phone'], '+33612345678');
     expect((calls['/api/v1/driver/onboarding/profile'] as Map)['driverType'], 'INDEPENDENT');
 
     // B4: identity recto + verso, kept apart.
     await tapNext(tester);
-    expect(find.text('2/7'), findsOneWidget);
+    expect(find.text('2/8'), findsOneWidget);
     await tapTile(tester, 'IDENTITY-front');
     await tapTile(tester, 'IDENTITY-back');
     await tapNext(tester);
@@ -122,7 +129,7 @@ void main() {
     await tapTile(tester, 'VTC_CARD-front');
     await tapTile(tester, 'VTC_CARD-back');
     await tapNext(tester);
-    expect(find.text('4/7'), findsOneWidget);
+    expect(find.text('4/8'), findsOneWidget);
 
     // B6: licence.
     await tester.enterText(find.byKey(const ValueKey('license-number')), '12AB34567');
@@ -135,6 +142,8 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('siren')), '123 456 789 00012');
     await tester.enterText(find.byKey(const ValueKey('address')), '123 rue de la Paix, 75008 Paris');
     await tapTile(tester, 'INSURANCE');
+    await tapTile(tester, 'KBIS');
+    await tapTile(tester, 'REVTC_CERTIFICATE');
     await tapNext(tester);
     final company = calls['/api/v1/driver/onboarding/company'] as Map;
     expect(company['siren'], '123456789');
@@ -155,12 +164,21 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('plate')), 'ab-123-cd');
     await tapTile(tester, 'VEHICLE_REGISTRATION');
+    await tapTile(tester, 'VEHICLE_INSURANCE');
     await tapNext(tester);
     final vehicle = calls['/api/v1/driver/onboarding/vehicles'] as Map;
     expect(vehicle['plateNumber'], 'AB-123-CD');
     expect(vehicle['seats'], 4);
     expect(vehicle['baggageCapacity'], 3);
-    expect(find.text('7/7'), findsOneWidget);
+    expect(find.text('7/8'), findsOneWidget);
+
+    // Bank account for payouts (as Uber / Bolt): holder, IBAN, RIB.
+    await tester.enterText(find.byKey(const ValueKey('bank-holder')), 'Karim Benali');
+    await tester.enterText(find.byKey(const ValueKey('bank-iban')), 'FR76 3000 6000 0112 3456 7890 189');
+    await tapTile(tester, 'RIB');
+    await tapNext(tester);
+    expect((calls['/api/v1/driver/onboarding/bank'] as Map)['holderName'], 'Karim Benali');
+    expect(find.text('8/8'), findsOneWidget);
 
     // B9: summary, charter, then submission.
     await tester.tap(find.widgetWithText(FilledButton, 'Envoyer mon dossier'));
@@ -226,7 +244,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('kind-affiliated')));
     await tester.pumpAndSettle();
     await tapNext(tester);
-    expect(find.text('1/6'), findsOneWidget);
+    expect(find.text('1/7'), findsOneWidget);
 
     // C2: personal information.
     await tester.enterText(find.byKey(const ValueKey('first-name')), 'Sophie');
@@ -251,11 +269,11 @@ void main() {
     await tapTile(tester, 'VTC_CARD-front');
     await tapTile(tester, 'VTC_CARD-back');
     await tapNext(tester);
-    expect(find.text('4/6'), findsOneWidget);
+    expect(find.text('4/7'), findsOneWidget);
 
     // C5: invitation code, company card, join request.
     await tapNext(tester);
-    expect(find.text('4/6'), findsOneWidget, reason: 'a company is required');
+    expect(find.text('4/7'), findsOneWidget, reason: 'a company is required');
     await tester.enterText(find.byKey(const ValueKey('invite-code')), 'ZZZZ-9999');
     await tester.pumpAndSettle();
     expect(find.text('Code d’invitation invalide.'), findsOneWidget);
@@ -266,16 +284,24 @@ void main() {
     await tapNext(tester);
     expect(joined, isTrue);
     expect((calls['/api/v1/driver/company/join'] as Map)['code'], 'PRST-7Q4K');
-    expect(find.text('5/6'), findsOneWidget);
+    expect(find.text('5/7'), findsOneWidget);
 
     // C6: licence and extra documents.
     await tester.enterText(find.byKey(const ValueKey('license-number')), '12AB34567');
     await pickDate(tester, 'license-expiry');
     await tapTile(tester, 'doc-license');
     await tapTile(tester, 'doc-address');
+    await tapTile(tester, 'doc-photo');
     await tapNext(tester);
     expect(uploads, containsAll(['DRIVING_LICENSE/FRONT', 'PROOF_OF_ADDRESS/']));
-    expect(find.text('6/6'), findsOneWidget);
+    expect(find.text('6/7'), findsOneWidget);
+
+    // Bank account step, then the summary.
+    await tester.enterText(find.byKey(const ValueKey('bank-holder')), 'Sophie Dubois');
+    await tester.enterText(find.byKey(const ValueKey('bank-iban')), 'FR7630006000011234567890189');
+    await tapTile(tester, 'RIB');
+    await tapNext(tester);
+    expect(find.text('7/7'), findsOneWidget);
 
     // C7: summary with the company awaiting validation, then C8.
     expect(find.text('Transports Prestige'), findsOneWidget);

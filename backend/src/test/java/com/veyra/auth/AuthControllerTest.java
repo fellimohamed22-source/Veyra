@@ -50,7 +50,7 @@ class AuthControllerTest {
 
   @Test
   void marketingConsentIsRecordedOnlyWhenExplicitlyGranted() {
-    when(users.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+    when(users.existsByEmailIgnoreCaseAndAccountType(anyString(), anyString())).thenReturn(false);
     UUID userId = UUID.randomUUID();
     User saved = new User("Jean", "Dupont", "client@example.com", "hashed");
     setId(saved, userId);
@@ -80,7 +80,7 @@ class AuthControllerTest {
 
   @Test
   void registerRejectsAnEmailAlreadyInUseWithoutCreatingAnything() {
-    when(users.existsByEmailIgnoreCase("taken@example.com")).thenReturn(true);
+    when(users.existsByEmailIgnoreCaseAndAccountType("taken@example.com", "CLIENT")).thenReturn(true);
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().register(
         new AuthController.Register("taken@example.com", "aStrongPassword1", "Jean", "Dupont", null, true, true, false)));
@@ -96,7 +96,7 @@ class AuthControllerTest {
     // driver@example.com -- checked here rather than assumed, since the
     // uniqueness guarantee only holds if both the existence check and the
     // saved record use the same normalized form.
-    when(users.existsByEmailIgnoreCase("driver@example.com")).thenReturn(false);
+    when(users.existsByEmailIgnoreCaseAndAccountType("driver@example.com", "CLIENT")).thenReturn(false);
     User saved = new User("Jean", "Dupont", "driver@example.com", "hashed");
     setId(saved, UUID.randomUUID());
     when(users.save(any(User.class))).thenReturn(saved);
@@ -105,7 +105,7 @@ class AuthControllerTest {
 
     controller().register(new AuthController.Register("Driver@Example.com", "aStrongPassword1", "Jean", "Dupont", null, true, true, false));
 
-    verify(users).existsByEmailIgnoreCase("driver@example.com");
+    verify(users).existsByEmailIgnoreCaseAndAccountType("driver@example.com", "CLIENT");
     org.mockito.ArgumentCaptor<User> captor = org.mockito.ArgumentCaptor.forClass(User.class);
     verify(users).save(captor.capture());
     assertEquals("driver@example.com", captor.getValue().email());
@@ -113,7 +113,7 @@ class AuthControllerTest {
 
   @Test
   void registerAssignsTheClientRoleAndReturns201WithTokens() {
-    when(users.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+    when(users.existsByEmailIgnoreCaseAndAccountType(anyString(), anyString())).thenReturn(false);
     UUID userId = UUID.randomUUID();
     User saved = new User("Jean", "Dupont", "client@example.com", "hashed");
     setId(saved, userId);
@@ -134,7 +134,7 @@ class AuthControllerTest {
 
   @Test
   void registerWithAPhoneUpdatesItSeparately() {
-    when(users.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+    when(users.existsByEmailIgnoreCaseAndAccountType(anyString(), anyString())).thenReturn(false);
     UUID userId = UUID.randomUUID();
     User saved = new User("Jean", "Dupont", "client@example.com", "hashed");
     setId(saved, userId);
@@ -149,7 +149,7 @@ class AuthControllerTest {
 
   @Test
   void loginWithUnknownEmailRejectsWithTheSameGenericErrorAsAWrongPassword() {
-    when(users.findByEmailIgnoreCase("nobody@example.com")).thenReturn(Optional.empty());
+    when(users.findByEmailIgnoreCaseAndAccountType("nobody@example.com", "CLIENT")).thenReturn(Optional.empty());
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().login(
         new AuthController.Login("nobody@example.com", "whatever", "device")));
@@ -165,7 +165,7 @@ class AuthControllerTest {
     User locked = new User("Jean", "Dupont", "locked@example.com", "hashed");
     setId(locked, UUID.randomUUID());
     lockUntil(locked, OffsetDateTime.now().plusMinutes(10));
-    when(users.findByEmailIgnoreCase("locked@example.com")).thenReturn(Optional.of(locked));
+    when(users.findByEmailIgnoreCaseAndAccountType("locked@example.com", "CLIENT")).thenReturn(Optional.of(locked));
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().login(
         new AuthController.Login("locked@example.com", "whatever", "device")));
@@ -189,10 +189,40 @@ class AuthControllerTest {
   }
 
   @Test
+  void aClientAccountCannotSignInToTheDriverAppAndViceVersa() {
+    User client = new User("Jean", "Dupont", "same@example.com", "hashed", "CLIENT");
+    when(users.findByEmailIgnoreCaseAndAccountType("same@example.com", "DRIVER")).thenReturn(Optional.empty());
+    when(users.findByEmailIgnoreCaseAndAccountType("same@example.com", "CLIENT")).thenReturn(Optional.of(client));
+    when(encoder.matches("good-password", "hashed")).thenReturn(true);
+
+    ApiException ex = assertThrows(ApiException.class, () -> controller().login(
+        new AuthController.Login("same@example.com", "good-password", "driver-app", "DRIVER")));
+    assertEquals("CLIENT_ACCOUNT_IN_DRIVER_APP", ex.code());
+
+    User driver = new User("Jean", "Dupont", "pilot@example.com", "hashed", "DRIVER");
+    when(users.findByEmailIgnoreCaseAndAccountType("pilot@example.com", "CLIENT")).thenReturn(Optional.empty());
+    when(users.findByEmailIgnoreCaseAndAccountType("pilot@example.com", "DRIVER")).thenReturn(Optional.of(driver));
+    ApiException ex2 = assertThrows(ApiException.class, () -> controller().login(
+        new AuthController.Login("pilot@example.com", "good-password", "client-app")));
+    assertEquals("DRIVER_ACCOUNT_IN_CLIENT_APP", ex2.code());
+  }
+
+  @Test
+  void aWrongPasswordNeverRevealsTheOtherAppAccount() {
+    User client = new User("Jean", "Dupont", "same@example.com", "hashed", "CLIENT");
+    when(users.findByEmailIgnoreCaseAndAccountType("same@example.com", "DRIVER")).thenReturn(Optional.empty());
+    when(users.findByEmailIgnoreCaseAndAccountType("same@example.com", "CLIENT")).thenReturn(Optional.of(client));
+    when(encoder.matches("bad", "hashed")).thenReturn(false);
+    ApiException ex = assertThrows(ApiException.class, () -> controller().login(
+        new AuthController.Login("same@example.com", "bad", "driver-app", "DRIVER")));
+    assertEquals("INVALID_CREDENTIALS", ex.code());
+  }
+
+  @Test
   void loginWithWrongPasswordRecordsTheFailureAndPersistsIt() {
     User user = new User("Jean", "Dupont", "client@example.com", "hashed");
     setId(user, UUID.randomUUID());
-    when(users.findByEmailIgnoreCase("client@example.com")).thenReturn(Optional.of(user));
+    when(users.findByEmailIgnoreCaseAndAccountType("client@example.com", "CLIENT")).thenReturn(Optional.of(user));
     when(encoder.matches("wrong", "hashed")).thenReturn(false);
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().login(
@@ -210,7 +240,7 @@ class AuthControllerTest {
     User user = new User("Jean", "Dupont", "suspended@example.com", "hashed");
     setId(user, UUID.randomUUID());
     setStatus(user, "SUSPENDED");
-    when(users.findByEmailIgnoreCase("suspended@example.com")).thenReturn(Optional.of(user));
+    when(users.findByEmailIgnoreCaseAndAccountType("suspended@example.com", "CLIENT")).thenReturn(Optional.of(user));
     when(encoder.matches("correct-password", "hashed")).thenReturn(true);
 
     ApiException ex = assertThrows(ApiException.class, () -> controller().login(
@@ -235,7 +265,7 @@ class AuthControllerTest {
     UUID userId = UUID.randomUUID();
     User user = new User("Jean", "Dupont", "client@example.com", "hashed");
     setId(user, userId);
-    when(users.findByEmailIgnoreCase("client@example.com")).thenReturn(Optional.of(user));
+    when(users.findByEmailIgnoreCaseAndAccountType("client@example.com", "CLIENT")).thenReturn(Optional.of(user));
     when(encoder.matches("correct-password", "hashed")).thenReturn(true);
     when(db.queryForList(anyString(), eq(String.class), any(Object[].class))).thenReturn(List.of("DRIVER"));
     when(jwt.issue(eq(userId), eq("client@example.com"), eq(List.of("DRIVER")))).thenReturn("access-token");

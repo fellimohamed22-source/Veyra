@@ -26,7 +26,7 @@ class PhoneVerificationControllerTest {
   @Test void smsSignInMarksThePhoneVerified(){
     claims.put("provider","phone");
     claims.put("phone_number","+33612345678");
-    when(db.queryForObject(contains("phone_verified_at is not null"),eq(Integer.class),eq("+33612345678"),eq(user))).thenReturn(0);
+    when(db.queryForObject(contains("phone_verified_at is not null"),eq(Integer.class),eq("+33612345678"),eq(user),eq(user))).thenReturn(0);
     assertEquals(true,controller.verify(new PhoneVerificationController.Proof("t")).get("verified"));
     verify(db).update(contains("phone_verified_at=now()"),eq("+33612345678"),eq(user));
   }
@@ -41,7 +41,7 @@ class PhoneVerificationControllerTest {
   @Test void aPhoneVerifiedByAnotherAccountIsRefused(){
     claims.put("provider","phone");
     claims.put("phone_number","+33612345678");
-    when(db.queryForObject(contains("phone_verified_at is not null"),eq(Integer.class),eq("+33612345678"),eq(user))).thenReturn(1);
+    when(db.queryForObject(contains("phone_verified_at is not null"),eq(Integer.class),eq("+33612345678"),eq(user),eq(user))).thenReturn(1);
     assertEquals("PHONE_ALREADY_USED",assertThrows(ApiException.class,()->controller.verify(new PhoneVerificationController.Proof("t"))).code());
   }
 }

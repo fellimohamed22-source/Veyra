@@ -83,9 +83,20 @@ class DriverLocationTracker {
                       'Votre position est partagée avec le client pendant la course.',
                   enableWakeLock: true,
                   setOngoing: true))
-          : LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: distanceFilterMeters);
+          : defaultTargetPlatform == TargetPlatform.iOS
+              // iOS twin of the Android foreground service: keep sharing
+              // the position while the app is in the background during a
+              // ride (needs UIBackgroundModes=location, set by ios-build).
+              ? AppleSettings(
+                  accuracy: LocationAccuracy.high,
+                  distanceFilter: distanceFilterMeters,
+                  activityType: ActivityType.automotiveNavigation,
+                  pauseLocationUpdatesAutomatically: false,
+                  allowBackgroundLocationUpdates: true,
+                  showBackgroundLocationIndicator: true)
+              : LocationSettings(
+                  accuracy: LocationAccuracy.high,
+                  distanceFilter: distanceFilterMeters);
       _subscription = (positionStream?.call(settings) ??
               Geolocator.getPositionStream(locationSettings: settings))
           .listen((p) {

@@ -43,7 +43,7 @@ public class PhoneVerificationController {
     if(!"phone".equals(claims.get("provider"))||phone.isEmpty())
       throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,"PHONE_PROOF_REQUIRED");
     UUID user=CurrentUser.id();
-    Integer taken=db.queryForObject("select count(*) from users where phone=? and phone_verified_at is not null and id<>?",Integer.class,phone,user);
+    Integer taken=db.queryForObject("select count(*) from users where phone=? and phone_verified_at is not null and id<>? and account_type=(select account_type from users where id=?)",Integer.class,phone,user,user);
     if(taken!=null&&taken>0)throw new ApiException(HttpStatus.CONFLICT,"PHONE_ALREADY_USED");
     db.update("update users set phone=?,phone_verified_at=now(),updated_at=now() where id=?",phone,user);
     return Map.of("phone",phone,"verified",true);

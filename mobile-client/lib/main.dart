@@ -65,7 +65,7 @@ Future<void> _ensureLocalNotifications(void Function(String payload) onTap)async
   if(_localNotificationsInitialized)return;
   const androidInit=AndroidInitializationSettings('@mipmap/ic_launcher');
   await _localNotifications.initialize(
-    const InitializationSettings(android:androidInit),
+    const InitializationSettings(android:androidInit,iOS:DarwinInitializationSettings(requestAlertPermission:false,requestBadgePermission:false,requestSoundPermission:false)),
     onDidReceiveNotificationResponse:(response){
       final payload=response.payload;
       if(payload!=null)onTap(payload);
@@ -95,7 +95,7 @@ Future<void> _showForegroundPush(RemoteMessage message)async{
       channelDescription:'Notifications Veyra',
       importance:Importance.high,
       priority:Priority.high,
-    )),
+    ),iOS:DarwinNotificationDetails(presentAlert:true,presentBadge:true,presentSound:true)),
     payload:jsonEncode(message.data),
   );
 }
@@ -310,6 +310,23 @@ class LanguageSwitch extends StatelessWidget{
       style:style,
       onPressed:()=>AppLocale.set(code=='fr'?'en':'fr'),
       child:Text(code=='fr'?'FR':'EN',style:const TextStyle(fontWeight:FontWeight.bold)),
+    ),
+  );
+}
+
+/// Profile row to pick the app language explicitly (Français / English).
+class LanguageTile extends StatelessWidget{
+  const LanguageTile({super.key});
+  @override Widget build(BuildContext context)=>ValueListenableBuilder<String>(
+    valueListenable:AppLocale.code,
+    builder:(context,code,_)=>ListTile(
+      contentPadding:EdgeInsets.zero,
+      leading:const Icon(Icons.language),
+      title:Text(t('Langue')),
+      trailing:Wrap(spacing:6,children:[
+        ChoiceChip(key:const Key('lang-fr'),label:const Text('Français'),selected:code=='fr',onSelected:(_)=>AppLocale.set('fr')),
+        ChoiceChip(key:const Key('lang-en'),label:const Text('English'),selected:code=='en',onSelected:(_)=>AppLocale.set('en')),
+      ]),
     ),
   );
 }
@@ -1247,7 +1264,7 @@ class _AccountScreenState extends State<AccountScreen> {
               item(Icons.place_outlined,t('Adresses enregistrées'),()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const SavedAddressesScreen()))),
               const Divider(),
               item(Icons.lock_outline,t('Modifier mon mot de passe'),password),
-              const Padding(padding:EdgeInsets.symmetric(vertical:4),child:LanguageSwitch()),
+              const LanguageTile(),
               const Divider(),
               item(Icons.logout,t('Déconnexion'),logout,color:VeyraColors.danger,chevron:false),
               const SizedBox(height:16),
@@ -1993,7 +2010,7 @@ class _OffersScreenState extends State<OffersScreen>{
 
   @override void initState(){
     super.initState();
-    refreshTimer=Timer.periodic(const Duration(seconds:10),(_)=>refreshOffers());
+    // No periodic reload (owner request): pull to refresh, push notifications.
     RefreshBus.tick.addListener(refreshOffers);
     future=api.offers(widget.bookingId);
     // The booking itself is shown too: right after publishing there is
@@ -2581,7 +2598,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen>{
   @override void initState(){
     super.initState();
     future=api.bookingDetail(widget.bookingId).then((value){favorite=value['favorite_driver']==true;return value;});
-    statusTimer=Timer.periodic(const Duration(seconds:8),(_)=>refreshStatus());
+    // No periodic reload (owner request): pull to refresh, push notifications.
     RefreshBus.tick.addListener(refreshStatus);
   }
 

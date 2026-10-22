@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'app_locale_en.dart';
 
 /// Same design as the client app's AppLocale -- see that file's own
 /// comment for the full reasoning (French text as the lookup key itself,
@@ -28,7 +29,7 @@ class AppLocale {
 
   static String t(String french) {
     if (code.value != 'en') return french;
-    return _en[french] ?? french;
+    return _en[french] ?? veyraEnExtra[french] ?? french;
   }
 
   static const Map<String, String> _en = {

@@ -18,7 +18,51 @@ import java.util.*;
 @RestController @RequestMapping("/api/v1/driver/onboarding")
 public class DriverOnboardingController {
   private final JdbcTemplate db;
-  public DriverOnboardingController(JdbcTemplate d) { db = d; }
+  private final com.veyra.security.PinCrypto crypto;
+  public DriverOnboardingController(JdbcTemplate d) { this(d, null); }
+  @org.springframework.beans.factory.annotation.Autowired
+  public DriverOnboardingController(JdbcTemplate d, com.veyra.security.PinCrypto crypto) { db = d; this.crypto = crypto; }
+
+  public record Bank(String holderName, String iban, String bic) {}
+
+  /**
+   * Payout bank account (owner request, as Uber/Bolt: RIB required).
+   * IBAN checked (ISO 13616 mod 97) and stored encrypted.
+   */
+  @PutMapping("/bank")
+  Map<String, Object> bank(@RequestBody Bank b) {
+    if (crypto == null) throw new IllegalStateException("CRYPTO_UNAVAILABLE");
+    String holder = b == null || b.holderName() == null ? "" : b.holderName().trim();
+    if (holder.length() < 2 || holder.length() > 140) throw new ApiException(HttpStatus.BAD_REQUEST, "BANK_HOLDER_REQUIRED");
+    String iban = normalizeIban(b.iban());
+    if (!validIban(iban)) throw new ApiException(HttpStatus.BAD_REQUEST, "IBAN_INVALID");
+    String bic = b.bic() == null || b.bic().isBlank() ? null : b.bic().trim().toUpperCase(Locale.ROOT).replaceAll("\\s", "");
+    if (bic != null && !bic.matches("[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?")) throw new ApiException(HttpStatus.BAD_REQUEST, "BIC_INVALID");
+    db.update("insert into driver_bank_accounts(driver_id,holder_name,iban_encrypted,iban_country,iban_last4,bic) values (?,?,?,?,?,?) "
+        + "on conflict(driver_id) do update set holder_name=excluded.holder_name,iban_encrypted=excluded.iban_encrypted,"
+        + "iban_country=excluded.iban_country,iban_last4=excluded.iban_last4,bic=excluded.bic,updated_at=now()",
+        driver(), holder, crypto.encrypt(iban), iban.substring(0, 2), iban.substring(iban.length() - 4), bic);
+    return Map.of("ibanMasked", mask(iban.substring(0, 2), iban.substring(iban.length() - 4)));
+  }
+
+  static String normalizeIban(String raw) {
+    return raw == null ? "" : raw.toUpperCase(Locale.ROOT).replaceAll("[\\s-]", "");
+  }
+
+  /** ISO 13616: country, check digits, BBAN; rearranged number mod 97 == 1. */
+  static boolean validIban(String iban) {
+    if (!iban.matches("[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}")) return false;
+    if (iban.startsWith("FR") && iban.length() != 27) return false;
+    String moved = iban.substring(4) + iban.substring(0, 4);
+    int rem = 0;
+    for (char ch : moved.toCharArray()) {
+      String digits = Character.isLetter(ch) ? String.valueOf(ch - 'A' + 10) : String.valueOf(ch);
+      for (char dch : digits.toCharArray()) rem = (rem * 10 + (dch - '0')) % 97;
+    }
+    return rem == 1;
+  }
+
+  static String mask(String country, String last4) { return country + "•• •••• •••• •••• " + last4; }
 
   public record Company(String siren, String siret, String legalName, String legalForm, String address) {
     public Company(String siren, String siret, String legalName) { this(siren, siret, legalName, null, null); }
@@ -33,8 +77,16 @@ public class DriverOnboardingController {
   public record License(String licenseNumber, String category, LocalDate expiresAt) {}
 
   static final Set<String> LICENSE_CATEGORIES = Set.of("B", "BE", "C1", "D1", "D");
-  static final List<String> REQUIRED_DOCUMENTS = List.of("IDENTITY", "VTC_CARD", "DRIVING_LICENSE", "INSURANCE", "VEHICLE_REGISTRATION");
-  static final Set<String> AFFILIATED_EXEMPT_DOCUMENTS = Set.of("INSURANCE", "VEHICLE_REGISTRATION");
+  /**
+   * Pieces asked by Uber / Bolt in France (checked 22/10/2026): identity,
+   * VTC card, licence, RC pro insurance, vehicle insurance (green card /
+   * paid passenger transport), registration certificate, company
+   * registration proof (Kbis or SIRENE notice), VTC register certificate,
+   * RIB. Affiliated drivers: the company holds the vehicle and business papers.
+   */
+  static final List<String> REQUIRED_DOCUMENTS = List.of("IDENTITY", "VTC_CARD", "DRIVING_LICENSE", "INSURANCE", "VEHICLE_INSURANCE",
+      "VEHICLE_REGISTRATION", "KBIS", "REVTC_CERTIFICATE", "RIB");
+  static final Set<String> AFFILIATED_EXEMPT_DOCUMENTS = Set.of("INSURANCE", "VEHICLE_INSURANCE", "VEHICLE_REGISTRATION", "KBIS", "REVTC_CERTIFICATE");
 
   @PutMapping("/company")
   void company(@RequestBody Company c) {
@@ -94,6 +146,8 @@ public class DriverOnboardingController {
       if (!docs.contains(type)) missing.add(type);
     }
     if (count("select count(*) from driver_licenses where driver_id=?", d) == 0) missing.add("LICENSE");
+    if (count("select count(*) from drivers dr join users u on u.id=dr.user_id where dr.id=? and u.avatar_storage_key is not null", d) == 0) missing.add("PROFILE_PHOTO");
+    if (count("select count(*) from driver_bank_accounts where driver_id=?", d) == 0) missing.add("BANK_ACCOUNT");
     if (count("select count(*) from driver_vtc_registrations where driver_id=?", d) == 0) missing.add("VTC");
     if (affiliated) {
       if (count("select count(*) from company_affiliations where driver_id=? and status in ('PENDING','ACTIVE')", d) == 0) missing.add("AFFILIATION");
@@ -123,6 +177,10 @@ public class DriverOnboardingController {
     result.put("company", db.queryForList("select legal_name,siren,siret,legal_form,address,status from driver_companies where driver_id=?", d));
     result.put("registration", db.queryForList("select registration_number,card_number,issued_at,expires_at from driver_vtc_registrations where driver_id=?", d));
     result.put("license", db.queryForList("select license_number,category,expires_at from driver_licenses where driver_id=?", d));
+    result.put("bank", db.queryForList("select holder_name,iban_country,iban_last4,bic from driver_bank_accounts where driver_id=?", d).stream()
+        .map(r -> Map.<String, Object>of("holder_name", r.get("holder_name"), "iban_masked", mask((String) r.get("iban_country"), (String) r.get("iban_last4")),
+            "bic", r.get("bic") == null ? "" : r.get("bic")))
+        .toList());
     result.put("missing", missing(d));
     return result;
   }
