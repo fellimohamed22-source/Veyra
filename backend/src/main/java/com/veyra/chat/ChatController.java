@@ -21,8 +21,9 @@ import java.util.*;
         if(!staff()&&!Boolean.TRUE.equals(db.queryForObject("select "+WINDOW_OPEN_SQL+" from scheduled_bookings sb where sb.id=?",Boolean.class,bookingId)))
             throw new ApiException(HttpStatus.FORBIDDEN,"CHAT_WINDOW_CLOSED");
         UUID c=conversation(bookingId),id=UUID.randomUUID(),u=CurrentUser.id();
-        db.update("insert into chat_messages(id,conversation_id,sender_user_id,body) values (?,?,?,?)",id,c,u,m.body());
-        Map<String,Object>x=Map.of("id",id,"senderUserId",u,"body",m.body());
+        java.time.OffsetDateTime sentAt=db.queryForObject("insert into chat_messages(id,conversation_id,sender_user_id,body) values (?,?,?,?) returning sent_at",java.time.OffsetDateTime.class,id,c,u,m.body());
+        // sentAt lets the apps place the message last (newest at the bottom).
+        Map<String,Object>x=Map.of("id",id,"senderUserId",u,"body",m.body(),"sentAt",sentAt==null?java.time.OffsetDateTime.now().toString():sentAt.toString());
         ws.convertAndSend("/topic/bookings/"+bookingId+"/chat",x);
         return ResponseEntity.status(201).body(x);
     }

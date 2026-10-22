@@ -3,7 +3,6 @@ import 'core/widgets/chat_view.dart';
 import 'core/maps/veyra_map_marks.dart';
 import 'core/widgets/profile_dialog.dart';
 import 'dart:async';
-import 'core/active_booking.dart';
 import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -99,14 +98,6 @@ Future<void> _showDriverForegroundPush(RemoteMessage message)async{
 String driverNotificationRoute(String bookingId,String? template,Map<String,dynamic> data){
   if(template=='NEW_BOOKING')return '/request/$bookingId';
   return '/ride/$bookingId';
-}
-Future<void> resumeActiveBooking()async{
-  try{
-    final id=activeBookingId(await api.bookings(scope:'active'));
-    if(id!=null&&router.routeInformationProvider.value.uri.path=='/home')router.go('/ride/'+Uri.encodeComponent(id));
-  }catch(_){
-    // Keep the usable home screen when the server cannot confirm an active ride.
-  }
 }
 
 void openDriverPush(RemoteMessage message){
@@ -379,7 +370,8 @@ class _LoginScreenState extends State<LoginScreen>{
       if(!mounted)return;
       final approved=status['kyc_status']=='APPROVED'&&status['marketplace_enabled']==true;
       context.go(approved?'/home':'/kyc');
-      if(approved){await resumeActiveBooking();await configureDriverPush();}
+      // Reopening the app always lands on the home screen (next ride shown there).
+      if(approved)await configureDriverPush();
     }on DioException catch(e){
       if(!mounted)return;
       if(e.response?.statusCode==401||e.response?.statusCode==403){

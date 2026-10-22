@@ -31,8 +31,10 @@ export class AdminShell implements OnInit {
       {label: 'Partenaires', link: '/admin/partenaires'},
       {label: 'Sociétés VTC', link: '/admin/societes'},
       {label: 'Paramètres', link: '/admin/parametres'});
+    if (admin || this.roles.includes('FINANCE')) items.push({label: 'Prix conseillés', link: '/admin/prix-conseilles'});
     if (admin || this.roles.includes('FINANCE')) items.push({label: 'Finance', link: '/admin/finance'});
     if (admin || this.roles.includes('SUPPORT')) items.push({label: 'Support', link: '/admin/support'});
+    if (admin) items.push({label: 'Journal d’audit', link: '/admin/audit'});
     return items;
   }
 

@@ -16,6 +16,7 @@ import {Api} from '../api';
         <div class="field"><label for="password">Mot de passe</label><input id="password" [(ngModel)]="password" type="password" autocomplete="current-password" (keyup.enter)="login()"></div>
         <div class="errbox" *ngIf="error">{{error}}</div>
         <button (click)="login()" [disabled]="loading">{{loading?'Connexion…':'Se connecter'}}</button>
+        <p class="sub" style="text-align:center;margin:0"><a routerLink="/mot-de-passe-oublie">Mot de passe oublié ?</a></p>
         <p class="sub" style="text-align:center;margin:0">Pas encore d’espace ? <a routerLink="/inscription" [queryParams]="{profil:'societe'}">Société VTC</a> · <a routerLink="/inscription" [queryParams]="{profil:'partenaire'}">Hôtel, entreprise</a></p>
       </div>
     </div>`

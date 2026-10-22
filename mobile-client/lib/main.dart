@@ -3,7 +3,6 @@ import 'core/widgets/chat_view.dart';
 import 'core/maps/veyra_map_marks.dart';
 import 'core/widgets/profile_dialog.dart';
 import 'dart:async';
-import 'core/active_booking.dart';
 import 'core/maps/tracking_eta.dart';
 import 'core/notifications/notification_launch.dart';
 import 'dart:convert';
@@ -108,14 +107,6 @@ String clientNotificationRoute(String bookingId,String? template,Map<String,dyna
   if({'DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_PROGRESS'}.contains(status))return '/live/$bookingId';
   if(template=='PAYMENT_REQUIRED'||status=='PAYMENT_PENDING')return '/payment/$bookingId';
   return '/booking/$bookingId';
-}
-Future<void> resumeActiveBooking()async{
-  try{
-    final id=activeBookingId(await api.bookings());
-    if(id!=null&&router.routeInformationProvider.value.uri.path=='/home')router.go('/booking/'+Uri.encodeComponent(id));
-  }catch(_){
-    // Keep the usable home screen when the server cannot confirm an active ride.
-  }
 }
 
 void openPush(RemoteMessage message){
@@ -488,11 +479,22 @@ class _LoginScreenState extends State<LoginScreen>{
       }catch(_){
         return;
       }
-      if(((token?.isNotEmpty??false)||(refreshToken?.isNotEmpty??false))&&mounted){
-        context.go('/home');
-        await resumeActiveBooking();
-        await configurePush();
-      }
+      if(!((token?.isNotEmpty??false)||(refreshToken?.isNotEmpty??false))||!mounted)return;
+      // Reopening the app: check the session with the server (the Dio
+      // interceptor refreshes an expired access token), then the home
+      // screen -- the next ride is shown there, never forced open.
+      try{
+        await api.me();
+      }on DioException catch(e){
+        if(e.response?.statusCode==401||e.response?.statusCode==403){
+          try{await api.storage.deleteAll();}catch(_){}
+          return;
+        }
+        // Offline or server hiccup: keep the stored session and open home.
+      }catch(_){}
+      if(!mounted)return;
+      context.go('/home');
+      await configurePush();
     });
   }
 

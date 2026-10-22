@@ -144,6 +144,12 @@ export class Api {
   settleCustomerDebt(id:string,amountMinor:number){return this.request('/finance/customer-debts/'+id+'/settle?amountMinor='+amountMinor,{method:'POST'});}
   markPayablePaid(id:string){return this.request('/finance/payables/'+id+'/mark-paid',{method:'POST'});}
   generatePartnerInvoice(partnerId:string,from:string,to:string){return this.request('/finance/partners/'+partnerId+'/invoices/generate?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{method:'POST'});}
+  adminDriverVehicles(id:string){return this.request('/admin/drivers/'+id+'/vehicles');}
+  auditLogs(limit=200){return this.request('/admin/audit?limit='+limit);}
+  priceGrid(){return this.request('/admin/suggested-price-grid');}
+  updatePriceGrid(categoryId:string,body:any){return this.request('/admin/suggested-price-grid/'+categoryId,{method:'PUT',body:JSON.stringify(body)});}
+  forgotPassword(email:string){return this.request('/auth/forgot-password',{method:'POST',body:JSON.stringify({email})});}
+  resetPassword(token:string,newPassword:string){return this.request('/auth/reset-password',{method:'POST',body:JSON.stringify({token,newPassword})});}
   problemReports(){return this.request('/support/problem-reports');}
   resolveProblemReport(id:string){return this.request('/support/problem-reports/'+id+'/resolve',{method:'POST'});}
   supportTimeline(id:string){return this.request('/support/bookings/'+id+'/timeline');}

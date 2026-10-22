@@ -116,7 +116,7 @@ class ChatControllerTest {
 
     assertEquals("CHAT_WINDOW_CLOSED", ex.code());
     assertEquals(HttpStatus.FORBIDDEN, ex.status());
-    verify(db, never()).update(contains("insert into chat_messages"), any(), any(), any(), any());
+    verify(db, never()).queryForObject(contains("insert into chat_messages"), eq(java.time.OffsetDateTime.class), any(), any(), any(), any());
     verifyNoInteractions(ws);
   }
 
@@ -155,7 +155,9 @@ class ChatControllerTest {
     // Must reuse the existing conversation, never create a second one for
     // the same booking.
     verify(db, never()).update(contains("insert into chat_conversations"), any(), any());
-    verify(db).update(contains("insert into chat_messages"), any(), eq(existingConversationId), eq(userId), eq("hello there"));
+    verify(db).queryForObject(contains("insert into chat_messages"), eq(java.time.OffsetDateTime.class), any(), eq(existingConversationId), eq(userId), eq("hello there"));
+    // The answer carries sentAt so the apps place it last.
+    assertNotNull(response.getBody().get("sentAt"));
     verify(ws).convertAndSend(eq("/topic/bookings/" + bookingId + "/chat"), any(Map.class));
   }
 

@@ -39,6 +39,15 @@ public class AdminController {
   // avant de les consulter -- approveDriver()/rejectDriver()
   // ci-dessous étaient donc appelables sans qu'aucun document n'ait
   // jamais été concrètement affiché à l'écran.
+  /** Vehicles shown on the driver review (board ADM-02 « Véhicule »). */
+  @GetMapping("/drivers/{id}/vehicles")
+  public List<Map<String,Object>> driverVehicles(@PathVariable UUID id){
+    return db.queryForList(
+      "select v.id,v.brand,v.model,v.year,v.plate_number,v.color,v.seats,v.baggage_capacity,v.status,vc.display_name as category_name " +
+      "from vehicles v join vehicle_categories vc on vc.id=v.category_id where v.driver_id=? order by v.brand,v.model",
+      id);
+  }
+
   @GetMapping("/drivers/{id}/documents")
   public List<Map<String,Object>> driverDocuments(@PathVariable UUID id){
     return db.queryForList(

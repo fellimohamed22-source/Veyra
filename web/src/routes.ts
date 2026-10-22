@@ -16,10 +16,13 @@ import {AdminCompanies, AdminCompanyReview} from './admin/companies';
 import {CompanyShell} from './company/shell';
 import {CompanyActivity, CompanyDashboard, CompanyDocuments, CompanyDrivers, CompanyVehicles} from './company/pages';
 import {Signup} from './views/signup';
+import {ForgotPassword} from './views/forgot';
+import {AdminAudit, AdminPriceGrid} from './admin/extra';
 
 export const routes: Routes = [
   {path: 'login', component: Login},
   {path: 'inscription', component: Signup},
+  {path: 'mot-de-passe-oublie', component: ForgotPassword},
   // Public passenger tracking link (PART-13); authorised by its token only.
   {path: 'suivi/:token', component: Guest},
   // Partner portal (validated mock-up DEC-13).
@@ -57,6 +60,8 @@ export const routes: Routes = [
       {path: 'societes', component: AdminCompanies},
       {path: 'societes/:id', component: AdminCompanyReview},
       {path: 'parametres', component: AdminSettings},
+      {path: 'prix-conseilles', component: AdminPriceGrid},
+      {path: 'audit', component: AdminAudit},
       {path: 'finance', component: Finance},
       {path: 'support', component: Support},
     ]

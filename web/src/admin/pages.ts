@@ -100,19 +100,30 @@ export class AdminVerifications implements OnInit {
             <button class="ghost" (click)="view(doc.id)">Voir</button></span>
         </div>
       </div>
+      <div class="card">
+        <h3>Véhicule</h3>
+        <p class="empty" *ngIf="!vehicles.length">Aucun véhicule enregistré.</p>
+        <div class="row between" *ngFor="let v of vehicles" style="border-top:1px solid #EEF1F6;padding-top:8px">
+          <span class="route"><b>{{v.brand}} {{v.model}} · {{v.year}} · {{v.plate_number}}</b>
+            <span class="sub">{{v.category_name}}<span *ngIf="v.seats"> · {{v.seats}} places</span><span *ngIf="v.baggage_capacity !== null && v.baggage_capacity !== undefined"> · {{v.baggage_capacity}} bagages</span><span *ngIf="v.color"> · {{v.color}}</span></span></span>
+          <span class="pill" [ngClass]="v.status === 'APPROVED' ? 'p-ok' : v.status === 'REJECTED' ? 'p-bad' : 'p-warn'">{{v.status === 'APPROVED' ? 'Approuvé' : v.status === 'REJECTED' ? 'Refusé' : 'À vérifier'}}</span>
+        </div>
+        <div class="sub" *ngIf="vehicles.length">L'approbation du chauffeur approuve aussi ses véhicules en attente.</div>
+      </div>
       <div class="okbox" *ngIf="message">{{message}}</div>
     </ng-container>`
 })
 export class AdminDriverReview implements OnInit {
   kycStatusLabel = kycStatusLabel; documentTypeLabel = documentTypeLabel;
   @Input() id = '';
-  driver: any = null; documents: any[] = []; error = ''; message = ''; busy = false; rejecting = false; reason = 'DOCUMENT_INVALID';
+  driver: any = null; documents: any[] = []; vehicles: any[] = []; error = ''; message = ''; busy = false; rejecting = false; reason = 'DOCUMENT_INVALID';
   constructor(private api: Api) {}
   async ngOnInit() { await this.load(); }
   async load() {
     try {
       this.driver = (await this.api.adminDrivers()).find((d: any) => d.id === this.id) || null;
       this.documents = await this.api.adminDriverDocuments(this.id);
+      try { this.vehicles = await this.api.adminDriverVehicles(this.id); } catch { this.vehicles = []; }
       if (!this.driver) this.error = 'Chauffeur introuvable.';
     } catch (e: any) { this.error = errorMessage(e?.code); }
   }

@@ -95,9 +95,14 @@ class _VeyraChatViewState extends State<VeyraChatView> {
 
   bool _known(Object? id) => id != null && messages.any((m) => m['id']?.toString() == id.toString());
 
+  /// A message without a timestamp (live push, older server) is dated now so
+  /// it sorts last: newest at the bottom.
+  static Map<String, dynamic> _dated(Map<String, dynamic> m) =>
+      (m['sentAt'] ?? m['sent_at']) == null ? {...m, 'sentAt': DateTime.now().toUtc().toIso8601String()} : m;
+
   void _incoming(Map<String, dynamic> m) {
     if (!mounted || _known(m['id'])) return;
-    setState(() => messages.add(m));
+    setState(() => messages.add(_dated(m)));
   }
 
   Future<void> send() async {
@@ -108,7 +113,7 @@ class _VeyraChatViewState extends State<VeyraChatView> {
       final sent = await api.sendMessage(widget.bookingId, body);
       if (!mounted) return;
       if (input.text == draft) input.clear();
-      if (!_known(sent['id'])) setState(() => messages.add(sent));
+      if (!_known(sent['id'])) setState(() => messages.add(_dated(sent)));
     } on DioException catch (e) {
       final code = e.response?.data is Map ? (e.response!.data as Map)['code']?.toString() : null;
       if (mounted) {
@@ -207,7 +212,13 @@ class _VeyraChatViewState extends State<VeyraChatView> {
     if (messages.isEmpty) {
       return VeyraEmptyView(icon: Icons.chat_bubble_outline, message: _t('Aucun message pour le moment. Écrivez le premier !'));
     }
-    final sorted = [...messages]..sort((a, b) => (_at(a) ?? DateTime(0)).compareTo(_at(b) ?? DateTime(0)));
+    // Oldest first, ties kept in arrival order (Dart sort is not stable).
+    final indexed = [for (var i = 0; i < messages.length; i++) (i, messages[i])];
+    indexed.sort((a, b) {
+      final c = (_at(a.$2) ?? DateTime(0)).compareTo(_at(b.$2) ?? DateTime(0));
+      return c != 0 ? c : a.$1.compareTo(b.$1);
+    });
+    final sorted = [for (final e in indexed) e.$2];
     // Reversed: index 0 is the newest message, kept at the bottom above the
     // composer even while the keyboard is open.
     final items = <Widget>[];

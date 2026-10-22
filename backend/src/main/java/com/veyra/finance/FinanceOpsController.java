@@ -25,8 +25,9 @@ public class FinanceOpsController {
   @GetMapping("/cash-debts")
   public List<Map<String,Object>> driverDebts(){
     return db.queryForList(
-        "select dpd.id,dpd.driver_id,dpd.booking_id,dpd.amount_minor,dpd.paid_amount_minor,dpd.currency,dpd.status " +
-        "from driver_platform_debts dpd order by dpd.created_at desc");
+        "select dpd.id,dpd.driver_id,dpd.booking_id,dpd.amount_minor,dpd.paid_amount_minor,dpd.currency,dpd.status," +
+        "trim(coalesce(u.first_name,'')||' '||coalesce(u.last_name,'')) as driver_name " +
+        "from driver_platform_debts dpd left join drivers d on d.id=dpd.driver_id left join users u on u.id=d.user_id order by dpd.created_at desc");
   }
 
   @PostMapping("/cash-debts/{id}/settle")
@@ -120,8 +121,9 @@ public class FinanceOpsController {
   @GetMapping("/payables")
   public List<Map<String,Object>> payables(){
     return db.queryForList(
-        "select id,driver_id,booking_id,amount_minor,currency,status,created_at " +
-        "from driver_payables order by created_at desc");
+        "select dp.id,dp.driver_id,dp.booking_id,dp.amount_minor,dp.currency,dp.status,dp.created_at," +
+        "trim(coalesce(u.first_name,'')||' '||coalesce(u.last_name,'')) as driver_name " +
+        "from driver_payables dp left join drivers d on d.id=dp.driver_id left join users u on u.id=d.user_id order by dp.created_at desc");
   }
 
   @PostMapping("/payables/{id}/mark-paid")
