@@ -547,4 +547,6 @@ const Map<String, String> veyraEnExtra = {
   "Disponible après la fin du mois": "Available after the month ends",
   "Factures de course": "Ride invoices",
   "Émises par VEYRA en votre nom pour vos clients (mandat de facturation).": "Issued by VEYRA in your name to your customers (billing mandate).",
+  "Choisissez votre statut TVA.": "Choose your VAT status.",
+  "Une erreur est survenue. Veuillez réessayer.": "Something went wrong. Please try again.",
 };

@@ -106,6 +106,12 @@ import {CardPayment} from '../portal/card-payment';
         <div class="row between" *ngFor="let h of timeline"><span>{{statusLabel(h.to_status)}}</span><span class="sub">{{dateTime(h.created_at)}}</span></div>
       </div>
 
+      <div class="card" *ngIf="invoiceAvailable">
+        <h3>Facture</h3>
+        <div class="sub">Facture de la course émise au nom du chauffeur (mandat de facturation), réglée par carte.</div>
+        <div class="row"><button class="ghost" (click)="openInvoice()" [disabled]="invoiceOpening">{{invoiceOpening ? 'Ouverture…' : 'Télécharger la facture'}}</button></div>
+      </div>
+
       <div class="row" *ngIf="cancellable && ctx.books">
         <button class="danger" (click)="cancel()" [disabled]="cancelling">{{cancelling ? 'Annulation…' : 'Annuler cette réservation'}}</button>
       </div>
@@ -182,6 +188,17 @@ export class PartnerBookingDetail implements OnInit {
     finally { this.linking = false; }
   }
 
+  /** Card-paid rides get a ride invoice (partner-invoiced ones are on the monthly partner invoice). */
+  get invoiceAvailable() { return this.b && ['COMPLETED', 'CLOSED'].includes(this.b.status) && this.b.payment_method !== 'PARTNER_INVOICE'; }
+  invoiceOpening = false;
+  /** The tab opens before the request so the browser does not block it. */
+  async openInvoice() {
+    this.invoiceOpening = true; this.error = '';
+    const tab = window.open('', '_blank');
+    try { const url = await this.api.bookingInvoiceUrl(this.id); if (tab) tab.location.href = url; else location.href = url; }
+    catch (e: any) { tab?.close(); this.error = errorMessage(e?.code); }
+    finally { this.invoiceOpening = false; }
+  }
   async cancel() {
     this.cancelling = true; this.error = '';
     try {

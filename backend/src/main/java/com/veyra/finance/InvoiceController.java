@@ -35,8 +35,10 @@ public class InvoiceController {
   public Map<String, Object> rideLink(@PathVariable UUID bookingId) {
     boolean staff = CurrentUser.hasRole("FINANCE") || CurrentUser.hasRole("ADMIN") || CurrentUser.hasRole("SUPPORT");
     Integer mine = db.queryForObject(
-        "select count(*) from scheduled_bookings sb left join drivers d on d.id=sb.selected_driver_id where sb.id=? and (sb.creator_user_id=? or d.user_id=?)",
-        Integer.class, bookingId, CurrentUser.id(), CurrentUser.id());
+        "select count(*) from scheduled_bookings sb left join drivers d on d.id=sb.selected_driver_id " +
+        "left join partner_users pu on pu.partner_id=sb.partner_id and pu.user_id=? " +
+        "where sb.id=? and (sb.creator_user_id=? or d.user_id=? or pu.id is not null)",
+        Integer.class, CurrentUser.id(), bookingId, CurrentUser.id(), CurrentUser.id());
     if (!staff && (mine == null || mine == 0)) throw new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND");
     return linkOf(invoices.rideInvoice(bookingId));
   }

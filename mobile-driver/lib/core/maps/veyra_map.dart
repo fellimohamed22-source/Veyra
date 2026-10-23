@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
+
+import 'google_map_kit.dart';
 
 import 'veyra_map_marks.dart';
 import 'veyra_tiles.dart';
@@ -67,6 +70,11 @@ class _VeyraMapState extends State<VeyraMap>
   bool _fitted=false;
   bool _follow=true;
   bool _mapReady=false;
+  /// Google Maps SDK controller when the native engine is used.
+  gm.GoogleMapController? _google;
+  DateTime _lastGoogleFrame=DateTime.fromMillisecondsSinceEpoch(0);
+
+  EdgeInsets get _fitPadding=>EdgeInsets.fromLTRB(54,widget.controlsBottom>24?170:90,64,widget.controlsBottom>24?widget.controlsBottom+40:60);
 
   LatLng get _fallback =>
       widget.driver ?? widget.pickup ?? widget.dropoff ?? const LatLng(43.2965,5.3698);
@@ -152,6 +160,12 @@ class _VeyraMapState extends State<VeyraMap>
     final position=lerpLatLng(from,to,curve);
     final heading=lerpHeading(_headingFrom,_headingTo,curve);
     if(!mounted)return;
+    if(_google!=null){
+      // Native markers and camera cross the platform channel: ~15 fps.
+      final now=DateTime.now();
+      if(_motion.value<1&&now.difference(_lastGoogleFrame).inMilliseconds<66)return;
+      _lastGoogleFrame=now;
+    }
     setState((){
       _displayedDriver=position;
       _displayedHeading=heading;
@@ -161,6 +175,11 @@ class _VeyraMapState extends State<VeyraMap>
 
   void _followCamera(LatLng target){
     if(!_mapReady)return;
+    final google=_google;
+    if(google!=null){
+      google.moveCamera(gm.CameraUpdate.newLatLngZoom(toGm(target),16.2)).catchError((_){});
+      return;
+    }
     try{
       _controller.move(target,16.2);
     }catch(_){}
@@ -176,6 +195,13 @@ class _VeyraMapState extends State<VeyraMap>
       if(_displayedDriver!=null)_displayedDriver!,
     ];
     if(points.isEmpty)return;
+    final google=_google;
+    if(google!=null){
+      google.moveCamera(points.length==1
+          ?gm.CameraUpdate.newLatLngZoom(toGm(points.first),16)
+          :gm.CameraUpdate.newLatLngBounds(boundsOf(points),24)).then((_){_fitted=true;}).catchError((_){});
+      return;
+    }
     try{
       if(points.length==1){
         _controller.move(points.first,16);
@@ -223,6 +249,32 @@ class _VeyraMapState extends State<VeyraMap>
     });
 
     return Stack(children:[
+      if(veyraGoogleMapsEnabled)
+        VeyraGoogleMap(
+          pickup:widget.pickup,
+          dropoff:widget.dropoff,
+          pickupLabel:widget.pickupLabel,
+          dropoffLabel:widget.dropoffLabel,
+          route:widget.route.points,
+          secondaryRoute:widget.secondaryRoute.points,
+          car:driver,
+          carHeading:_displayedHeading,
+          // This widget already glides the car between GPS fixes.
+          carGlide:false,
+          padding:_fitPadding,
+          initialCenter:_fallback,
+          initialZoom:widget.initialZoom,
+          fitOnCreate:false,
+          onCreated:(c){
+            _google=c;
+            _mapReady=true;
+            _fitAll();
+          },
+          onUserGesture:(){
+            if(_follow&&mounted)setState(()=>_follow=false);
+          },
+        )
+      else
       FlutterMap(
         mapController:_controller,
         options:MapOptions(
@@ -280,7 +332,7 @@ class _VeyraMapState extends State<VeyraMap>
             onPressed:_recenter,
           ),
         ),
-      Positioned.fill(child:Padding(
+      if(!veyraGoogleMapsEnabled)Positioned.fill(child:Padding(
         padding:EdgeInsets.only(bottom:widget.controlsBottom>24?widget.controlsBottom-18:0),
         child:Stack(children:[VeyraTiles.attribution()]),
       )),

@@ -71,6 +71,10 @@ veyra:
     # Adresse publique du site web qui affiche /suivi/{jeton} (PART-13).
     base-url: ${VEYRA_GUEST_BASE_URL:}
 
+  mail:
+    # Expéditeur des e-mails (factures). Vide : adresse du compte SMTP.
+    from: ${VEYRA_MAIL_FROM:${SMTP_USER:}}
+
   invoice:
     # Identité légale de VEYRA imprimée sur les factures de commission (et en
     # pied de toutes les factures). Sans SIREN ni adresse, les factures de

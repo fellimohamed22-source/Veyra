@@ -144,7 +144,15 @@ void main() {
     await tapTile(tester, 'INSURANCE');
     await tapTile(tester, 'KBIS');
     await tapTile(tester, 'REVTC_CERTIFICATE');
+    // VAT status is required (it is printed on the ride invoices).
     await tapNext(tester);
+    expect(calls['/api/v1/driver/onboarding/company'], isNull);
+    await tester.ensureVisible(find.byKey(const ValueKey('vat-franchise')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('vat-franchise')));
+    await tester.pumpAndSettle();
+    await tapNext(tester);
+    expect(calls['/api/v1/driver/invoices/vat'], {'vatRegistered': false, 'vatNumber': null});
     final company = calls['/api/v1/driver/onboarding/company'] as Map;
     expect(company['siren'], '123456789');
     expect(company['siret'], '12345678900012');

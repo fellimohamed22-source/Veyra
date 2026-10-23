@@ -41,6 +41,7 @@ jobs:
       - name: Prepare iOS project
         env:
           GOOGLE_SERVICE_INFO_PLIST: ${{ secrets[matrix.plist_secret] }}
+          GOOGLE_MAPS_MOBILE_KEY: ${{ secrets.GOOGLE_MAPS_MOBILE_KEY }}
         run: bash .github/scripts/ios-prepare.sh "${{ matrix.app }}" "${{ matrix.project }}" "${{ matrix.bundle }}" "${{ matrix.display }}" "${{ matrix.kind }}"
       - name: Build (no codesign)
         working-directory: ${{ matrix.app }}

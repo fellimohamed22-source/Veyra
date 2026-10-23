@@ -5,7 +5,7 @@ import '../app/theme.dart';
 import '../app_locale.dart';
 import '../core/formatters/error_messages.dart';
 import '../core/widgets/auth_ui.dart';
-import '../core/widgets/veyra_ui.dart' show VeyraStepTitle;
+import '../core/widgets/veyra_ui.dart' show VeyraStepTitle, VeyraSelectableCard;
 import '../core/widgets/signup_consents.dart';
 import '../ui/driver_ui.dart' show DriverPill;
 
@@ -109,6 +109,9 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
   final sirenSiret = TextEditingController();
   final address = TextEditingController();
   final revtc = TextEditingController();
+  // VAT status printed on the ride invoices issued in the driver's name.
+  bool? vatRegistered;
+  final vatNumber = TextEditingController();
 
   // Step 6: vehicle.
   List<Map<String, dynamic>> categories = [];
@@ -157,7 +160,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
 
   @override
   void dispose() {
-    for (final c in [firstName, lastName, phone, email, password, vtcCard, licenseNumber, legalName, sirenSiret, address, revtc, brand, model, plate, inviteCode, companySearch, bankHolder, bankIban, bankBic]) {
+    for (final c in [firstName, lastName, phone, email, password, vtcCard, licenseNumber, legalName, sirenSiret, address, revtc, vatNumber, brand, model, plate, inviteCode, companySearch, bankHolder, bankIban, bankBic]) {
       c.dispose();
     }
     super.dispose();
@@ -215,6 +218,8 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         legalName.text = (c['legal_name'] ?? '').toString();
         sirenSiret.text = (c['siret'] ?? c['siren'] ?? '').toString();
         address.text = (c['address'] ?? '').toString();
+        vatRegistered = c['vat_registered'] as bool?;
+        vatNumber.text = (c['vat_number'] ?? '').toString();
       }
       final v = (s['vehicles'] as List? ?? const []).whereType<Map>();
       if (v.isNotEmpty) {
@@ -409,6 +414,9 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
         if (!page('INSURANCE').sent) return _fail(_t('Ajoutez votre attestation d’assurance RC professionnelle.'));
         if (!page('KBIS').sent) return _fail(_t('Ajoutez votre Kbis ou avis de situation SIRENE.'));
         if (!page('REVTC_CERTIFICATE').sent) return _fail(_t('Ajoutez votre attestation d’inscription au registre VTC.'));
+        if (vatRegistered == null) return _fail(_t('Choisissez votre statut TVA.'));
+        final vat = vatNumber.text.replaceAll(' ', '').toUpperCase();
+        if (vatRegistered == true && !RegExp(r'^[A-Z]{2}[A-Z0-9]{2,13}$').hasMatch(vat)) return _fail(_t('Numéro de TVA intracommunautaire invalide (ex. FR12345678901).'));
         await widget.api.saveCompany(
           siren: digits.substring(0, 9),
           siret: digits.length == 14 ? digits : null,
@@ -416,6 +424,7 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
           legalForm: legalForm,
           address: address.text.trim(),
         );
+        await widget.api.saveVat(vatRegistered!, vatRegistered == true ? vatNumber.text.replaceAll(' ', '').toUpperCase() : null);
         if (revtc.text.trim().isNotEmpty && vtcCard.text.trim().isNotEmpty) {
           await widget.api.saveVtc(registrationNumber: revtc.text.trim(), cardNumber: vtcCard.text.trim(), expiresAt: vtcExpiry == null ? null : iso(vtcExpiry!));
         }
@@ -891,6 +900,18 @@ class DriverSignupFlowState extends State<DriverSignupFlow> {
           field(_t('SIREN/SIRET'), sirenSiret, keyboard: TextInputType.number, key: const ValueKey('siren')),
           field(_t('Adresse'), address, key: const ValueKey('address')),
           field(_t('Inscription au registre VTC (si applicable)'), revtc, required: false, key: const ValueKey('revtc')),
+          VeyraFieldLabel(_t('Statut TVA'), required: true),
+          VeyraSelectableCard(key: const ValueKey('vat-registered'), selected: vatRegistered == true, onTap: () => setState(() => vatRegistered = true), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_t('Assujetti à la TVA'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(_t('TVA 10 % (transport de personnes) sur vos factures.'), style: const TextStyle(color: VeyraColors.textSecondary, fontSize: 13)),
+          ])),
+          const SizedBox(height: 8),
+          VeyraSelectableCard(key: const ValueKey('vat-franchise'), selected: vatRegistered == false, onTap: () => setState(() => vatRegistered = false), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_t('Franchise de TVA (micro-entreprise)'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(_t('Mention « TVA non applicable, art. 293 B du CGI ».'), style: const TextStyle(color: VeyraColors.textSecondary, fontSize: 13)),
+          ])),
+          if (vatRegistered == true) ...[const SizedBox(height: 10), field(_t('N° de TVA intracommunautaire'), vatNumber, hint: 'FR12345678901', key: const ValueKey('vat-number'))],
+          const SizedBox(height: 14),
           VeyraFieldLabel(_t('Attestation d’assurance (RC professionnelle / véhicule)'), required: true),
           uploadTile(_t('ASSURANCE RC PRO'), 'INSURANCE', key: const ValueKey('INSURANCE')),
           const SizedBox(height: 14),

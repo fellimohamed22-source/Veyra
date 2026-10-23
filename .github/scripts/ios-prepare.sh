@@ -86,3 +86,12 @@ if [ -n "${GOOGLE_SERVICE_INFO_PLIST:-}" ]; then
 else
   echo "::warning title=iOS $project::GoogleService-Info.plist absent (secret) : Firebase (connexion Google/Apple/téléphone, notifications) ne fonctionnera pas sur iOS."
 fi
+
+# Native Google Maps SDK (same engine as Uber/Bolt): key given to the SDK at
+# launch, from the GitHub secret, never stored in the repository.
+if [ -n "${GOOGLE_MAPS_MOBILE_KEY:-}" ]; then
+  delegate=ios/Runner/AppDelegate.swift
+  perl -0pi -e 's/import Flutter\n/import Flutter\nimport GoogleMaps\n/' "$delegate"
+  MAPS_KEY="$GOOGLE_MAPS_MOBILE_KEY" perl -0pi -e 's/(didFinishLaunchingWithOptions[^{]*\{\n)/$1    GMSServices.provideAPIKey("$ENV{MAPS_KEY}")\n/' "$delegate"
+  grep -q 'GMSServices.provideAPIKey' "$delegate"
+fi

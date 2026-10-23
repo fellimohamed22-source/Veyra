@@ -279,22 +279,11 @@ Future<void> _mainBody() async {
     // the app's very first screen.
     unawaited(Stripe.instance.applySettings());
   }
-  // Diagnostic aid, re-added: the blank AddressScreen was reported as
-  // STILL happening after the confirmed, real FlutterFragmentActivity
-  // fix (a2c3919) -- meaning there is a second, separate bug, and this
-  // banner is needed again to see it. Learned from prematurely removing
-  // it last time before the user had fully confirmed the fix worked
-  // end to end: keeping this in place until they explicitly confirm
-  // success this time, not removing it speculatively again.
+  // A screen that fails to build shows a plain message (details go to
+  // logcat through FlutterError.onError), never the technical error.
   ErrorWidget.builder=(details){
     lastCrash.value='BUILD: '+details.exceptionAsString();
-    return Material(child:SafeArea(child:SingleChildScrollView(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      const Text('ERREUR DE RENDU (diagnostic temporaire)',style:TextStyle(color:Colors.red,fontWeight:FontWeight.bold,fontSize:16)),
-      const SizedBox(height:12),
-      Text(details.exceptionAsString(),style:const TextStyle(fontSize:13)),
-      const SizedBox(height:12),
-      Text(details.stack?.toString()??'',style:const TextStyle(fontSize:10,color:Colors.black54)),
-    ]))));
+    return Material(color:Colors.white,child:Center(child:Padding(padding:const EdgeInsets.all(24),child:Text(t('Une erreur est survenue. Veuillez réessayer.'),textAlign:TextAlign.center,style:const TextStyle(fontSize:15,color:Color(0xFF5B6576))))));
   };
   runApp(const App());
 }
@@ -356,18 +345,6 @@ class App extends StatelessWidget{
         GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig:router,
-      builder:(context,child)=>ValueListenableBuilder<String?>(
-        valueListenable:lastCrash,
-        builder:(context,crash,_)=>Stack(children:[
-          if(child!=null)child,
-          if(crash!=null)Positioned(top:0,left:0,right:0,child:Material(color:Colors.red.shade900,child:SafeArea(bottom:false,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[
-            Row(children:[const Expanded(child:Text('ERREUR CAPTURÉE (diagnostic temporaire)',style:TextStyle(color:Colors.white,fontWeight:FontWeight.bold))),IconButton(key:const Key('crash-close'),onPressed:()=>lastCrash.value=null,icon:const Icon(Icons.close,color:Colors.white))]),
-            // Plain Text: this banner sits above the Navigator, so there is no
-            // Overlay for SelectableText (it crashed and hid the real error).
-            Text(crash,maxLines:8,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:12)),
-          ]))))),
-        ]),
-      ),
     ),
   );
 }

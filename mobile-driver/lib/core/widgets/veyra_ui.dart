@@ -7,6 +7,7 @@ import '../../app/theme.dart';
 import '../../app_locale.dart';
 import '../maps/veyra_map_marks.dart';
 import '../maps/veyra_tiles.dart';
+import '../maps/google_map_kit.dart';
 
 /// Composants visuels communs reproduisant les planches de maquettes
 /// (en-tête « VEYRA », pied « Retour / Suivant », cartes, compteurs,
@@ -416,6 +417,14 @@ class VeyraRouteMap extends StatelessWidget {
         height: height,
         child: Stack(children: [
           Positioned.fill(child: Container(color: const Color(0xFFE9EEF3))),
+          if (veyraGoogleMapsEnabled)
+            VeyraGoogleMap(
+              pickup: pickup, dropoff: dropoff, pickupLabel: pickupLabel, dropoffLabel: dropoffLabel,
+              route: route, car: car, carHeading: carHeading, etaText: etaText, etaAt: bubble,
+              interactive: interactive, onTap: onTap, padding: const EdgeInsets.fromLTRB(40, 48, 96, 28),
+              initialZoom: points.isEmpty ? 11 : 14,
+            )
+          else ...[
           FlutterMap(
             options: MapOptions(
               initialCenter: center,
@@ -436,6 +445,7 @@ class VeyraRouteMap extends StatelessWidget {
             ],
           ),
           VeyraTiles.attribution(),
+          ],
         ]),
       ),
     );

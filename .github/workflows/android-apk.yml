@@ -39,7 +39,7 @@ jobs:
             echo "::notice title=Google Maps::GOOGLE_MAPS_MOBILE_KEY OK : l'API Map Tiles répond."
           else
             reason=$(grep -oE '"(status|message)": *"[^"]*"' /tmp/maps.json | head -2 | tr '\n' ' ' | tr -d '"')
-            echo "::warning title=Google Maps::GOOGLE_MAPS_MOBILE_KEY présente mais refusée par Map Tiles (HTTP $code) : $reason"
+            echo "::warning title=Google Maps::Map Tiles (fond de carte de secours) refuse la clé (HTTP $code) : $reason. Les cartes des apps utilisent le SDK natif Maps SDK for Android / iOS : activer ces deux API et lier un compte de facturation au projet Google Cloud."
           fi
           rm -f /tmp/maps.json
 
@@ -69,10 +69,14 @@ jobs:
           # can update cleanly over each other.
           mkdir -p ~/.android
           cp .github/ci-keystores/debug.keystore ~/.android/debug.keystore
+          # Fingerprint to allow on the Google key (Android apps restriction).
+          sha1=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | awk '/SHA1:/{print $2}')
+          echo "::notice title=Google Maps (Android)::Packages com.veyra.client et com.veyra.driver, empreinte SHA-1 $sha1"
 
       - name: Build Client APK
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          MAPS_KEY: ${{ secrets.GOOGLE_MAPS_MOBILE_KEY }}
         run: |
           cd mobile-client
           flutter create . --platforms=android --project-name veyra_client
@@ -106,6 +110,12 @@ jobs:
           # rules this out.
           sed -i '/android:icon="@mipmap\/ic_launcher">/a\    <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />' android/app/src/main/AndroidManifest.xml
           grep -q 'io.flutter.embedding.android.EnableImpeller' android/app/src/main/AndroidManifest.xml
+          # Native Google Maps SDK (same engine as Uber/Bolt): the key goes
+          # into the generated manifest only, never into the repository.
+          if [ -n "$MAPS_KEY" ]; then
+            sed -i "/android:icon=\"@mipmap\/ic_launcher\">/a\    <meta-data android:name=\"com.google.android.geo.API_KEY\" android:value=\"$MAPS_KEY\" />" android/app/src/main/AndroidManifest.xml
+            grep -q 'com.google.android.geo.API_KEY' android/app/src/main/AndroidManifest.xml
+          fi
           # Required by flutter_local_notifications (added for real,
           # working push notifications in foreground -- see main.dart's
           # own comment for the full explanation): "Dependency
@@ -246,6 +256,7 @@ jobs:
       - name: Build Driver APK
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          MAPS_KEY: ${{ secrets.GOOGLE_MAPS_MOBILE_KEY }}
         run: |
           cd mobile-driver
           flutter create . --platforms=android --project-name veyra_driver
@@ -291,6 +302,12 @@ jobs:
           # rules this out.
           sed -i '/android:icon="@mipmap\/ic_launcher">/a\    <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />' android/app/src/main/AndroidManifest.xml
           grep -q 'io.flutter.embedding.android.EnableImpeller' android/app/src/main/AndroidManifest.xml
+          # Native Google Maps SDK (same engine as Uber/Bolt): the key goes
+          # into the generated manifest only, never into the repository.
+          if [ -n "$MAPS_KEY" ]; then
+            sed -i "/android:icon=\"@mipmap\/ic_launcher\">/a\    <meta-data android:name=\"com.google.android.geo.API_KEY\" android:value=\"$MAPS_KEY\" />" android/app/src/main/AndroidManifest.xml
+            grep -q 'com.google.android.geo.API_KEY' android/app/src/main/AndroidManifest.xml
+          fi
           # Same real flutter_local_notifications requirement as the
           # client build -- see that section's own comment.
           sed -i '/compileOptions {/a\        isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
